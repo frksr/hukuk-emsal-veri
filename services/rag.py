@@ -8,8 +8,12 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CHROMA_DIR = ROOT / "data" / "chroma_db"
-COLLECTION_NAME = "hukuk_kararlari"
+# Vektör DB ve parquet konumları env ile override edilebilir → cloud'da kalıcı
+# volume'a (ör. /data/chroma_db) yönlendirilir. Git'te tutulmaz (bkz. .gitignore).
+CHROMA_DIR = Path(os.environ.get("CHROMA_DIR", str(ROOT / "data" / "chroma_db")))
+DECISIONS_PARQUET = Path(os.environ.get(
+    "DECISIONS_PARQUET", str(ROOT / "data" / "final" / "all_decisions.parquet")))
+COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "hukuk_kararlari")
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL",
                                   "intfloat/multilingual-e5-base")
 
@@ -34,7 +38,15 @@ def search(query: str, k: int = 5, where: dict | None = None) -> list[dict]:
       [{'text': str, 'meta': dict, 'similarity': float, 'chunk_id': str}, ...]
     """
     model = _load_model()
-    col = _load_collection()
+    try:
+        col = _load_collection()
+    except Exception as e:
+        # Volume henüz seed edilmemiş olabilir → 500 yerine boş sonuç + uyarı.
+        import logging
+        logging.getLogger("services.rag").warning(
+            "Chroma collection '%s' yüklenemedi (CHROMA_DIR=%s): %s — seed gerekli?",
+            COLLECTION_NAME, CHROMA_DIR, e)
+        return []
 
     q_emb = model.encode([f"query: {query}"],
                          normalize_embeddings=True).tolist()
@@ -72,7 +84,7 @@ def get_collection_stats() -> dict:
 def get_full_decision(decision_id: str) -> dict | None:
     """Parquet'ten tam karar metnini çek."""
     import duckdb
-    parquet = ROOT / "data" / "final" / "all_decisions.parquet"
+    parquet = DECISIONS_PARQUET
     if not parquet.exists():
         return None
     try:
