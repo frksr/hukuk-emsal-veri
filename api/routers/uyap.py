@@ -333,7 +333,7 @@ async def ai_sorgu(
     """
     from services.tenant_rag import search_tenant
     from services.rag import search as public_search
-    from services.pii_redaction import redact, unredact, audit_pii, ner_available
+    from services.pii_redaction import redact, unredact, audit_pii, ner_available, name_layer
     from llm.provider import generate, is_available
     import os
     import time
@@ -390,25 +390,28 @@ async def ai_sorgu(
     for ph, orig in query_map.forward.items():
         redaction_map.forward[ph] = orig
 
-    # İsim/adres katmanı gerçekten çalıştı mı? (KVKK şeffaflık + opsiyonel engel)
+    # İsim/adres maskeleme şeffaflığı (KVKK)
     names_redacted = redaction_map.names_redacted
+    active_layer = name_layer()  # "ner" | "heuristic"
     pii_warning = None
-    if not ner_available():
+    if active_layer == "heuristic":
         pii_warning = (
-            "İsim/adres maskeleme (NER) etkin değil. Yapısal PII (TCKN/IBAN/"
-            "telefon/e-posta) maskelendi ancak kişi/taraf adları ve açık adresler "
-            "LLM sağlayıcısına gönderilmiş olabilir."
+            "İsim/adres maskeleme kural tabanlı (heuristik) katmanla yapıldı; en "
+            "geniş kapsam için NER modeli (PII_NER_MODEL) önerilir. Bazı kişi "
+            "adları/adresler maskelenmemiş olabilir."
         )
 
     # 4) LLM çağrısı
     answer = ""
     llm_provider_used = "none"
     tokens_used = 0
-    if _block_without_ner and not names_redacted and is_available():
-        log.warning("KVKK: NER yok, yurt dışı LLM çağrısı engellendi (tenant=%s).", user.tenant_id)
+    # Strict KVKK modu: güçlü NER katmanı yoksa yurt dışı LLM çağrısını engelle.
+    if _block_without_ner and not ner_available() and is_available():
+        log.warning("KVKK strict: NER yok, yurt dışı LLM çağrısı engellendi (tenant=%s).", user.tenant_id)
         answer = (
-            "KVKK koruması: kişi adı/adres maskeleme katmanı etkin olmadığından "
-            "AI yanıtı üretilmedi. Aşağıdaki kaynakları inceleyebilirsiniz."
+            "KVKK koruması (strict mod): güçlü isim/adres maskeleme (NER) katmanı "
+            "etkin olmadığından AI yanıtı üretilmedi. Aşağıdaki kaynakları "
+            "inceleyebilirsiniz."
         )
         llm_provider_used = "blocked_pii"
     elif is_available():
@@ -485,7 +488,7 @@ async def ai_sorgu(
         ],
         "duration_ms": duration_ms,
         "pii": {
-            "names_layer_active": ner_available(),
+            "name_layer": active_layer,
             "names_redacted": names_redacted,
             "warning": pii_warning,
         },

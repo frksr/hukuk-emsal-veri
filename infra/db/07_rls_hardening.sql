@@ -108,6 +108,10 @@ CREATE TABLE IF NOT EXISTS tenant_encryption_keys (
 ALTER TABLE tenant_encryption_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenant_encryption_keys FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON tenant_encryption_keys FROM app_user;
+-- app_service'e AÇIK tablo yetkisi: BYPASSRLS yalnızca RLS'i atlar, tablo GRANT'i
+-- ayrı bir kontroldür. app_service, app_user'dan miras aldığı yetkiler REVOKE
+-- edildiği için bu tabloya doğrudan GRANT almalıdır.
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_encryption_keys TO app_service;
 
 -- ----------------------------------------------------------------------------
 -- 5) Webhook imza/idempotency için ek alanlar

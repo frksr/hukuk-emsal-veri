@@ -31,6 +31,30 @@ logging.basicConfig(
 )
 log = logging.getLogger("api")
 
+# Sentry — SENTRY_DSN set ise hata/performans izleme aktif olur.
+import os as _os
+_SENTRY_DSN = _os.environ.get("SENTRY_DSN", "")
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            environment=_os.environ.get("APP_ENV", "production"),
+            release=_os.environ.get("APP_RELEASE"),
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=float(_os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            # KVKK: PII'yi Sentry'ye göndermeyiz (request body/headers maskelenir).
+            send_default_pii=False,
+        )
+        log.info("Sentry aktif (env=%s)", _os.environ.get("APP_ENV", "production"))
+    except Exception as e:
+        log.warning("Sentry başlatılamadı: %s", e)
+else:
+    log.info("SENTRY_DSN yok — hata izleme devre dışı.")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

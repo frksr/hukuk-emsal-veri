@@ -25,24 +25,41 @@ def test_same_value_same_placeholder():
     assert len(m.forward) == 1
 
 
-def test_names_not_redacted_without_ner():
-    """NER yoksa kişi adları MASKELENMEZ ve names_redacted False olmalı.
-
-    Bu, abartılı 'LLM hiç kişisel veri görmez' iddiasını engelleyen güvenlik
-    bayrağıdır."""
-    text = "Davacı Ahmet Yılmaz, davalı Mehmet Demir'e karşı."
+def test_heuristic_masks_role_prefixed_names():
+    """Heuristik katman (NER olmadan da) rol bağlamındaki kişi adlarını maskeler."""
+    text = "Davacı Ahmet Yılmaz, davalı Mehmet Demir aleyhine dava açmıştır."
     masked, m = pii.redact(text)
-    if not pii.ner_available():
-        assert m.names_redacted is False
-        # İsim hâlâ metinde (regex yakalayamaz)
-        assert "Ahmet" in masked
+    assert m.names_redacted is True
+    assert "Ahmet" not in masked
+    assert "Mehmet" not in masked
+    # Rol kelimeleri korunur
+    assert "Davacı" in masked and "davalı" in masked
+    # Birebir geri yüklenebilir
+    assert pii.unredact(masked, m) == text
 
 
-def test_audit_pii_reports_names_layer_flag():
+def test_heuristic_masks_address():
+    text = "Adres: Bağdat Caddesi No:12 Daire:5"
+    masked, m = pii.redact(text)
+    assert "Bağdat Caddesi" not in masked
+    assert m.names_redacted is True
+    assert pii.unredact(masked, m) == text
+
+
+def test_court_names_not_false_positive():
+    """Rol öneki olmayan mahkeme/kurum adları heuristik tarafından maskelenmez."""
+    text = "Yargıtay 12. Hukuk Dairesi ve Bölge Adliye Mahkemesi kararı."
+    masked, m = pii.redact(text)
+    assert "Yargıtay" in masked
+    assert "Mahkemesi" in masked
+
+
+def test_audit_pii_reports_name_layer():
     a = pii.audit_pii("TCKN: 12345678901")
     assert a["contains_pii"] is True
-    assert "names_layer_active" in a
-    assert a["names_layer_active"] == pii.ner_available()
+    # İsim katmanı her zaman aktif (en az heuristik)
+    assert a["names_layer_active"] is True
+    assert a["name_layer"] in ("ner", "heuristic")
 
 
 def test_empty_text():
