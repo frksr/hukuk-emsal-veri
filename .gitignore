@@ -1,0 +1,50 @@
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# ============================================================================
+# Ortam / sırlar (örnekler hariç: .env.example, web/.env.local.example izlenir)
+# ============================================================================
+.env
+.env.local
+web/.env.local
+
+# ============================================================================
+# Üretilen / büyük veri — git'te TUTULMAZ (pipeline ile yeniden üretilir)
+# ============================================================================
+# Vektör DB (Chroma) — GitHub 100MB limitini aşıyor
+data/chroma_db/
+# Per-tenant şifreli dosya depolama (KVKK: asla repoya girmemeli)
+data/tenant_storage/
+# Pipeline ara çıktıları
+data/raw/
+data/cleaned/
+data/enriched/
+data/final/
+# Yerel job kuyruğu / DuckDB / SQLite
+data/queue.db
+data/*.db
+*.sqlite3
+*.duckdb
+data/external/inventory.json
+
+# ============================================================================
+# Node / Next.js (frontend)
+# ============================================================================
+node_modules/
+web/node_modules/
+web/.next/
+.next/
+
+# ============================================================================
+# Model / cache
+# ============================================================================
+.cache/
+*.curl
+curls/*.curl

@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hukuk-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hukuk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev_change_me}
+      POSTGRES_DB: hukuk_emsal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Migration'lar otomatik uygulansın
+      - ./infra/db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hukuk -d hukuk_emsal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Local SMTP — emaillerinizi tarayıcıdan görüp test edersiniz
+  # http://localhost:8025 (Mailpit web UI)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: hukuk-mailpit
+    restart: unless-stopped
+    ports:
+      - "1026:1025"   # SMTP (host 1026 → container 1025) — host'ta 1025 dolu
+      - "8025:8025"   # Web UI
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mailpit_data:/data
+
+  # Opsiyonel: Redis (rate limit + cache için ileride)
+  # Şu an gerekli değil — Postgres usage_events kullanıyor.
+  # İleride aktive etmek için aşağıdaki bloku uncomment et:
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: hukuk-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6380:6379"   # host'ta 6380 (6379 dolu olabilir)
+  #   volumes:
+  #     - redis_data:/data
+
+volumes:
+  pgdata:
+  mailpit_data:
+  # redis_data:

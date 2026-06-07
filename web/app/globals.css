@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Açık tema — legal navy + warm gold */
+    --background: 0 0% 100%;
+    --foreground: 215 45% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 45% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 45% 12%;
+
+    /* Primary: #1e3a5f -> hsl(213, 52%, 25%) */
+    --primary: 213 52% 25%;
+    --primary-foreground: 0 0% 98%;
+
+    /* Accent (gold): #c9a961 -> hsl(42, 49%, 59%) */
+    --accent: 42 49% 59%;
+    --accent-foreground: 215 45% 12%;
+
+    --secondary: 213 25% 95%;
+    --secondary-foreground: 213 52% 25%;
+
+    --muted: 213 15% 96%;
+    --muted-foreground: 215 15% 40%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 142 60% 38%;
+    --success-foreground: 0 0% 98%;
+
+    --border: 213 20% 90%;
+    --input: 213 20% 90%;
+    --ring: 213 52% 25%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 215 45% 7%;
+    --foreground: 0 0% 95%;
+
+    --card: 215 40% 10%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 215 40% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 213 60% 65%;
+    --primary-foreground: 215 45% 12%;
+
+    --accent: 42 55% 65%;
+    --accent-foreground: 215 45% 12%;
+
+    --secondary: 215 30% 18%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 215 25% 16%;
+    --muted-foreground: 215 10% 65%;
+
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 142 50% 50%;
+    --success-foreground: 0 0% 98%;
+
+    --border: 215 25% 20%;
+    --input: 215 25% 20%;
+    --ring: 213 60% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* Türkçe için tipografi optimizasyonu: kerning + Türkçe i noktası */
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "case" 1, "ss01" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Türkçe locale uyumu — tireleme ve seçim renkleri */
+  :lang(tr) {
+    hyphens: auto;
+    -webkit-hyphens: auto;
+  }
+
+  ::selection {
+    @apply bg-accent/40 text-foreground;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading tracking-tight;
+    text-wrap: balance;
+  }
+
+  h1 {
+    @apply text-3xl font-bold md:text-4xl lg:text-5xl;
+  }
+
+  h2 {
+    @apply text-2xl font-bold md:text-3xl;
+  }
+
+  h3 {
+    @apply text-xl font-semibold md:text-2xl;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Erişilebilirlik: odak halkası */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  .container-main {
+    @apply mx-auto w-full max-w-container px-4 sm:px-6 lg:px-8;
+  }
+
+  .prose-tr {
+    @apply max-w-prose leading-relaxed text-foreground;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+}

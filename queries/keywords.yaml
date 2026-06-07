@@ -1,0 +1,38 @@
+# tahsilat / ihtar / icra konuları için sorgu matrisi
+primary:
+  - "icra"
+  - "icra takibi"
+  - "icra emri"
+  - "ödeme emri"
+  - "tahsilat"
+  - "ihtar"
+  - "ihtarname"
+  - "haciz"
+
+secondary:
+  - "itirazın iptali"
+  - "itirazın kaldırılması"
+  - "menfi tespit"
+  - "istihkak"
+  - "ihalenin feshi"
+  - "kıymet takdiri"
+  - "borçlunun temerrüdü"
+  - "temerrüt faizi"
+  - "kambiyo senedi"
+  - "çek"
+  - "senet"
+  - "vergi tahsilatı"
+  - "amme alacağı"
+
+laws:
+  - "İİK"
+  - "2004 sayılı"
+  - "İİK 67"
+  - "İİK 68"
+  - "İİK 89"
+  - "TBK 117"
+  - "6183 sayılı"
+
+yargitay_chambers:
+  primary: ["12. Hukuk Dairesi", "8. Hukuk Dairesi"]
+  secondary: ["13. Hukuk Dairesi", "19. Hukuk Dairesi", "3. Hukuk Dairesi"]
