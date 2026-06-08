@@ -98,8 +98,8 @@ export function FaizForm() {
             {sonuc.yillik_breakdown?.length > 0 && (
               <Card>
                 <CardHeader><CardTitle className="text-base">Yıllık Faiz Dağılımı</CardTitle></CardHeader>
-                <CardContent>
-                  <table className="w-full text-sm">
+                <CardContent className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-sm">
                     <thead className="text-left text-muted-foreground border-b">
                       <tr><th className="pb-2">Yıl</th><th>Gün</th><th>Oran %</th><th className="text-right">Faiz</th></tr>
                     </thead>

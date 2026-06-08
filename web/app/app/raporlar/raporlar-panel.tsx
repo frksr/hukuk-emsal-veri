@@ -127,11 +127,11 @@ export function RaporlarPanel() {
             <Receipt className="h-5 w-5" /> Fatura Geçmişi
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           {payments.length === 0 ? (
             <p className="text-sm text-muted-foreground">Henüz ödeme kaydı yok.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[560px] text-sm">
               <thead className="text-left text-muted-foreground border-b">
                 <tr><th className="pb-2">Tarih</th><th>Tutar</th><th>Durum</th><th>Fatura No</th><th></th></tr>
               </thead>

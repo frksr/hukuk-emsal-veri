@@ -48,8 +48,8 @@ export function AuditPanel() {
       </Card>
 
       <Card>
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="text-left border-b bg-muted/30 text-xs">
               <tr>
                 <th className="p-2">Tarih</th>
