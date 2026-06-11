@@ -22,6 +22,9 @@ export const metadata: Metadata = buildMetadata({
   ],
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+
 const searchActionJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebPage",
@@ -32,8 +35,7 @@ const searchActionJsonLd = {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate:
-        "https://hukuk-emsal.tr/emsal-arama?q={search_term_string}",
+      urlTemplate: `${SITE_URL}/emsal-arama?q={search_term_string}`,
     },
     "query-input": "required name=search_term_string",
   },
@@ -47,13 +49,13 @@ const breadcrumbJsonLd = {
       "@type": "ListItem",
       position: 1,
       name: "Ana Sayfa",
-      item: "https://hukuk-emsal.tr/",
+      item: `${SITE_URL}/`,
     },
     {
       "@type": "ListItem",
       position: 2,
       name: "Emsal Arama",
-      item: "https://hukuk-emsal.tr/emsal-arama",
+      item: `${SITE_URL}/emsal-arama`,
     },
   ],
 };

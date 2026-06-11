@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from api.concurrency import run_blocking
 from api.deps import rate_limit
 from api.schemas import APIResponse, KVKKIstegi
 from services.kvkk import (
@@ -36,7 +37,8 @@ async def kvkk_checklist(
         log.info(f"Bilinmeyen sektor {istek.sektor!r} → 'diger' kullanılacak")
 
     try:
-        sonuc = checklist_uret(
+        sonuc = await run_blocking(
+            checklist_uret,
             sektor=istek.sektor,
             veri_turleri=istek.veri_turleri,
             llm_ek=istek.llm_ek,

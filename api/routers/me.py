@@ -231,3 +231,254 @@ async def delete_account(
         request=request,
     )
     return APIResponse(ok=True, message="Hesap silme talebiniz alındı. Verileriniz 30 gün içinde tamamen silinir.")
+
+
+# =============================================================================
+# Kaydedilen kararlar (favoriler) — karar bazlı yıldızlama + klasörleme
+# =============================================================================
+
+from pydantic import BaseModel as _BaseModel, Field as _Field
+
+
+class KararKaydetIstegi(_BaseModel):
+    decision_id: str = _Field(..., min_length=1, max_length=200)
+    chunk_id: str | None = _Field(None, max_length=200)
+    klasor: str | None = _Field(None, max_length=120)
+    baslik: str | None = _Field(None, max_length=300)
+    ozet: str | None = _Field(None, max_length=4000)
+    meta: dict | None = None
+    not_metni: str | None = _Field(None, max_length=2000)
+
+
+@router.post("/kararlar", response_model=APIResponse,
+             summary="Emsal kararı kaydet (yıldızla)")
+async def karar_kaydet(
+    istek: KararKaydetIstegi,
+    user: CurrentUser = Depends(get_current_user),
+):
+    import json as _json
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO user_saved_decisions
+                   (user_id, decision_id, chunk_id, klasor, baslik, ozet, meta, not_metni)
+               VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+               ON CONFLICT (user_id, decision_id, chunk_id)
+               DO UPDATE SET klasor = EXCLUDED.klasor,
+                             baslik = EXCLUDED.baslik,
+                             not_metni = EXCLUDED.not_metni
+               RETURNING id""",
+            user.user_id, istek.decision_id, istek.chunk_id or "",
+            istek.klasor, istek.baslik, istek.ozet,
+            _json.dumps(istek.meta or {}), istek.not_metni,
+        )
+    return APIResponse(ok=True, data={"id": str(row["id"])},
+                       message="Karar kaydedildi.")
+
+
+@router.get("/kararlar", response_model=APIResponse,
+            summary="Kaydedilen kararları listele")
+async def kararlar_listele(
+    user: CurrentUser = Depends(get_current_user),
+    klasor: str | None = None,
+    limit: int = 100,
+):
+    where = "WHERE user_id = $1"
+    params: list = [user.user_id]
+    if klasor:
+        where += " AND klasor = $2"
+        params.append(klasor)
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        rows = await conn.fetch(
+            f"""SELECT id, decision_id, chunk_id, klasor, baslik, ozet,
+                       meta, not_metni, created_at
+                FROM user_saved_decisions {where}
+                ORDER BY created_at DESC LIMIT {min(int(limit), 500)}""",
+            *params,
+        )
+        klasorler = await conn.fetch(
+            """SELECT klasor, COUNT(*) AS adet FROM user_saved_decisions
+               WHERE user_id = $1 AND klasor IS NOT NULL
+               GROUP BY klasor ORDER BY klasor""",
+            user.user_id,
+        )
+    return APIResponse(ok=True, data={
+        "kararlar": [
+            {
+                "id": str(r["id"]),
+                "decision_id": r["decision_id"],
+                "chunk_id": r["chunk_id"] or None,
+                "klasor": r["klasor"],
+                "baslik": r["baslik"],
+                "ozet": r["ozet"],
+                "meta": r["meta"],
+                "not_metni": r["not_metni"],
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in rows
+        ],
+        "klasorler": [
+            {"klasor": k["klasor"], "adet": k["adet"]} for k in klasorler
+        ],
+    })
+
+
+@router.delete("/kararlar/{kayit_id}", response_model=APIResponse,
+               summary="Kaydedilen kararı sil")
+async def karar_sil(
+    kayit_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        result = await conn.execute(
+            "DELETE FROM user_saved_decisions WHERE id = $1 AND user_id = $2",
+            kayit_id, user.user_id,
+        )
+    if result.endswith("0"):
+        raise HTTPException(404, "Kayıt bulunamadı.")
+    return APIResponse(ok=True, message="Silindi.")
+
+
+# =============================================================================
+# Emsal alarmı — "bu konuda yeni karar çıkınca haber ver"
+# =============================================================================
+
+
+class AlarmIstegi(_BaseModel):
+    query: str = _Field(..., min_length=3, max_length=300)
+    filters: dict | None = None
+
+
+@router.post("/alerts", response_model=APIResponse,
+             summary="Aramayı takibe al (yeni emsal çıkınca e-posta)")
+async def alarm_olustur(
+    istek: AlarmIstegi,
+    user: CurrentUser = Depends(get_current_user),
+):
+    import json as _json
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO saved_search_alerts (user_id, query, filters)
+               VALUES ($1, $2, $3::jsonb)
+               ON CONFLICT (user_id, query)
+               DO UPDATE SET aktif = TRUE, filters = EXCLUDED.filters
+               RETURNING id""",
+            user.user_id, istek.query.strip(), _json.dumps(istek.filters or {}),
+        )
+    return APIResponse(ok=True, data={"id": str(row["id"])},
+                       message="Takibe alındı — yeni emsal çıkınca e-posta alacaksınız.")
+
+
+@router.get("/alerts", response_model=APIResponse, summary="Takip edilen aramalar")
+async def alarm_listele(user: CurrentUser = Depends(get_current_user)):
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        rows = await conn.fetch(
+            """SELECT id, query, filters, aktif, son_bildirim, created_at
+               FROM saved_search_alerts WHERE user_id = $1
+               ORDER BY created_at DESC""",
+            user.user_id,
+        )
+    return APIResponse(ok=True, data={"alerts": [
+        {
+            "id": str(r["id"]),
+            "query": r["query"],
+            "filters": r["filters"],
+            "aktif": r["aktif"],
+            "son_bildirim": r["son_bildirim"].isoformat() if r["son_bildirim"] else None,
+            "created_at": r["created_at"].isoformat(),
+        } for r in rows
+    ]})
+
+
+@router.delete("/alerts/{alarm_id}", response_model=APIResponse,
+               summary="Takibi durdur")
+async def alarm_sil(
+    alarm_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        result = await conn.execute(
+            "DELETE FROM saved_search_alerts WHERE id = $1 AND user_id = $2",
+            alarm_id, user.user_id,
+        )
+    if result.endswith("0"):
+        raise HTTPException(404, "Alarm bulunamadı.")
+    return APIResponse(ok=True, message="Takip durduruldu.")
+
+
+# =============================================================================
+# API anahtarları (enterprise/entegrasyon) — anahtar yalnızca oluşturulurken
+# bir kez gösterilir; DB'de sadece sha256 hash'i tutulur.
+# =============================================================================
+
+
+class ApiKeyIstegi(_BaseModel):
+    name: str = _Field(..., min_length=1, max_length=100)
+    daily_quota: int = _Field(1000, ge=1, le=100_000)
+
+
+@router.post("/api-keys", response_model=APIResponse,
+             summary="API anahtarı oluştur")
+async def apikey_olustur(
+    istek: ApiKeyIstegi,
+    user: CurrentUser = Depends(get_current_user),
+):
+    import hashlib
+    import secrets
+
+    tam_anahtar = "he_live_" + secrets.token_urlsafe(32)
+    key_hash = hashlib.sha256(tam_anahtar.encode("utf-8")).hexdigest()
+    prefix = tam_anahtar[:12] + "…"
+
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO api_keys (user_id, tenant_id, name, key_prefix, key_hash, daily_quota)
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
+            user.user_id, user.tenant_id, istek.name, prefix, key_hash,
+            istek.daily_quota,
+        )
+    await audit(action="apikey.created", user_id=user.user_id,
+                tenant_id=user.tenant_id, metadata={"name": istek.name})
+    return APIResponse(ok=True, data={
+        "id": str(row["id"]),
+        "api_key": tam_anahtar,  # YALNIZCA bu yanıtta görünür
+        "prefix": prefix,
+    }, message="Anahtarı şimdi kaydedin — bir daha gösterilmeyecek.")
+
+
+@router.get("/api-keys", response_model=APIResponse, summary="API anahtarlarım")
+async def apikey_listele(user: CurrentUser = Depends(get_current_user)):
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        rows = await conn.fetch(
+            """SELECT id, name, key_prefix, aktif, daily_quota, last_used_at, created_at
+               FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC""",
+            user.user_id,
+        )
+    return APIResponse(ok=True, data={"keys": [
+        {
+            "id": str(r["id"]),
+            "name": r["name"],
+            "prefix": r["key_prefix"],
+            "aktif": r["aktif"],
+            "daily_quota": r["daily_quota"],
+            "last_used_at": r["last_used_at"].isoformat() if r["last_used_at"] else None,
+            "created_at": r["created_at"].isoformat(),
+        } for r in rows
+    ]})
+
+
+@router.delete("/api-keys/{key_id}", response_model=APIResponse,
+               summary="API anahtarını iptal et")
+async def apikey_iptal(
+    key_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        result = await conn.execute(
+            "UPDATE api_keys SET aktif = FALSE WHERE id = $1 AND user_id = $2",
+            key_id, user.user_id,
+        )
+    if result.endswith("0"):
+        raise HTTPException(404, "Anahtar bulunamadı.")
+    await audit(action="apikey.revoked", user_id=user.user_id,
+                tenant_id=user.tenant_id, metadata={"key_id": key_id})
+    return APIResponse(ok=True, message="Anahtar iptal edildi.")

@@ -397,3 +397,163 @@ export const api = {
   kvkkChecklist,
   sozlesmeAnaliz,
 };
+
+// -----------------------------------------------------------------------------
+// Streaming (SSE) — dilekçe token-token üretim
+// -----------------------------------------------------------------------------
+
+export interface DilekceStreamMeta {
+  kullanilan_emsaller: Array<{
+    karar_id?: string;
+    atif_text: string;
+    ilgili_bolum: string;
+  }>;
+  uyari: string;
+  demo: boolean;
+}
+
+export interface DilekceStreamHandlers {
+  onMeta?: (meta: DilekceStreamMeta) => void;
+  onDelta?: (text: string) => void;
+  onError?: (message: string) => void;
+  onDone?: () => void;
+}
+
+/**
+ * POST /api/dilekce/stream — SSE akışını okur, event'leri handler'lara dağıtır.
+ * fetch + ReadableStream kullanır (EventSource POST desteklemediği için).
+ */
+export async function dilekceStream(
+  params: DilekceParams,
+  handlers: DilekceStreamHandlers,
+  init?: { signal?: AbortSignal }
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/dilekce/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    signal: init?.signal,
+  });
+
+  if (!res.ok || !res.body) {
+    let detail = `API ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.detail) detail = String(j.detail);
+    } catch { /* ignore */ }
+    throw Object.assign(new Error(detail), { status: res.status });
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  const processChunk = (raw: string) => {
+    const line = raw.trim();
+    if (!line.startsWith("data:")) return;
+    const payload = line.slice(5).trim();
+    if (!payload) return;
+    let evt: { type?: string; text?: string; message?: string } & Partial<DilekceStreamMeta>;
+    try {
+      evt = JSON.parse(payload);
+    } catch {
+      return;
+    }
+    switch (evt.type) {
+      case "meta":
+        handlers.onMeta?.({
+          kullanilan_emsaller: evt.kullanilan_emsaller ?? [],
+          uyari: evt.uyari ?? "",
+          demo: Boolean(evt.demo),
+        });
+        break;
+      case "delta":
+        if (evt.text) handlers.onDelta?.(evt.text);
+        break;
+      case "error":
+        handlers.onError?.(evt.message ?? "Akış hatası");
+        break;
+      case "done":
+        handlers.onDone?.();
+        break;
+    }
+  };
+
+  // SSE: event'ler "\n\n" ile ayrılır
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      processChunk(buffer.slice(0, idx));
+      buffer = buffer.slice(idx + 2);
+    }
+  }
+  if (buffer.trim()) processChunk(buffer);
+}
+
+// -----------------------------------------------------------------------------
+// Belge export — .docx / .udf (UYAP) indirme
+// -----------------------------------------------------------------------------
+
+export async function exportBelge(
+  format: "docx" | "udf",
+  params: { metin: string; baslik?: string; dosya_adi?: string }
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/export/${format}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    let detail = `Export hatası (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.detail) detail = String(j.detail);
+    } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const m = cd.match(/filename="?([^";]+)"?/);
+  const fname = m?.[1] ?? `${params.dosya_adi ?? "belge"}.${format}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// -----------------------------------------------------------------------------
+// Kaydedilen kararlar + koleksiyon durumu
+// -----------------------------------------------------------------------------
+
+export function aramaStats(): Promise<{
+  ok: boolean;
+  data: { chunk_count?: number; available: boolean };
+}> {
+  return apiFetch("/api/arama/stats", { method: "GET" });
+}
+
+export interface KararKaydetParams {
+  decision_id: string;
+  chunk_id?: string;
+  klasor?: string;
+  baslik?: string;
+  ozet?: string;
+  meta?: Record<string, unknown>;
+  not_metni?: string;
+}
+
+export function kararKaydet(params: KararKaydetParams): Promise<unknown> {
+  return apiFetch("/api/me/kararlar", { method: "POST", body: params });
+}
+
+export function alarmOlustur(params: {
+  query: string;
+  filters?: Record<string, unknown>;
+}): Promise<unknown> {
+  return apiFetch("/api/me/alerts", { method: "POST", body: params });
+}

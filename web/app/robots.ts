@@ -8,8 +8,19 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
-        disallow: ["/api/", "/admin/", "/_next/", "/static/"],
+        // /api/og dinamik Open Graph görseli — engellenmemeli
+        allow: ["/", "/api/og"],
+        disallow: [
+          "/api/",
+          "/admin/",
+          "/_next/",
+          "/static/",
+          "/app/",
+          "/giris",
+          "/kayit",
+          "/sifre-sifirla",
+          "/hosgeldin",
+        ],
       },
       {
         userAgent: "GPTBot",

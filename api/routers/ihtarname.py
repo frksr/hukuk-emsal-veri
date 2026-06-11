@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import rate_limit
+from api.concurrency import run_blocking
 from api.schemas import APIResponse, IhtarnameIstegi
 from services.ihtarname import ihtarname_olustur, TUR_PROFILLERI
 
@@ -47,7 +48,8 @@ async def ihtarname_uret(
         )
 
     try:
-        sonuc = ihtarname_olustur(
+        sonuc = await run_blocking(
+            ihtarname_olustur,
             tur=istek.tur,
             taraflar=istek.taraflar,
             alacak_detay=istek.alacak_detay,

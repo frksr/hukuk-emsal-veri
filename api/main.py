@@ -159,6 +159,7 @@ from api.routers import (
     arama, dilekce, ozet, faiz, zamanasimi,
     ihtarname, trend, karsi_argument, kvkk, sozlesme,
     denetim, me, auth_actions, billing, uyap, admin, feedback,
+    export, karar, v1,
 )
 
 app.include_router(arama.router, prefix="/api/arama", tags=["arama"])
@@ -178,3 +179,6 @@ app.include_router(trend.router, prefix="/api/trend", tags=["analytics"])
 app.include_router(karsi_argument.router, prefix="/api/karsi-argument", tags=["v3"])
 app.include_router(kvkk.router, prefix="/api/kvkk", tags=["v3"])
 app.include_router(sozlesme.router, prefix="/api/sozlesme", tags=["v3"])
+app.include_router(export.router, prefix="/api/export", tags=["export"])
+app.include_router(karar.router, prefix="/api/karar", tags=["karar"])
+app.include_router(v1.router, prefix="/api/v1", tags=["public-api"])

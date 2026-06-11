@@ -120,6 +120,15 @@ def _oran_getir(faiz_turu: str, yil: int) -> float:
             f"Bilinmeyen faiz_turu: {faiz_turu!r}. "
             f"Geçerli: {list(FAIZ_TABLOLARI.keys())}"
         )
+    # Önce güncellenebilir JSON kaynağına bak (TCMB EVDS güncellemeleri),
+    # yoksa statik fallback tabloya düş. Bkz: services/faiz_oranlari.py
+    try:
+        from services.faiz_oranlari import oran_overrides
+        overrides = oran_overrides(faiz_turu)
+        if yil in overrides:
+            return overrides[yil]
+    except Exception:
+        pass
     tablo = FAIZ_TABLOLARI[faiz_turu]
     if yil in tablo:
         return tablo[yil]

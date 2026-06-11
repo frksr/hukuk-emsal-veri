@@ -1,7 +1,17 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { CheckCircle2, ArrowRight, Search, FileText, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Hoş Geldin — Hesabın Hazır | Hukuk Emsal",
+  description:
+    "Hukuk Emsal hesabın hazır. Emsal karar arama, AI dilekçe taslağı ve faiz/zamanaşımı hesaplama araçlarına hemen başla.",
+  path: "/hosgeldin",
+  noIndex: true,
+});
 
 export default function HosgeldinPage() {
   return (

@@ -154,3 +154,34 @@ async def send_welcome_email(to: str, name: Optional[str]) -> bool:
         subject="Hoş geldin — Hukuk Emsal hesabınız aktif",
         html=_wrap("Hoş geldiniz! 🎉", body, (f"{SITE_URL}/app", "Dashboard'a Git")),
     )
+
+
+async def send_emsal_alarm_email(
+    to: str,
+    name: Optional[str],
+    query: str,
+    yeni_kararlar: list[dict],
+) -> bool:
+    """Emsal alarmı — takip edilen sorguya yeni karar düştüğünde gönderilir."""
+    site = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukemsal.tr")
+    satirlar = []
+    for k in yeni_kararlar[:5]:
+        baslik = k.get("baslik") or k.get("chunk_id") or "Yeni karar"
+        ozet = (k.get("ozet") or "")[:200]
+        satirlar.append(f"<li><strong>{baslik}</strong><br/><small>{ozet}…</small></li>")
+    body = (
+        f"<p>Merhaba {name or ''},</p>"
+        f"<p>Takip ettiğiniz <strong>“{query}”</strong> sorgusuyla eşleşen "
+        f"{len(yeni_kararlar)} yeni emsal karar bulundu:</p>"
+        f"<ul>{''.join(satirlar)}</ul>"
+    )
+    html = _wrap(
+        "Takip ettiğiniz konuda yeni emsal var",
+        body,
+        cta=(f"{site}/emsal-arama?q=" + query.replace(" ", "+"), "Kararları İncele"),
+    )
+    return await send_email(
+        to=to,
+        subject=f"Yeni emsal: {query[:60]}",
+        html=html,
+    )

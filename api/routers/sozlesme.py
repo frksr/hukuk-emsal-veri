@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.deps import rate_limit
+from api.concurrency import run_blocking
 from api.schemas import APIResponse
 from services.sozlesme import parse_dosya, analiz_et, rapor_docx, rapor_pdf
 
@@ -67,7 +68,7 @@ async def sozlesme_upload(
         )
 
     try:
-        metin = parse_dosya(veri, ext)
+        metin = await run_blocking(parse_dosya, veri, ext)
     except Exception as e:
         log.exception("parse_dosya hatası")
         raise HTTPException(status_code=400, detail=f"Dosya parse edilemedi: {e}")
@@ -79,7 +80,7 @@ async def sozlesme_upload(
         )
 
     try:
-        analiz = analiz_et(metin, sozlesme_turu=sozlesme_turu)
+        analiz = await run_blocking(analiz_et, metin, sozlesme_turu=sozlesme_turu)
     except Exception as e:
         log.exception("analiz_et hatası")
         if _llm_hata_mi(str(e)):
@@ -106,7 +107,7 @@ async def sozlesme_analyze_text(
 ) -> APIResponse:
     """Sözleşme metnini doğrudan vererek analiz al."""
     try:
-        analiz = analiz_et(istek.metin, sozlesme_turu=istek.sozlesme_turu)
+        analiz = await run_blocking(analiz_et, istek.metin, sozlesme_turu=istek.sozlesme_turu)
     except Exception as e:
         log.exception("analiz_et hatası")
         if _llm_hata_mi(str(e)):
@@ -131,7 +132,7 @@ async def sozlesme_report_docx(
 ) -> StreamingResponse:
     """Analiz dict'ini alıp Word (.docx) raporu döner."""
     try:
-        veri = rapor_docx(istek.analiz_data)
+        veri = await run_blocking(rapor_docx, istek.analiz_data)
     except RuntimeError as e:
         log.warning(f"docx üretimi başarısız (paket eksik?): {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -154,7 +155,7 @@ async def sozlesme_report_pdf(
 ) -> StreamingResponse:
     """Analiz dict'ini alıp PDF raporu döner."""
     try:
-        veri = rapor_pdf(istek.analiz_data)
+        veri = await run_blocking(rapor_pdf, istek.analiz_data)
     except RuntimeError as e:
         log.warning(f"pdf üretimi başarısız (paket eksik?): {e}")
         raise HTTPException(status_code=500, detail=str(e))

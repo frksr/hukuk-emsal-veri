@@ -144,11 +144,11 @@ Detay: `IMPLEMENTASYON_PLANI.md` Bölüm 13.
 
 ## Test Durumu
 
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest tests/ -q
 ```
-normalize.py:  8/8 PASS  (Türkçe-aware tr_fold dahil)
-anonymize.py:  8/8 PASS  (TCKN, IBAN, telefon, mail)
-job_queue.py:  4/4 PASS  (idempotent, resumable)
-─────────────────────────
-TOPLAM:       20/20 PASS
-```
-"# hukuk-emsal-veri" 
+
+Kapsam: normalize, anonymize, job_queue, encryption, pii_redaction,
+billing (TCKN/telefon validasyonu), db entegrasyon, faiz_hesaplayici, zamanasimi.
+

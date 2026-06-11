@@ -9,17 +9,17 @@ const KATEGORI = [
 ];
 
 const ARACLAR = [
-  { href: "/faiz-hesaplama", label: "Faiz Hesaplama" },
+  { href: "/faiz-hesaplayici", label: "Faiz Hesaplama" },
   { href: "/zamanasimi", label: "Zamanaşımı" },
-  { href: "/kvkk-uyum", label: "KVKK Uyum" },
-  { href: "/trendler", label: "Yıllık Trendler" },
+  { href: "/kvkk", label: "KVKK Uyum" },
+  { href: "/trend", label: "Yıllık Trendler" },
 ];
 
 const YASAL = [
-  { href: "/hakkimizda", label: "Hakkımızda" },
-  { href: "/iletisim", label: "İletişim" },
+  { href: "/fiyatlandirma", label: "Fiyatlandırma" },
+  { href: "/yasal-uyari", label: "Yasal Uyarı" },
   { href: "/gizlilik", label: "Gizlilik Politikası" },
-  { href: "/kullanim-kosullari", label: "Kullanım Koşulları" },
+  { href: "/kullanim-sartlari", label: "Kullanım Koşulları" },
 ];
 
 export function Footer() {

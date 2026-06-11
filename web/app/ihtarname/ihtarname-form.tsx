@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ihtarnameOlustur } from "@/lib/api";
+import { ihtarnameOlustur, exportBelge } from "@/lib/api";
 
 const TURLER = [
   { value: "alacak_temerrut", label: "Alacak Temerrüt (TBK 117 - 7 gün)" },
@@ -46,12 +46,13 @@ export function IhtarnameForm() {
   }
 
   function copy() { if (sonuc?.ihtarname_metni) navigator.clipboard.writeText(sonuc.ihtarname_metni); }
-  function download() {
+  async function downloadAs(format: "docx" | "udf") {
     if (!sonuc?.ihtarname_metni) return;
-    const blob = new Blob([sonuc.ihtarname_metni], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `ihtarname-${tur}-${Date.now()}.txt`; a.click();
-    URL.revokeObjectURL(url);
+    try {
+      await exportBelge(format, { metin: sonuc.ihtarname_metni, dosya_adi: `ihtarname-${tur}` });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İndirme hatası.");
+    }
   }
 
   return (
@@ -97,8 +98,9 @@ export function IhtarnameForm() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>İhtarname Taslağı</CardTitle>
               <div className="flex gap-2">
-                <Button onClick={copy} variant="outline" size="sm"><Copy className="h-4 w-4" /></Button>
-                <Button onClick={download} variant="outline" size="sm"><Download className="h-4 w-4" /></Button>
+                <Button onClick={copy} variant="outline" size="sm" title="Panoya kopyala"><Copy className="h-4 w-4" /></Button>
+                <Button onClick={() => downloadAs("docx")} variant="outline" size="sm" title="Word olarak indir"><Download className="h-4 w-4 mr-1" /> Word</Button>
+                <Button onClick={() => downloadAs("udf")} variant="outline" size="sm" title="UYAP belgesi olarak indir"><Download className="h-4 w-4 mr-1" /> UYAP</Button>
               </div>
             </CardHeader>
             <CardContent>

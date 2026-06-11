@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
-import { Search, Loader2, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Search, Loader2, ExternalLink, Star, FileText, Scale, Bell, BellRing } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { aramaCagir, type EmsalKarar } from "@/lib/api";
+import { alarmOlustur, aramaCagir, aramaStats, kararKaydet, type EmsalKarar } from "@/lib/api";
 
 export function AramaForm() {
   const [query, setQuery] = useState("");
@@ -14,6 +15,37 @@ export function AramaForm() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<EmsalKarar[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dbHazirDegil, setDbHazirDegil] = useState(false);
+  const [kaydedilenler, setKaydedilenler] = useState<Set<string>>(new Set());
+  const [kayitMesaj, setKayitMesaj] = useState<string | null>(null);
+  const [takipte, setTakipte] = useState(false);
+
+  async function handleTakip() {
+    try {
+      await alarmOlustur({
+        query,
+        filters: { source: source || null, court_chamber: chamber || null },
+      });
+      setTakipte(true);
+      setKayitMesaj(null);
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 401 || status === 403) {
+        setKayitMesaj("Aramayı takip etmek için ücretsiz hesap açın — yeni emsal çıkınca e-posta alırsınız.");
+      } else {
+        setKayitMesaj(err instanceof Error ? err.message : "Takip hatası.");
+      }
+    }
+  }
+
+  // Koleksiyon hazır mı? (seed edilmemişse kullanıcıya açıkla)
+  useEffect(() => {
+    aramaStats()
+      .then((s) => setDbHazirDegil(!s?.data?.available))
+      .catch(() => {
+        /* stats erişilemiyorsa banner gösterme — arama yine denenir */
+      });
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -31,8 +63,44 @@ export function AramaForm() {
     }
   }
 
+  async function handleKaydet(r: EmsalKarar) {
+    const key = r.chunk_id;
+    try {
+      await kararKaydet({
+        decision_id: r.decision_id || r.chunk_id,
+        chunk_id: r.chunk_id,
+        baslik: `${r.court_chamber || "?"} · ${r.case_no || "?"} → ${r.decision_no || "?"}`,
+        ozet: (r.text || "").slice(0, 2000),
+        meta: {
+          source: r.source,
+          court_chamber: r.court_chamber,
+          case_no: r.case_no,
+          decision_no: r.decision_no,
+          decision_date: r.decision_date,
+          source_url: r.source_url,
+        },
+      });
+      setKaydedilenler((prev) => new Set(prev).add(key));
+      setKayitMesaj(null);
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 401 || status === 403) {
+        setKayitMesaj("Kararları kaydetmek için ücretsiz hesap açın — kayıtlar dava dosyanıza göre klasörlenir.");
+      } else {
+        setKayitMesaj(err instanceof Error ? err.message : "Kaydetme hatası.");
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {dbHazirDegil && (
+        <div className="rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-800 dark:text-amber-200">
+          Karar veritabanı şu anda hazırlanıyor (indeksleme devam ediyor). Arama
+          sonuçları eksik veya boş dönebilir — kısa süre sonra tekrar deneyin.
+        </div>
+      )}
+
       <form onSubmit={handleSearch} className="space-y-4">
         <div className="flex gap-2">
           <Input
@@ -77,6 +145,15 @@ export function AramaForm() {
         </div>
       )}
 
+      {kayitMesaj && (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 text-sm flex items-center justify-between gap-3">
+          <span>{kayitMesaj}</span>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/kayit">Ücretsiz Kayıt</Link>
+          </Button>
+        </div>
+      )}
+
       {loading && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -93,7 +170,34 @@ export function AramaForm() {
 
       {results && results.length > 0 && (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">{results.length} emsal karar bulundu.</div>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-sm text-muted-foreground">{results.length} emsal karar bulundu.</div>
+            <div className="flex gap-2">
+              <Button asChild size="sm" variant="outline" title="Bu sorguyla AI dilekçe taslağı oluştur">
+                <Link href={`/dilekce?durum=${encodeURIComponent(query)}`}>
+                  <FileText className="h-3.5 w-3.5 mr-1.5" /> Bu konuda dilekçe yaz
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" title="Bu teze karşı argümanları gör">
+                <Link href={`/karsi-argument?tez=${encodeURIComponent(query)}`}>
+                  <Scale className="h-3.5 w-3.5 mr-1.5" /> Karşı argüman üret
+                </Link>
+              </Button>
+              <Button
+                size="sm"
+                variant={takipte ? "default" : "outline"}
+                onClick={handleTakip}
+                disabled={takipte}
+                title="Bu konuda yeni emsal çıkınca e-posta al"
+              >
+                {takipte ? (
+                  <><BellRing className="h-3.5 w-3.5 mr-1.5" /> Takipte</>
+                ) : (
+                  <><Bell className="h-3.5 w-3.5 mr-1.5" /> Takip et</>
+                )}
+              </Button>
+            </div>
+          </div>
           {results.map((r, i) => (
             <Card key={r.chunk_id}>
               <CardContent className="p-5">
@@ -106,11 +210,26 @@ export function AramaForm() {
                       {r.decision_date || ""} · {r.source} · benzerlik: {(r.similarity * 100).toFixed(1)}%
                     </div>
                   </div>
-                  {r.source_url && (
-                    <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
-                      Kaynak <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleKaydet(r)}
+                      title={kaydedilenler.has(r.chunk_id) ? "Kaydedildi" : "Kararı kaydet"}
+                      className="text-muted-foreground hover:text-amber-500 transition-colors"
+                      aria-label="Kararı kaydet"
+                    >
+                      <Star
+                        className="h-4 w-4"
+                        fill={kaydedilenler.has(r.chunk_id) ? "currentColor" : "none"}
+                        color={kaydedilenler.has(r.chunk_id) ? "#f59e0b" : undefined}
+                      />
+                    </button>
+                    {r.source_url && (
+                      <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                        Kaynak <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-foreground/80 leading-relaxed line-clamp-4">{r.text}</p>
                 {r.topic_tags && (

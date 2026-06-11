@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 from fastapi import APIRouter, HTTPException, Query
 
+from api.cache import trend_cache
+from api.concurrency import run_blocking
 from api.schemas import APIResponse
 from services.trend import (
     trend_yillik,
@@ -28,7 +30,11 @@ async def yillik(
 ) -> APIResponse:
     """Yıl bazında karar sayısı. Konu/kaynak/daire ile filtrelenebilir."""
     try:
-        data = trend_yillik(konu_filtresi=konu_filtresi, kaynak=kaynak, daire=daire)
+        _ck = trend_cache.make_key("trend_yillik", konu_filtresi, kaynak, daire)
+        data = trend_cache.get(_ck)
+        if data is None:
+            data = await run_blocking(trend_yillik, konu_filtresi=konu_filtresi, kaynak=kaynak, daire=daire)
+            trend_cache.set(_ck, data)
     except Exception as e:
         log.exception("trend_yillik hatası")
         raise HTTPException(status_code=500, detail=str(e))
@@ -48,7 +54,11 @@ async def konu_dagilimi(
             detail="yil_bitis, yil_baslangic'tan küçük olamaz.",
         )
     try:
-        data = trend_konu_dagilimi(yil_baslangic, yil_bitis)
+        _ck = trend_cache.make_key("trend_konu_dagilimi", yil_baslangic, yil_bitis)
+        data = trend_cache.get(_ck)
+        if data is None:
+            data = await run_blocking(trend_konu_dagilimi, yil_baslangic, yil_bitis)
+            trend_cache.set(_ck, data)
     except Exception as e:
         log.exception("trend_konu_dagilimi hatası")
         raise HTTPException(status_code=500, detail=str(e))
@@ -63,10 +73,14 @@ async def mahkeme_konu(
 ) -> APIResponse:
     """Heatmap için court_chamber × topic matrisi."""
     try:
-        data = trend_mahkeme_konu_matrix(
+        _ck = trend_cache.make_key("trend_mahkeme_konu_matrix", top_n_mahkeme, top_n_konu)
+        data = trend_cache.get(_ck)
+        if data is None:
+            data = await run_blocking(trend_mahkeme_konu_matrix,
             top_n_mahkeme=top_n_mahkeme,
             top_n_konu=top_n_konu,
         )
+            trend_cache.set(_ck, data)
     except Exception as e:
         log.exception("trend_mahkeme_konu_matrix hatası")
         raise HTTPException(status_code=500, detail=str(e))
@@ -87,7 +101,11 @@ async def aylik(
             detail="yil_bitis, yil_baslangic'tan küçük olamaz.",
         )
     try:
-        data = trend_aylik(konu_filtresi, yil_baslangic, yil_bitis)
+        _ck = trend_cache.make_key("trend_aylik", konu_filtresi, yil_baslangic, yil_bitis)
+        data = trend_cache.get(_ck)
+        if data is None:
+            data = await run_blocking(trend_aylik, konu_filtresi, yil_baslangic, yil_bitis)
+            trend_cache.set(_ck, data)
     except Exception as e:
         log.exception("trend_aylik hatası")
         raise HTTPException(status_code=500, detail=str(e))
@@ -121,11 +139,15 @@ async def kaynak_dagilimi(
             detail="yil_bitis, yil_baslangic'tan küçük olamaz.",
         )
     try:
-        data = trend_kaynak_dagilimi(
+        _ck = trend_cache.make_key("trend_kaynak_dagilimi", konu_filtresi, yil_baslangic, yil_bitis)
+        data = trend_cache.get(_ck)
+        if data is None:
+            data = await run_blocking(trend_kaynak_dagilimi,
             konu_filtresi=konu_filtresi,
             yil_baslangic=yil_baslangic,
             yil_bitis=yil_bitis,
         )
+            trend_cache.set(_ck, data)
     except Exception as e:
         log.exception("trend_kaynak_dagilimi hatası")
         raise HTTPException(status_code=500, detail=str(e))
@@ -149,13 +171,17 @@ async def top_mahkemeler(
             detail="yil_bitis, yil_baslangic'tan küçük olamaz.",
         )
     try:
-        data = trend_top_mahkemeler(
+        _ck = trend_cache.make_key("trend_top_mahkemeler", top_n, konu_filtresi, kaynak, yil_baslangic, yil_bitis)
+        data = trend_cache.get(_ck)
+        if data is None:
+            data = await run_blocking(trend_top_mahkemeler,
             top_n=top_n,
             konu_filtresi=konu_filtresi,
             kaynak=kaynak,
             yil_baslangic=yil_baslangic,
             yil_bitis=yil_bitis,
         )
+            trend_cache.set(_ck, data)
     except Exception as e:
         log.exception("trend_top_mahkemeler hatası")
         raise HTTPException(status_code=500, detail=str(e))

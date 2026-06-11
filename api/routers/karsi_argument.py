@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import rate_limit
+from api.concurrency import run_blocking
 from api.schemas import APIResponse, KarsiArgumentIstegi
 from services.karsi_argument import karsi_argument_uret
 
@@ -23,7 +24,8 @@ async def karsi_argument(
     bayrağını döner — 503 atmaz çünkü RAG kısmı çalışır.
     """
     try:
-        sonuc = karsi_argument_uret(
+        sonuc = await run_blocking(
+            karsi_argument_uret,
             kendi_tezi=istek.kendi_tezi,
             dava_turu=istek.dava_turu,
             k=istek.k,

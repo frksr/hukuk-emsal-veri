@@ -7,6 +7,7 @@ export const metadata: Metadata = buildMetadata({
   description:
     "Hukuk Emsal ücretsiz hesap açın. Geçmiş aramalar, daha yüksek limitler ve e-mail bildirimleri kullanıma sunulur.",
   path: "/kayit",
+  noIndex: true,
 });
 
 export default function KayitPage() {

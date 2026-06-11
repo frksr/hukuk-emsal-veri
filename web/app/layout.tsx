@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Providers } from "@/components/providers";
 import { CookieConsent } from "@/components/cookie-consent";
+import { ChromeGuard } from "@/components/layout/chrome-guard";
 import "./globals.css";
 
 const inter = Inter({
@@ -90,7 +90,10 @@ export const metadata: Metadata = {
   },
   manifest: "/site.webmanifest",
   verification: {
-    // google: "google-site-verification-token",
+    // Google Search Console doğrulama token'ı env'den okunur.
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+      : {}),
   },
   formatDetection: {
     email: false,
@@ -157,12 +160,11 @@ export default function RootLayout({
           href="https://fonts.gstatic.com"
           crossOrigin="anonymous"
         />
-        <Script
-          id="ld-json-legalservice"
+        {/* JSON-LD ilk HTML'de olmalı — next/script afterInteractive kullanma */}
+        <script
           type="application/ld+json"
-          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(legalServiceJsonLd),
+            __html: JSON.stringify(legalServiceJsonLd).replace(/</g, "\\u003c"),
           }}
         />
       </head>
@@ -174,12 +176,16 @@ export default function RootLayout({
           >
             Ana içeriğe geç
           </a>
-          <Header />
+          <ChromeGuard>
+            <Header />
+          </ChromeGuard>
           <main id="main-content" className="flex-1">
             {children}
           </main>
-          <Footer />
-          <CookieConsent />
+          <ChromeGuard>
+            <Footer />
+            <CookieConsent />
+          </ChromeGuard>
         </Providers>
       </body>
     </html>

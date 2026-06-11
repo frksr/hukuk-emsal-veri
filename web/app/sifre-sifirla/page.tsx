@@ -6,6 +6,7 @@ export const metadata: Metadata = buildMetadata({
   title: "Şifre Sıfırlama",
   description: "Hukuk Emsal hesap şifrenizi sıfırlayın.",
   path: "/sifre-sifirla",
+  noIndex: true,
 });
 
 export default function SifreSifirlaPage({

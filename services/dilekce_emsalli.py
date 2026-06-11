@@ -315,3 +315,102 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
         "kullanilan_emsaller": kullanilan,
         "uyari": uyari,
     }
+
+
+def generate_dilekce_stream(
+    durum: str,
+    dilekce_turu: str = "genel",
+    taraflar: dict | None = None,
+    k: int = 5,
+):
+    """Streaming dilekçe üretimi — event dict'leri yield eder.
+
+    Event'ler:
+      {"type": "meta",  "kullanilan_emsaller": [...], "uyari": str, "demo": bool}
+      {"type": "delta", "text": str}          # LLM'den gelen parça
+      {"type": "done"}
+    """
+    from llm.provider import generate_stream
+
+    durum = (durum or "").strip()
+    if not durum:
+        yield {"type": "meta", "kullanilan_emsaller": [],
+               "uyari": "Olay anlatımı (durum) boş — dilekçe üretilemedi.",
+               "demo": False}
+        yield {"type": "done"}
+        return
+
+    if dilekce_turu not in DILEKCE_TURU_LABEL:
+        dilekce_turu = "genel"
+
+    # 1) RAG araması
+    try:
+        emsaller = search(durum, k=k)
+        rag_hatasi = ""
+    except Exception as e:
+        emsaller = []
+        rag_hatasi = f"RAG araması başarısız: {e}"
+
+    kullanilan = _kullanilan_emsaller_format(emsaller)
+
+    # 2) LLM yoksa demo modu — stub'ı tek seferde gönder
+    if not is_available():
+        uyari = (
+            "DEMO MODU: LLM API key bulunamadı. Sadece emsaller listelendi, "
+            "dilekçe iskeleti verildi."
+        )
+        if rag_hatasi:
+            uyari = rag_hatasi + " | " + uyari
+        yield {"type": "meta", "kullanilan_emsaller": kullanilan,
+               "uyari": uyari, "demo": True}
+        yield {"type": "delta",
+               "text": _stub_dilekce(durum, dilekce_turu, taraflar, emsaller)}
+        yield {"type": "done"}
+        return
+
+    # 3) Prompt (generate_dilekce ile aynı)
+    taraflar = taraflar or {}
+    alacakli = (taraflar.get("alacakli") or "").strip() or "[ALACAKLI / DAVACI]"
+    borclu = (taraflar.get("borclu") or "").strip() or "[BORÇLU / DAVALI]"
+    baslik = DILEKCE_TURU_LABEL.get(dilekce_turu, "Hukuki Dilekçe")
+    dayanak = DILEKCE_TURU_HUKUKI_DAYANAK.get(dilekce_turu, "İlgili mevzuat.")
+    emsal_blogu = _emsal_blogu_hazirla(emsaller)
+
+    user_prompt = f"""DİLEKÇE TÜRÜ: {baslik} ({dilekce_turu})
+
+TARAFLAR:
+  - Davacı / Alacaklı: {alacakli}
+  - Davalı / Borçlu : {borclu}
+
+SOMUT OLAY (kullanıcının anlatımı):
+\"\"\"
+{durum}
+\"\"\"
+
+İLGİLİ EMSAL KARARLAR (RAG ile çekildi — atıflarda METADATA'yı kullan):
+{emsal_blogu}
+
+HUKUKİ DAYANAK ÖNERİSİ:
+{dayanak}
+
+GÖREV:
+Yukarıdaki olaya ve emsallere dayanarak, "{baslik}" formatında, mahkemeye
+sunulabilir nitelikte bir dilekçe taslağı yaz. Emsal kararları AÇIKLAMALAR
+bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ver.
+"""
+
+    # 4) Önce meta (frontend emsalleri hemen gösterebilsin), sonra delta'lar
+    yield {"type": "meta", "kullanilan_emsaller": kullanilan,
+           "uyari": rag_hatasi, "demo": False}
+
+    try:
+        for piece in generate_stream(
+            system=SISTEM_PROMPT, user=user_prompt,
+            max_tokens=2500, temperature=0.3,
+        ):
+            yield {"type": "delta", "text": piece}
+    except Exception as e:
+        yield {"type": "error",
+               "message": f"LLM akışı kesildi: {e}. Lütfen tekrar deneyin."}
+        return
+    yield {"type": "done"}

@@ -88,12 +88,50 @@ def get_full_decision(decision_id: str) -> dict | None:
     if not parquet.exists():
         return None
     try:
-        rows = duckdb.sql(
-            f"SELECT * FROM '{parquet}' WHERE id = '{decision_id}' LIMIT 1"
-        ).fetchall()
-        cols = duckdb.sql(f"SELECT * FROM '{parquet}' LIMIT 0").columns
+        con = duckdb.connect()
+        cur = con.execute(
+            "SELECT * FROM read_parquet(?) WHERE id = ? LIMIT 1",
+            [str(parquet), decision_id],
+        )
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        con.close()
         if not rows:
             return None
         return dict(zip(cols, rows[0]))
     except Exception:
         return None
+
+
+def list_decisions(limit: int = 100, offset: int = 0,
+                   source: str | None = None) -> list[dict]:
+    """Karar detay sayfaları için sayfalı liste (parquet'ten).
+
+    Yalnızca anonymization_check'i geçen kayıtlar döner — KVKK: kişisel veri
+    içerme şüphesi olan karar public sayfada yayımlanmaz.
+    """
+    import duckdb
+    if not DECISIONS_PARQUET.exists():
+        return []
+    try:
+        con = duckdb.connect()
+        sql = (
+            "SELECT id, source, court_chamber, case_no, decision_no, "
+            "decision_date, topic_tags, char_count "
+            "FROM read_parquet(?) "
+            "WHERE COALESCE(CAST(anonymization_check AS VARCHAR), '') "
+            "  NOT IN ('failed', 'false', '0') "
+        )
+        params: list = [str(DECISIONS_PARQUET)]
+        if source:
+            sql += "AND source = ? "
+            params.append(source)
+        sql += "ORDER BY decision_date DESC NULLS LAST LIMIT ? OFFSET ?"
+        params += [int(limit), int(offset)]
+        cur = con.execute(sql, params)
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        con.close()
+        return [dict(zip(cols, r)) for r in rows]
+    except Exception:
+        return []

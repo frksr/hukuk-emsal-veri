@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import rate_limit
+from api.concurrency import run_blocking
 from api.schemas import APIResponse, OzetIstegi, OzetIstegiID
 from services.karar_ozet import ozet_uret
 from services.rag import get_full_decision
@@ -32,7 +33,7 @@ async def ozet_metinden(
             detail=f"Geçersiz uzunluk: {istek.uzunluk!r}. Geçerli: {sorted(GECERLI_UZUNLUK)}",
         )
     try:
-        sonuc = ozet_uret(istek.karar_metni, uzunluk=istek.uzunluk)
+        sonuc = await run_blocking(ozet_uret, istek.karar_metni, uzunluk=istek.uzunluk)
     except Exception as e:
         log.exception("Özet üretimi başarısız")
         raise HTTPException(status_code=500, detail=f"Özet üretilemedi: {e}")
@@ -59,7 +60,7 @@ async def ozet_by_id(
         )
 
     try:
-        karar = get_full_decision(istek.decision_id)
+        karar = await run_blocking(get_full_decision, istek.decision_id)
     except Exception as e:
         log.exception("get_full_decision hatası")
         raise HTTPException(status_code=500, detail=str(e))
@@ -84,7 +85,7 @@ async def ozet_by_id(
         )
 
     try:
-        sonuc = ozet_uret(str(metin), uzunluk=istek.uzunluk)
+        sonuc = await run_blocking(ozet_uret, str(metin), uzunluk=istek.uzunluk)
     except Exception as e:
         log.exception("Özet üretimi başarısız (by-id)")
         raise HTTPException(status_code=500, detail=f"Özet üretilemedi: {e}")

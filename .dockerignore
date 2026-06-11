@@ -6,8 +6,16 @@ __pycache__/
 .env.local
 data/raw/
 data/cleaned/
+data/enriched/
+data/final/
+data/chroma_db/
+data/tenant_storage/
 data/queue.db
+data/*.db
 data/external/
+*.before-reextract
+.pytest_cache/
+pytest-cache-files-*/
 web/
 app/
 scrapers/

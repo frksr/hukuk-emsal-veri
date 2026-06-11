@@ -70,9 +70,22 @@ async def faiz_hesapla(
             summary="Desteklenen faiz türleri ve oran tabloları")
 async def faiz_options() -> APIResponse:
     """Geçerli faiz türleri ve yıl bazlı oranları döndürür."""
+    from services.faiz_oranlari import oran_meta, oran_overrides
+
+    # Statik fallback + JSON override'larını birleştirerek dön
+    oranlar: dict = {}
+    for tur, tablo in FAIZ_TABLOLARI.items():
+        birlesik = dict(tablo)
+        try:
+            birlesik.update(oran_overrides(tur))
+        except Exception:
+            pass
+        oranlar[tur] = birlesik
+
     data = {
         "faiz_turleri": list(FAIZ_TABLOLARI.keys()),
-        "oranlar": {k: dict(v) for k, v in FAIZ_TABLOLARI.items()},
+        "oranlar": oranlar,
+        "oran_kaynagi": oran_meta(),
         "uyari": UYARI_METNI,
     }
     return APIResponse(ok=True, data=data)

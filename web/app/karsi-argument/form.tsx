@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Swords, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,13 @@ export function KarsiArgumentForm() {
   const [loading, setLoading] = useState(false);
   const [sonuc, setSonuc] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Emsal aramadan "karşı argüman üret" ile gelindiyse tezi ön-doldur.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tez");
+    if (t) setTezi(t);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

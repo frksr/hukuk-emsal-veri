@@ -9,9 +9,10 @@ const NAV = [
   { href: "/emsal-arama", label: "Emsal Arama" },
   { href: "/dilekce", label: "Dilekçe" },
   { href: "/ihtarname", label: "İhtarname" },
-  { href: "/faiz-hesaplama", label: "Faiz" },
+  { href: "/faiz-hesaplayici", label: "Faiz" },
   { href: "/zamanasimi", label: "Zamanaşımı" },
-  { href: "/kvkk-uyum", label: "KVKK" },
+  { href: "/kvkk", label: "KVKK" },
+  { href: "/fiyatlandirma", label: "Fiyatlandırma" },
 ];
 
 export function Header() {

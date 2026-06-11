@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from api.audit import audit
+from api.concurrency import run_blocking
 from api.auth import CurrentUser, require_uyap
 from api.db import db_session
 from api.rate_limit import rate_limit_for
@@ -346,7 +347,8 @@ async def ai_sorgu(
     start = time.perf_counter()
 
     # 1) Tenant dosyalarında arama
-    tenant_results = search_tenant(
+    tenant_results = await run_blocking(
+        search_tenant,
         user.tenant_id, payload.query, k=payload.k,
         document_ids=payload.document_ids,
     )
@@ -355,7 +357,7 @@ async def ai_sorgu(
     emsal_results = []
     if payload.include_emsal:
         try:
-            emsal_results = public_search(payload.query, k=3)
+            emsal_results = await run_blocking(public_search, payload.query, k=3)
         except Exception:
             pass
 
@@ -428,7 +430,8 @@ async def ai_sorgu(
             "Yukarıdaki kaynaklara dayanarak soruyu yanıtla."
         )
         try:
-            raw_answer = generate(
+            raw_answer = await run_blocking(
+                generate,
                 system=sys_prompt, user=user_prompt,
                 max_tokens=1500, temperature=0.3,
             )

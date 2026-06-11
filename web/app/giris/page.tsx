@@ -6,6 +6,7 @@ export const metadata: Metadata = buildMetadata({
   title: "Giriş Yap",
   description: "Hukuk Emsal hesabınızla giriş yapın.",
   path: "/giris",
+  noIndex: true,
 });
 
 export default function GirisPage() {

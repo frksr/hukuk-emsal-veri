@@ -28,6 +28,7 @@ MIGRATIONS = [
     "04_migration_002.sql",
     "05_migration_003.sql",
     "06_migration_004.sql",
+    "10_saved_decisions.sql",
 ]
 
 

@@ -43,11 +43,14 @@ export const metadata: Metadata = buildMetadata({
   ],
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "Türk Hukuk Emsal Asistanı",
-  url: "https://hukuk-emsal.tr",
+  url: SITE_URL,
   inLanguage: "tr-TR",
   description:
     "Türk hukuk sisteminde Yargıtay, Danıştay ve AİHM emsal kararlarını AI ile arayın; dilekçe, ihtarname ve faiz hesaplama araçları.",
@@ -55,8 +58,7 @@ const websiteJsonLd = {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate:
-        "https://hukuk-emsal.tr/emsal-arama?q={search_term_string}",
+      urlTemplate: `${SITE_URL}/emsal-arama?q={search_term_string}`,
     },
     "query-input": "required name=search_term_string",
   },
@@ -66,8 +68,8 @@ const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Türk Hukuk Emsal Asistanı",
-  url: "https://hukuk-emsal.tr",
-  logo: "https://hukuk-emsal.tr/logo.png",
+  url: SITE_URL,
+  logo: `${SITE_URL}/logo.png`,
   description:
     "İcra ve tahsilat hukuku odaklı AI destekli emsal karar arama platformu.",
   sameAs: [

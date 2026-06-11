@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
 from api.deps import rate_limit
+from api.concurrency import run_blocking
 from api.schemas import APIResponse
 
 router = APIRouter()
@@ -20,7 +21,7 @@ async def denetle_text(payload: dict, _: None = Depends(rate_limit)):
 
     try:
         from services.belge_denetim import denetle
-        result = denetle(metin, tur=tur, k=k)
+        result = await run_blocking(denetle, metin, tur=tur, k=k)
         return APIResponse(ok=True, data=result)
     except Exception as e:
         msg = str(e).lower()
@@ -50,7 +51,7 @@ async def denetle_upload(
 
     try:
         from services.sozlesme import parse_dosya
-        metin = parse_dosya(content, ext)
+        metin = await run_blocking(parse_dosya, content, ext)
     except Exception as e:
         raise HTTPException(400, f"Dosya parse edilemedi: {e}")
 
@@ -59,7 +60,7 @@ async def denetle_upload(
 
     try:
         from services.belge_denetim import denetle
-        result = denetle(metin, tur=tur, k=5)
+        result = await run_blocking(denetle, metin, tur=tur, k=5)
         result["dosya_adi"] = file.filename
         result["dosya_boyut"] = len(content)
         return APIResponse(ok=True, data=result)
