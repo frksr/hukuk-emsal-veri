@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { auth } from "@/auth";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Providers } from "@/components/providers";
 import { CookieConsent } from "@/components/cookie-consent";
 import { ChromeGuard } from "@/components/layout/chrome-guard";
+import { InactivityLogout } from "@/components/inactivity-logout";
 import "./globals.css";
 
 const inter = Inter({
@@ -15,7 +17,7 @@ const inter = Inter({
 });
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -24,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s | Türk Hukuk Asistanı",
   },
   description:
-    "İcra, tahsilat, ihtar konularında Yargıtay, Danıştay ve AİHM emsal kararları. AI destekli dilekçe, ihtarname, faiz hesaplama.",
+    "İcra, tahsilat, ihtar konularında Yargıtay, Danıştay ve AİHM emsal kararları. Yapay Zeka destekli dilekçe, ihtarname, faiz hesaplama.",
   keywords: [
     "yargıtay kararları",
     "danıştay kararları",
@@ -49,7 +51,7 @@ export const metadata: Metadata = {
     siteName: "Hukuk Emsal",
     title: "Türk Hukuk Asistanı | Emsal Karar Arama",
     description:
-      "Yargıtay, Danıştay ve AİHM emsal kararları + AI destekli hukuki araçlar.",
+      "Yargıtay, Danıştay ve AİHM emsal kararları + Yapay Zeka destekli hukuki araçlar.",
     images: [
       {
         url: "/og-default.png",
@@ -63,7 +65,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Türk Hukuk Asistanı | Emsal Karar Arama",
     description:
-      "Yargıtay, Danıştay ve AİHM emsal kararları + AI destekli hukuki araçlar.",
+      "Yargıtay, Danıştay ve AİHM emsal kararları + Yapay Zeka destekli hukuki araçlar.",
     images: ["/og-default.png"],
   },
   robots: {
@@ -122,7 +124,7 @@ const legalServiceJsonLd = {
   logo: `${SITE_URL}/logo.png`,
   image: `${SITE_URL}/og-default.png`,
   description:
-    "Yargıtay, Danıştay ve AİHM emsal kararları üzerinde arama ve AI destekli hukuki araçlar (dilekçe, ihtarname, faiz/zamanaşımı hesaplama).",
+    "Yargıtay, Danıştay ve AİHM emsal kararları üzerinde arama ve Yapay Zeka destekli hukuki araçlar (dilekçe, ihtarname, faiz/zamanaşımı hesaplama).",
   inLanguage: "tr-TR",
   areaServed: {
     "@type": "Country",
@@ -146,14 +148,31 @@ const legalServiceJsonLd = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Giriş durumunu SUNUCUDA çöz → ilk render'da doğru header/oturum durumu
+  // (client fetch'i beklemeden). "çıkış-yapmış → giriş-yapmış" titremesini önler.
+  const session = await auth();
+  const initialUser = session?.user
+    ? {
+        name: session.user.name ?? null,
+        email: session.user.email ?? null,
+        role: (session.user as { role?: string }).role ?? null,
+      }
+    : null;
   return (
     <html lang="tr" className={inter.variable} suppressHydrationWarning>
       <head>
+        {/* Tema: render öncesi sınıfı uygula — FOUC önlenir.
+            localStorage("tema") -> yoksa sistem tercihi (prefers-color-scheme). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("tema");var koyu=t==="dark"||(!t&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(koyu){document.documentElement.classList.add("dark");}else{document.documentElement.classList.remove("dark");}}catch(e){}})();`,
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -169,7 +188,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col bg-background font-sans">
-        <Providers>
+        <Providers initialUser={initialUser}>
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
@@ -186,6 +205,7 @@ export default function RootLayout({
             <Footer />
             <CookieConsent />
           </ChromeGuard>
+          <InactivityLogout />
         </Providers>
       </body>
     </html>

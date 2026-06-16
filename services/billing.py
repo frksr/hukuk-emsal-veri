@@ -25,10 +25,10 @@ from typing import Optional
 
 log = logging.getLogger("services.billing")
 
-IYZICO_API_KEY = os.environ.get("IYZICO_API_KEY", "")
-IYZICO_SECRET_KEY = os.environ.get("IYZICO_SECRET_KEY", "")
-IYZICO_BASE_URL = os.environ.get("IYZICO_BASE_URL", "https://sandbox-api.iyzipay.com")
-SITE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukemsal.tr")
+IYZICO_API_KEY = os.environ.get("IYZICO_API_KEY", "").strip()
+IYZICO_SECRET_KEY = os.environ.get("IYZICO_SECRET_KEY", "").strip()
+IYZICO_BASE_URL = os.environ.get("IYZICO_BASE_URL", "https://sandbox-api.iyzipay.com").strip().rstrip("/")
+SITE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukcuyapayzekasi.com")
 # iyzico panelinde tanımlanan webhook imza anahtarı (HMAC-SHA256). Set edilirse
 # webhook'lar imza doğrulamasından geçmek zorunda kalır.
 IYZICO_WEBHOOK_SECRET = os.environ.get("IYZICO_WEBHOOK_SECRET", "")
@@ -72,7 +72,10 @@ def get_plan_info(plan_tier: str) -> Optional[dict]:
 
 def _make_iyzico_auth(uri: str, body: str | None) -> dict[str, str]:
     """iyzico v2 HMAC-SHA256 imzalama."""
-    rand_str = base64.b64encode(os.urandom(8)).decode()
+    # randomKey özel karakter (+ / =) İÇERMEMELİ — iyzico header'dan yeniden
+    # okuyup imzayı doğruluyor; base64 özel karakterleri bozulup imza tutmuyordu.
+    # Resmi SDK gibi salt alfanümerik (hex) bir değer kullan.
+    rand_str = os.urandom(16).hex()
     payload = rand_str + uri + (body or "")
     signature = hmac.new(
         IYZICO_SECRET_KEY.encode(),
@@ -91,16 +94,65 @@ def _make_iyzico_auth(uri: str, body: str | None) -> dict[str, str]:
 
 
 async def _post(uri: str, body: dict) -> dict:
-    """iyzico API'sine async POST."""
+    """iyzico API'sine async POST.
+
+    Aralıklı DNS/bağlantı hatalarına (örn. flaky router DNS → getaddrinfo failed)
+    karşı dayanıklı: ConnectError/timeout durumunda artan beklemeyle yeniden dener.
+    """
+    import asyncio
     import httpx
     body_json = json.dumps(body, separators=(",", ":"))
     headers = _make_iyzico_auth(uri, body_json)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(f"{IYZICO_BASE_URL}{uri}", headers=headers, content=body_json)
+    max_attempts = 5
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
         try:
-            return r.json()
-        except Exception:
-            return {"status": "failure", "errorMessage": r.text[:500]}
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(
+                    f"{IYZICO_BASE_URL}{uri}", headers=headers, content=body_json,
+                )
+            # JSON ise normal sonuç. iyzico bazen 5xx'te HTML "Service Unavailable"
+            # sayfası döner → ham HTML'i kullanıcıya yansıtma; geçiciyse yeniden dene.
+            try:
+                return r.json()
+            except Exception:
+                if r.status_code >= 500 and attempt < max_attempts:
+                    await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
+                    continue
+                print(f"[IYZICO] JSON olmayan yanıt ({r.status_code}) {uri}: {r.text[:300]!r}")
+                return {
+                    "status": "failure",
+                    "errorMessage": "Ödeme servisine şu an ulaşılamıyor. Lütfen birazdan tekrar deneyin.",
+                }
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            last_exc = e
+            if attempt < max_attempts:
+                await asyncio.sleep(0.5 * (2 ** (attempt - 1)))  # 0.5,1,2,4 sn
+                continue
+    return {"status": "failure", "errorMessage": f"Ödeme servisine bağlanılamadı. Lütfen birazdan tekrar deneyin. ({last_exc})"}
+
+
+async def _get(uri: str) -> dict:
+    """iyzico API'sine async GET (imza boş body ile hesaplanır)."""
+    import asyncio
+    import httpx
+    headers = _make_iyzico_auth(uri, "")
+    max_attempts = 5
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.get(f"{IYZICO_BASE_URL}{uri}", headers=headers)
+            try:
+                return r.json()
+            except Exception:
+                return {"status": "failure", "errorMessage": r.text[:500]}
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            last_exc = e
+            if attempt < max_attempts:
+                await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
+                continue
+    return {"status": "failure", "errorMessage": f"Bağlantı hatası ({max_attempts} deneme): {last_exc}"}
 
 
 async def create_subscription_checkout(
@@ -129,7 +181,9 @@ async def create_subscription_checkout(
     if not plan["iyzico_pricing_plan_ref"]:
         raise RuntimeError(f"IYZICO_PLAN_{plan_tier.upper()} env eksik")
 
-    cb_url = callback_url or f"{SITE_URL}/app/ayarlar/abonelik?callback=1"
+    # iyzico ödeme sonunda buraya POST yapar → route handler token'ı alıp
+    # abonelik sayfasına 303 GET yönlendirir (sayfa ham POST'u işleyemez).
+    cb_url = callback_url or f"{SITE_URL}/api/billing/subscription-callback"
     body = {
         "locale": "tr",
         "conversationId": f"{tenant_id}:{plan_tier}:{datetime.now(timezone.utc).timestamp():.0f}",
@@ -162,11 +216,14 @@ async def create_subscription_checkout(
 
 
 async def retrieve_checkout_result(token: str) -> dict:
-    """Callback sonrası checkout sonucunu sorgula."""
+    """Callback sonrası abonelik checkout sonucunu sorgula.
+
+    Doğru uç: GET /v2/subscription/checkoutform/{token}  (POST .../auth/ecom/detail
+    abonelikte 'Sistem hatası 100001' döndürüyordu — o tek-seferlik ödeme içindir).
+    """
     if not is_configured():
         return {"status": "success", "dev_mode": True, "subscriptionReferenceCode": f"mock-{token}"}
-    body = {"locale": "tr", "token": token}
-    return await _post("/v2/subscription/checkoutform/auth/ecom/detail", body)
+    return await _get(f"/v2/subscription/checkoutform/{token}")
 
 
 async def cancel_subscription(iyzico_subscription_ref: str) -> dict:
@@ -189,6 +246,85 @@ async def retrieve_subscription(iyzico_subscription_ref: str) -> dict:
         "subscriptionReferenceCode": iyzico_subscription_ref,
     }
     return await _post("/v2/subscription/subscriptions/detail", body)
+
+
+# ===========================================================================
+# Tek seferlik ödeme (ek/kredi paketleri) — iyzico CheckoutForm (non-recurring)
+# ===========================================================================
+
+async def create_addon_checkout(
+    order_id: str,
+    user: dict,            # {name, surname, email, phone, identity_no, address, city, zip}
+    pack: dict,            # {ad, amount, ...}
+    callback_url: str | None = None,
+) -> dict:
+    """Ek paket için tek seferlik CheckoutForm başlat.
+
+    Returns: {status, token, paymentPageUrl, checkoutFormContent, dev_mode?}
+    """
+    if not is_configured():
+        # Dev fallback — gerçek ödeme yok; çağıran taraf krediyi hemen yükler.
+        return {
+            "status": "success",
+            "token": f"mock-addon-{order_id}",
+            "paymentPageUrl": f"{SITE_URL}/app/ayarlar/ek-paketler?mock=1&order={order_id}",
+            "checkoutFormContent": "",
+            "dev_mode": True,
+        }
+
+    fiyat = f"{Decimal(str(pack['amount'])):.2f}"
+    # Callback bir route handler'a gider (POST'u karşılayıp sayfaya 303 yönlendirir);
+    # doğrudan sayfaya POST → Next.js "Invalid URL" hatası verir.
+    cb_url = callback_url or f"{SITE_URL}/api/billing/addon-callback"
+    body = {
+        "locale": "tr",
+        "conversationId": order_id,
+        "price": fiyat,
+        "paidPrice": fiyat,
+        "currency": "TRY",
+        "basketId": order_id,
+        "paymentGroup": "PRODUCT",
+        "callbackUrl": cb_url,
+        "enabledInstallments": [1],
+        "buyer": {
+            "id": user.get("buyer_id", order_id),
+            "name": user.get("name", "")[:50] or "Avukat",
+            "surname": user.get("surname", "")[:50] or "Hesap",
+            "email": user["email"],
+            "gsmNumber": user.get("phone", "+905000000000"),
+            "identityNumber": user.get("identity_no", "11111111111"),
+            "registrationAddress": user.get("address", "—"),
+            "city": user.get("city", "İstanbul"),
+            "country": "Türkiye",
+            "zipCode": user.get("zip", "34000"),
+            "ip": user.get("ip", "85.34.78.112"),
+        },
+        "billingAddress": {
+            "contactName": f"{user.get('name','')} {user.get('surname','')}".strip() or "Hesap",
+            "city": user.get("city", "İstanbul"),
+            "country": "Türkiye",
+            "address": user.get("address", "—"),
+            "zipCode": user.get("zip", "34000"),
+        },
+        "basketItems": [
+            {
+                "id": pack.get("key", "addon"),
+                "name": pack.get("ad", "Ek Paket")[:120],
+                "category1": "Ek Paket",
+                "itemType": "VIRTUAL",
+                "price": fiyat,
+            }
+        ],
+    }
+    return await _post("/payment/iyzipos/checkoutform/initialize/auth/ecom", body)
+
+
+async def retrieve_addon_result(token: str) -> dict:
+    """Tek seferlik ödeme sonucunu sorgula (callback sonrası)."""
+    if not is_configured():
+        return {"status": "success", "paymentStatus": "SUCCESS", "dev_mode": True}
+    body = {"locale": "tr", "token": token}
+    return await _post("/payment/iyzipos/checkoutform/auth/ecom/detail", body)
 
 
 # ---------------------------------------------------------------------------

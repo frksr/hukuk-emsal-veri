@@ -18,13 +18,25 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
-SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@hukukemsal.tr")
+SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@hukukcuyapayzekasi.com")
 SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "Hukuk Emsal")
-SITE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukemsal.tr")
+# STARTTLS: açıkça set edilebilir; aksi halde port 587 ise True, (mailpit/yerel
+# 1025/1026/25 gibi) diğer portlarda False (düz SMTP). Mailpit STARTTLS istemez.
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "").strip().lower()
+SITE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukcuyapayzekasi.com")
 
 
 def is_configured() -> bool:
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+    # Host yeterli — kimlik (USER/PASS) opsiyonel: mailpit gibi sunucular auth istemez.
+    return bool(SMTP_HOST)
+
+
+def _use_starttls() -> bool:
+    if SMTP_STARTTLS in ("1", "true", "yes", "on"):
+        return True
+    if SMTP_STARTTLS in ("0", "false", "no", "off"):
+        return False
+    return SMTP_PORT == 587  # otomatik: 587 → STARTTLS, diğerleri (yerel/mailpit) düz
 
 
 async def send_email(
@@ -48,20 +60,23 @@ async def send_email(
         msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
+    gonderim: dict = {
+        "hostname": SMTP_HOST,
+        "port": SMTP_PORT,
+        "use_tls": False,
+        "start_tls": _use_starttls(),
+        "timeout": 15,
+    }
+    # Kimlik yalnızca tanımlıysa gönderilir (mailpit gibi auth'suz sunucular için).
+    if SMTP_USER and SMTP_PASS:
+        gonderim["username"] = SMTP_USER
+        gonderim["password"] = SMTP_PASS
+
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=SMTP_HOST,
-            port=SMTP_PORT,
-            username=SMTP_USER,
-            password=SMTP_PASS,
-            use_tls=False,
-            start_tls=True,
-            timeout=15,
-        )
+        await aiosmtplib.send(msg, **gonderim)
         return True
     except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
+        print(f"[EMAIL ERROR] to={to} host={SMTP_HOST}:{SMTP_PORT} starttls={gonderim['start_tls']} -> {e}")
         return False
 
 
@@ -91,28 +106,56 @@ def _wrap(title: str, body: str, cta: tuple[str, str] | None = None) -> str:
     <hr style="border:none;border-top:1px solid #eee;margin:32px 0 16px;">
     <p style="color:#888;font-size:12px;text-align:center;margin:0;">
       Bu e-posta {SITE_URL} sistemi tarafından otomatik gönderildi.<br>
-      İletişim: <a href="mailto:info@hukukemsal.tr" style="color:#1e3a5f;">info@hukukemsal.tr</a>
+      İletişim: <a href="mailto:info@hukukcuyapayzekasi.com" style="color:#1e3a5f;">info@hukukcuyapayzekasi.com</a>
     </p>
   </div>
 </body></html>"""
 
 
-async def send_verification_email(to: str, name: Optional[str], token: str) -> bool:
-    url = f"{SITE_URL}/giris/dogrulama?token={token}"
+async def send_verification_email(
+    to: str,
+    name: Optional[str],
+    code: str,
+    token: Optional[str] = None,
+    expires_minutes: int = 10,
+) -> bool:
+    """E-posta doğrulama — 6 haneli KOD (birincil) + tek-tık LİNK (yedek).
+
+    Kod cihazdan bağımsız çalışır (masaüstünde kayıt olup telefonda mailı açan
+    kullanıcı için sorunsuz) ve kurumsal e-posta tarayıcılarının linki önceden
+    tıklayıp tüketmesinden etkilenmez. Link ise aynı cihazda tek tıkla doğrular.
+    """
     greeting = f"Merhaba {name}," if name else "Merhaba,"
+    kod_kutu = (
+        "<div style='margin:24px 0;text-align:center;'>"
+        "<div style='display:inline-block;font-size:34px;font-weight:700;"
+        "letter-spacing:10px;padding:14px 26px;border-radius:12px;"
+        "background:#f1f5f9;color:#0f172a;font-family:monospace;'>"
+        f"{code}</div></div>"
+    )
     body = (
         f"<p>{greeting}</p>"
-        "<p>Hukuk Emsal'e kayıt olduğunuz için teşekkürler. "
-        "Hesabınızı doğrulamak için aşağıdaki butona tıklayın:</p>"
-        "<p style='color:#666;font-size:13px;'>"
-        "Bu bağlantı 24 saat geçerlidir. Eğer kayıt işlemini siz yapmadıysanız "
-        "bu e-postayı yok sayabilirsiniz.</p>"
+        "<p>Hukuk Emsal hesabınızı doğrulamak için aşağıdaki <strong>6 haneli kodu</strong> "
+        "siteye girin:</p>"
+        f"{kod_kutu}"
+        f"<p style='color:#666;font-size:13px;'>Kod <strong>{expires_minutes} dakika</strong> "
+        "geçerlidir. Bu işlemi siz yapmadıysanız bu e-postayı yok sayabilirsiniz.</p>"
     )
+    cta = None
+    text = f"{greeting}\n\nDoğrulama kodunuz: {code}\n({expires_minutes} dakika geçerli)\n"
+    if token:
+        url = f"{SITE_URL}/giris/dogrulama?token={token}"
+        body += (
+            "<p style='color:#666;font-size:13px;'>Dilerseniz tek tıkla da "
+            "doğrulayabilirsiniz:</p>"
+        )
+        cta = (url, "Tek Tıkla Doğrula")
+        text += f"\nVeya tek tıkla: {url}\n"
     return await send_email(
         to=to,
-        subject="Hesabınızı doğrulayın — Hukuk Emsal",
-        html=_wrap("E-posta Doğrulama", body, (url, "Hesabımı Doğrula")),
-        text=f"{greeting}\n\nHesabınızı doğrulamak için: {url}\n\n24 saat içinde yapın.",
+        subject=f"Doğrulama kodunuz: {code} — Hukuk Emsal",
+        html=_wrap("E-posta Doğrulama", body, cta),
+        text=text,
     )
 
 
@@ -156,6 +199,50 @@ async def send_welcome_email(to: str, name: Optional[str]) -> bool:
     )
 
 
+_PLAN_ETIKET = {
+    "pro_solo": "Pro Solo",
+    "pro_solo_uyap": "Pro + UYAP",
+    "team": "Team",
+    "team_uyap": "Team + UYAP",
+    "enterprise": "Enterprise",
+}
+
+
+async def send_payment_failed_email(
+    to: str,
+    name: Optional[str],
+    plan_tier: str,
+    amount_try: float = 0.0,
+) -> bool:
+    """Abonelik yenileme ödemesi alınamadığında gönderilir.
+
+    Ödeme alınamadığı için ücretli özellikler askıya alınır; kullanıcı kartını
+    güncelleyip yeniden deneyebilir.
+    """
+    greeting = f"Merhaba {name}," if name else "Merhaba,"
+    plan_ad = _PLAN_ETIKET.get(plan_tier, plan_tier)
+    tutar = f"{amount_try:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".") if amount_try else ""
+    body = (
+        f"<p>{greeting}</p>"
+        f"<p><strong>{plan_ad}</strong> aboneliğinizin yenileme ödemesi "
+        f"{('(' + tutar + ') ') if tutar else ''}alınamadı.</p>"
+        "<p>Bu nedenle hesabınızdaki ücretli özellikler geçici olarak askıya alındı. "
+        "Erişiminizi geri açmak için ödeme yönteminizi güncelleyip yenilemeyi "
+        "tekrar deneyebilirsiniz.</p>"
+        "<p style='color:#64748b;font-size:13px;'>Ödeme başarıyla alındığında "
+        "paketiniz ve tüm hakları otomatik olarak geri yüklenir.</p>"
+    )
+    return await send_email(
+        to=to,
+        subject="Ödeme alınamadı — aboneliğiniz askıya alındı",
+        html=_wrap(
+            "Ödeme alınamadı",
+            body,
+            (f"{SITE_URL}/app/ayarlar/abonelik", "Ödemeyi Güncelle"),
+        ),
+    )
+
+
 async def send_emsal_alarm_email(
     to: str,
     name: Optional[str],
@@ -163,7 +250,7 @@ async def send_emsal_alarm_email(
     yeni_kararlar: list[dict],
 ) -> bool:
     """Emsal alarmı — takip edilen sorguya yeni karar düştüğünde gönderilir."""
-    site = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukemsal.tr")
+    site = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukcuyapayzekasi.com")
     satirlar = []
     for k in yeni_kararlar[:5]:
         baslik = k.get("baslik") or k.get("chunk_id") or "Yeni karar"

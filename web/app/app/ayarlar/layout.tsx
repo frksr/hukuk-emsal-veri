@@ -3,7 +3,6 @@ import Link from "next/link";
 const TABS = [
   { href: "/app/ayarlar", label: "Profil" },
   { href: "/app/ayarlar/guvenlik", label: "Güvenlik" },
-  { href: "/app/ayarlar/abonelik", label: "Abonelik" },
   { href: "/app/ayarlar/kvkk", label: "KVKK & Veriler" },
 ];
 
@@ -13,7 +12,7 @@ export default function AyarlarLayout({ children }: { children: React.ReactNode 
       <div>
         <h1 className="text-3xl font-bold">Ayarlar</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Profil, güvenlik, abonelik ve KVKK haklarınızı yönetin.
+          Profil, güvenlik ve KVKK haklarınızı yönetin.
         </p>
       </div>
       <nav className="flex gap-1 border-b overflow-x-auto">

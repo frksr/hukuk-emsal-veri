@@ -1,10 +1,14 @@
 "use client";
 import { useState } from "react";
-import { Loader2, FileSearch, Upload, AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Loader2, FileSearch, Upload, AlertTriangle, CheckCircle2, ChevronDown, Lock, Sparkles, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { belgeDenetText, type DenetimSonuc } from "@/lib/api";
+import { usePlan, modulKullanabilir } from "@/lib/use-plan";
+import { AracYukleniyor } from "@/components/arac-yukleniyor";
+import { ProUpsell } from "@/components/pro-upsell";
 
 const TURLER = [
   ["dilekce", "Dilekçe (genel)"],
@@ -16,6 +20,10 @@ const TURLER = [
 ];
 
 export function DenetimForm() {
+  const router = useRouter();
+  const plan = usePlan();
+  const { loading: planLoading, isLoggedIn } = plan;
+  const erisim = modulKullanabilir(plan, "denetim");
   const [metin, setMetin] = useState("");
   const [tur, setTur] = useState("dilekce");
   const [loading, setLoading] = useState(false);
@@ -23,15 +31,27 @@ export function DenetimForm() {
   const [error, setError] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
 
+  const kilitli = !planLoading && !erisim;
+
+  function gate(): boolean {
+    // true → işleme devam edilebilir; false → yönlendirildi
+    if (!isLoggedIn) { router.push("/kayit"); return false; }
+    if (!erisim) { router.push("/app/ayarlar/ek-paketler?modul=denetim"); return false; }
+    return true;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (metin.trim().length < 50) return;
+    if (!gate()) return;
     setLoading(true); setError(null);
     try {
       const data = await belgeDenetText({ metin, tur, k: 5 });
       setSonuc(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Hata");
+      const status = (err as { status?: number })?.status;
+      if (status === 402 || status === 401) setError("Bu araçtaki bu ayki kullanım hakkın doldu. Pro'ya geçebilir veya ek paket alabilirsin.");
+      else setError(err instanceof Error ? err.message : "Hata");
       setSonuc(null);
     } finally { setLoading(false); }
   }
@@ -39,15 +59,21 @@ export function DenetimForm() {
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!gate()) return;
     setFileLoading(true);
+    setError(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("tur", tur);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const res = await fetch(`${apiUrl}/api/denetim/upload`, { method: "POST", body: formData });
+      // Proxy üzerinden (auth + Pro kontrolü backend'de)
+      const res = await fetch("/api/proxy/denetim/upload", { method: "POST", body: formData });
+      if (res.status === 401 || res.status === 402) {
+        setError("Bu araçtaki bu ayki kullanım hakkın doldu. Pro'ya geçebilir veya ek paket alabilirsin.");
+        return;
+      }
       const json = await res.json();
-      if (json.ok) setSonuc(json.data);
+      if (json.ok) setSonuc(json.data ?? json);
       else setError(json.message || "Dosya yüklenemedi");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Yükleme hatası");
@@ -55,12 +81,28 @@ export function DenetimForm() {
   }
 
   const ciddiyetRengi = (c: string) =>
-    c === "yuksek" ? "bg-red-50 border-red-300 text-red-900"
-    : c === "orta" ? "bg-amber-50 border-amber-300 text-amber-900"
-    : "bg-blue-50 border-blue-300 text-blue-900";
+    c === "yuksek" ? "bg-red-50 border-red-300 text-red-900 dark:bg-red-950/40 dark:border-red-800/60 dark:text-red-200"
+    : c === "orta" ? "bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800/60 dark:text-amber-200"
+    : "bg-blue-50 border-blue-300 text-blue-900 dark:bg-blue-950/40 dark:border-blue-800/60 dark:text-blue-200";
 
   const skorRengi = (s: number) =>
     s >= 70 ? "text-destructive" : s >= 40 ? "text-amber-600" : "text-emerald-600";
+
+  if (planLoading) return <AracYukleniyor />;
+  if (kilitli)
+    return (
+      <ProUpsell
+        isLoggedIn={isLoggedIn}
+        modul="denetim"
+        baslik="Belge Denetleyici"
+        aciklama="Dilekçe/ihtarname/sözleşmenizi mahkemeye sunmadan Yapay Zeka ile denetleyin."
+        ozellikler={[
+          "Yasal dayanak ve emsal uyumluluk kontrolü",
+          "Eksik / zayıf bölüm tespiti + iyileştirme önerisi",
+          "Genel risk skoru",
+        ]}
+      />
+    );
 
   return (
     <div className="space-y-6">
@@ -93,13 +135,52 @@ export function DenetimForm() {
                 {metin.length.toLocaleString("tr-TR")} karakter · min 50
               </div>
               <Button type="submit" disabled={loading || metin.trim().length < 50} size="lg">
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSearch className="mr-2 h-4 w-4" />}
-                Denetle
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : kilitli ? (
+                  <Lock className="mr-2 h-4 w-4" />
+                ) : (
+                  <FileSearch className="mr-2 h-4 w-4" />
+                )}
+                {kilitli ? "Pro ile Aç" : "Denetle"}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      {/* Bilgilendirme / upsell — ücretsiz kullanıcıya, sonuç yokken */}
+      {kilitli && !sonuc && (
+        <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" /> Belge Denetleyici — Pro özelliği
+            </CardTitle>
+            <CardDescription>Dilekçe/ihtarname/sözleşmenizi mahkemeye sunmadan Yapay Zeka ile denetleyin.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <p className="leading-relaxed text-foreground/80">
+              Yazdığınız belgeyi yükleyin veya yapıştırın; Yapay Zeka <strong>yasal dayanağın doğruluğunu</strong>,
+              <strong> eksik bölümleri</strong>, Yargıtay emsallerine aykırı argümanları ve karşı tarafın
+              yakalayabileceği <strong>zayıf noktaları</strong> tespit eder, her biri için iyileştirme önerir.
+            </p>
+            <ul className="space-y-1.5">
+              {[
+                "Yasal dayanak ve emsal uyumluluk kontrolü",
+                "Eksik/zayıf bölüm tespiti + iyileştirme önerisi",
+                "Genel risk skoru",
+              ].map((m) => (
+                <li key={m} className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> {m}
+                </li>
+              ))}
+            </ul>
+            <Button onClick={() => router.push(isLoggedIn ? "/fiyatlandirma" : "/kayit")}>
+              <Sparkles className="h-4 w-4 mr-1.5" /> {isLoggedIn ? "Pro'ya geç" : "Ücretsiz kayıt ol"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">⚠️ {error}</div>}
 
@@ -163,13 +244,13 @@ export function DenetimForm() {
                   <details key={i} className={`rounded border p-3 ${ciddiyetRengi(u.ciddiyet)}`}>
                     <summary className="cursor-pointer text-sm font-semibold flex items-center gap-2">
                       <span className="text-xs uppercase">{u.ciddiyet}</span>
-                      <span className="text-xs rounded-full bg-white/50 px-2 py-0.5">{u.kategori}</span>
+                      <span className="text-xs rounded-full bg-white/50 px-2 py-0.5 dark:bg-white/10">{u.kategori}</span>
                       <span className="flex-1">{u.sorun}</span>
                       <ChevronDown className="h-4 w-4" />
                     </summary>
                     <div className="mt-3 space-y-2 text-sm">
                       {u.ilgili_bolum && (
-                        <div className="bg-white/60 rounded p-2 text-xs font-mono">
+                        <div className="bg-white/60 rounded p-2 text-xs font-mono dark:bg-white/10">
                           <span className="opacity-60">İlgili bölüm:</span> {u.ilgili_bolum}
                         </div>
                       )}
@@ -252,7 +333,7 @@ export function DenetimForm() {
       {!sonuc && !loading && !error && (
         <Card><CardContent className="p-12 text-center text-muted-foreground">
           <FileSearch className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Belgeyi yapıştırın veya yükleyin, AI denetim raporu burada görünecek.</p>
+          <p>Belgeyi yapıştırın veya yükleyin, Yapay Zeka denetim raporu burada görünecek.</p>
         </CardContent></Card>
       )}
     </div>

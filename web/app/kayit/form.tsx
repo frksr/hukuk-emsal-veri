@@ -1,7 +1,10 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+
+// Ücretli planlar — kayıt sonrası doğrulama + ödeme akışına yönlendirilir.
+const PAID_PLANS = new Set(["pro_solo", "pro_solo_uyap", "team", "team_uyap"]);
 import { Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +12,8 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export function KayitForm() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const secilenPlan = sp.get("plan");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,9 +34,14 @@ export function KayitForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Kayıt başarısız");
 
-      // Auto login
+      // Auto login → e-posta doğrulama. Ücretli plan seçildiyse doğrulama sonrası
+      // o planın ödeme ekranına yönlendir (free ise panele).
       await signIn("credentials", { email, password, redirect: false });
-      router.push("/hosgeldin");
+      const next =
+        secilenPlan && PAID_PLANS.has(secilenPlan)
+          ? `/app/ayarlar/abonelik?plan=${secilenPlan}`
+          : "/app";
+      router.push(`/giris/dogrulama?next=${encodeURIComponent(next)}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hata");

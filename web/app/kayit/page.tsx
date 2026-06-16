@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { buildMetadata } from "@/lib/seo";
 import { KayitForm } from "./form";
@@ -20,7 +21,9 @@ export default function KayitPage() {
           <a href="/giris" className="text-primary hover:underline font-medium">Giriş yapın</a>
         </p>
       </div>
-      <KayitForm />
+      <Suspense fallback={null}>
+        <KayitForm />
+      </Suspense>
     </div>
   );
 }

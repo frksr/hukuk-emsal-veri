@@ -1,13 +1,32 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search, Loader2, ExternalLink, Star, FileText, Scale, Bell, BellRing } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { alarmOlustur, aramaCagir, aramaStats, kararKaydet, type EmsalKarar } from "@/lib/api";
+import { usePlan, actionGateHref } from "@/lib/use-plan";
+import { useKayitDavet } from "@/components/kayit-davet";
+import { NotHatirlatma } from "@/components/not-hatirlatma";
+
+// Son arama anlık görüntüsü — modül seviyesinde tutulur.
+// SPA içinde gezinmede (karara gidip geri gelince) KORUNUR,
+// tam sayfa yenilemede (F5) modül yeniden yüklendiği için SIFIRLANIR.
+type AramaSnapshot = {
+  query: string;
+  source: string;
+  chamber: string;
+  k: number;
+  results: EmsalKarar[];
+};
+let sonArama: AramaSnapshot | null = null;
 
 export function AramaForm() {
+  const router = useRouter();
+  const plan = usePlan();
+  const { davetGoster, dialog: kayitDialog } = useKayitDavet();
   const [query, setQuery] = useState("");
   const [source, setSource] = useState<string>("");
   const [chamber, setChamber] = useState<string>("");
@@ -19,6 +38,17 @@ export function AramaForm() {
   const [kaydedilenler, setKaydedilenler] = useState<Set<string>>(new Set());
   const [kayitMesaj, setKayitMesaj] = useState<string | null>(null);
   const [takipte, setTakipte] = useState(false);
+
+  // Bir karara gidip geri gelince son aramayı geri yükle.
+  // (Modül değişkeni tam sayfa yenilemede sıfırlandığı için F5'te temiz başlar.)
+  useEffect(() => {
+    if (!sonArama) return;
+    setQuery(sonArama.query);
+    setSource(sonArama.source);
+    setChamber(sonArama.chamber);
+    setK(sonArama.k);
+    setResults(sonArama.results);
+  }, []);
 
   async function handleTakip() {
     try {
@@ -50,11 +80,16 @@ export function AramaForm() {
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
+    // Kullanmak için kayıt şart (ücretsiz). Girişsiz → kayıt sayfasına.
+    const gate = actionGateHref(plan, false);
+    if (gate === "/kayit") { davetGoster(); return; }
+    if (gate) { router.push(gate); return; }
     setLoading(true);
     setError(null);
     try {
       const data = await aramaCagir({ query, k, source: source || null, court_chamber: chamber || null });
       setResults(data);
+      sonArama = { query, source, chamber, k, results: data };
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bilinmeyen hata");
       setResults(null);
@@ -94,6 +129,7 @@ export function AramaForm() {
 
   return (
     <div className="space-y-6">
+      {kayitDialog}
       {dbHazirDegil && (
         <div className="rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-800 dark:text-amber-200">
           Karar veritabanı şu anda hazırlanıyor (indeksleme devam ediyor). Arama
@@ -139,6 +175,8 @@ export function AramaForm() {
         </div>
       </form>
 
+      <NotHatirlatma q={query} />
+
       {error && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           ⚠️ {error}
@@ -173,7 +211,7 @@ export function AramaForm() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-muted-foreground">{results.length} emsal karar bulundu.</div>
             <div className="flex gap-2">
-              <Button asChild size="sm" variant="outline" title="Bu sorguyla AI dilekçe taslağı oluştur">
+              <Button asChild size="sm" variant="outline" title="Bu sorguyla Yapay Zeka dilekçe taslağı oluştur">
                 <Link href={`/dilekce?durum=${encodeURIComponent(query)}`}>
                   <FileText className="h-3.5 w-3.5 mr-1.5" /> Bu konuda dilekçe yaz
                 </Link>
@@ -224,8 +262,13 @@ export function AramaForm() {
                         color={kaydedilenler.has(r.chunk_id) ? "#f59e0b" : undefined}
                       />
                     </button>
+                    {r.decision_id && (
+                      <Link href={`/karar/${encodeURIComponent(r.decision_id)}`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                        Kararı incele <FileText className="h-3 w-3" />
+                      </Link>
+                    )}
                     {r.source_url && (
-                      <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                      <a href={r.source_url} target="_blank" rel="noopener noreferrer" title="Resmî kaynak (Yargıtay)" className="text-xs text-muted-foreground hover:underline flex items-center gap-1">
                         Kaynak <ExternalLink className="h-3 w-3" />
                       </a>
                     )}

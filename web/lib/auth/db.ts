@@ -106,3 +106,18 @@ export async function emailTaken(email: string): Promise<boolean> {
   const u = await getUserByEmail(email);
   return !!u;
 }
+
+/**
+ * Kullanıcının GÜNCEL rolünü DB'den okur (JWT'deki olası eski rol yerine).
+ * Admin yetkisi gibi kritik kontroller için kaynak-doğruluk. Pasif/yok → null.
+ */
+export async function getUserRole(userId: string): Promise<string | null> {
+  const pool = getPool();
+  const res = await pool.query<{ role: string; is_active: boolean }>(
+    `SELECT role, is_active FROM users WHERE id = $1`,
+    [userId],
+  );
+  const r = res.rows[0];
+  if (!r || !r.is_active) return null;
+  return r.role;
+}

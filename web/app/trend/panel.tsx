@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Loader2, BarChart3 } from "lucide-react";
+import { Loader2, BarChart3, Info } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trendYillik } from "@/lib/api";
 
 const COLORS = ["#1e3a5f", "#c9a961", "#5b8fb9", "#a47148", "#7a9b76"];
@@ -72,6 +72,29 @@ export function TrendPanel() {
         </CardContent>
       </Card>
 
+      {/* Ne gösteriyoruz — bağlam açıklaması */}
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground flex gap-3">
+        <Info className="h-5 w-5 shrink-0 mt-0.5 text-primary" />
+        <div className="space-y-1">
+          <p>
+            Bu panel, <strong>veritabanındaki emsal kararların yıllara göre dağılımını</strong> gösterir
+            — yani hangi yıl kaç karar bulunduğunu. Üstteki <strong>Konu</strong> ve <strong>Kaynak</strong>{" "}
+            filtreleriyle (örn. yalnızca &quot;icra&quot; konusu veya yalnızca Yargıtay) daralabilirsiniz.
+          </p>
+          <p>
+            Soldaki <strong>bar grafik</strong> tüm yılların karar sayısını; sağdaki <strong>pasta</strong>{" "}
+            en çok karar bulunan ilk 5 yılın payını gösterir. Sayılar, sistemdeki kararların{" "}
+            <em>karar tarihine</em> göre gruplanmasıyla hesaplanır.
+          </p>
+          {yillik?.dummy && (
+            <p className="text-amber-700 dark:text-amber-400">
+              ⚠️ Şu an <strong>örnek (demo) veri</strong> gösteriliyor — veritabanında tarihli karar
+              bulunamadı. Gerçek kararlar yüklendiğinde grafik otomatik güncellenir.
+            </p>
+          )}
+        </div>
+      </div>
+
       {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">⚠️ {error}</div>}
 
       {loading && (
@@ -83,7 +106,10 @@ export function TrendPanel() {
       {!loading && chartData.length > 0 && (
         <div className="grid lg:grid-cols-2 gap-6">
           <Card>
-            <CardHeader><CardTitle className="text-base">Yıllık Karar Dağılımı</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Yıllık Karar Dağılımı</CardTitle>
+              <CardDescription>Her yıl için veritabanındaki karar sayısı (karar tarihine göre).</CardDescription>
+            </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={chartData}>
@@ -96,7 +122,10 @@ export function TrendPanel() {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Top 5 Yıl</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Top 5 Yıl</CardTitle>
+              <CardDescription>En çok karar bulunan ilk 5 yılın toplam içindeki payı.</CardDescription>
+            </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
                 <PieChart>

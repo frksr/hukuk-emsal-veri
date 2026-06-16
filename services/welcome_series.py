@@ -14,7 +14,7 @@ import os
 from services.email import send_email, _wrap
 
 log = logging.getLogger("services.welcome_series")
-SITE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukemsal.tr")
+SITE_URL = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukcuyapayzekasi.com")
 
 
 TEMPLATES = {
@@ -63,7 +63,8 @@ TEMPLATES = {
             "<li>Müvekkil bilgileri otomatik maskelenir (KVKK uyum)</li>"
             "<li>Tüm veriler Türkiye lokasyonunda, sadece size özel</li>"
             "</ul>"
-            "<p>Aylık ₺799 — 14 gün koşulsuz iade.</p>"
+            "<p>Aylık ₺799. İstediğiniz an iptal edebilirsiniz; iptalde hizmet dönem "
+            "sonuna kadar açık kalır. Para iadesi yapılmaz.</p>"
         ),
         "cta": ("/app/ayarlar/abonelik", "Pro + UYAP'ı İncele"),
     },

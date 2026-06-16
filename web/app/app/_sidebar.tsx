@@ -2,28 +2,85 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch } from "lucide-react";
+import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { usePlan } from "@/lib/use-plan";
 
-const NAV = [
+type NavItem = { href: string; label: string; icon: LucideIcon; badge?: string };
+
+const PLAN_AD: Record<string, string> = {
+  free: "Free Plan",
+  pro_solo: "Pro Solo",
+  pro_solo_uyap: "Pro + UYAP",
+  team: "Team",
+  team_uyap: "Team + UYAP",
+  enterprise: "Enterprise",
+};
+
+const NAV: NavItem[] = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/app/notlar", label: "Notlarım", icon: StickyNote },
+  { href: "/app/hatirlaticilar", label: "Hatırlatıcılar", icon: Bell, badge: "Pro" },
   { href: "/app/dosyalar", label: "Dosyalarım", icon: FolderClosed, badge: "Pro" },
-  { href: "/app/sorgu", label: "AI Sorgu", icon: Sparkles, badge: "Pro" },
-  { href: "/app/raporlar", label: "Raporlar", icon: FileText, badge: "Pro" },
+  { href: "/app/sorgu", label: "Yapay Zeka Sorgu", icon: Sparkles, badge: "Pro" },
+  { href: "/app/raporlar", label: "Raporlar", icon: FileText },
   { href: "/app/gecmis", label: "Geçmiş", icon: FileSearch },
+  { href: "/app/ayarlar/ek-paketler", label: "Ek Paketler", icon: Package },
+  { href: "/app/ayarlar/abonelik", label: "Abonelik", icon: CreditCard },
   { href: "/app/ayarlar", label: "Ayarlar", icon: Settings },
+  { href: "/app/oneri", label: "Bize Yazın", icon: MessageSquarePlus },
+];
+
+// Admin menüsü — admin kullanıcıda kullanıcı sekmeleri yerine bunlar görünür.
+// (İzleme/takip konumlu: sistem, müşteri, paket, kredi.)
+const ADMIN_NAV: NavItem[] = [
+  { href: "/app/admin", label: "Genel Bakış", icon: LayoutDashboard },
+  { href: "/app/admin/analitik", label: "Analitik", icon: BarChart3 },
+  { href: "/app/admin/sistem", label: "Sistem", icon: Activity },
+  { href: "/app/admin/kullanicilar", label: "Kullanıcılar", icon: Users },
+  { href: "/app/admin/paketler", label: "Paketler & Limitler", icon: SlidersHorizontal },
+  { href: "/app/admin/feedback", label: "Geri Bildirim", icon: MessageSquare },
+  { href: "/app/admin/audit", label: "Audit Log", icon: FileWarning },
+  { href: "/app/admin/beta", label: "Beta Davet", icon: Gift },
+  { href: "/app/ayarlar", label: "Ayarlar", icon: Settings },
+];
+
+// Sınırsız ücretsiz araçlar — panelden hızlı erişim.
+// (Emsal arama free planda aylık limitli olduğu için buraya konmaz; üst menüden erişilir.)
+const ARACLAR = [
+  { href: "/faiz-hesaplayici", label: "Faiz & Tahsilat", icon: Calculator },
+  { href: "/zamanasimi", label: "Zamanaşımı", icon: Clock },
 ];
 
 export function AppSidebar({ userName }: { userName: string }) {
   const path = usePathname();
+  const plan = usePlan();
+  const planAd = plan.loading
+    ? "…"
+    : plan.isAdmin
+    ? "Yönetici"
+    : PLAN_AD[plan.plan ?? "free"] ?? "Free Plan";
   return (
     <div className="md:sticky md:top-20 md:space-y-1">
       {/* Kullanıcı satırı — mobilde çıkış butonu da burada (kompakt) */}
       <div className="px-3 py-2 mb-2 md:mb-3 text-sm flex items-center justify-between md:block">
         <div>
           <div className="font-semibold">{userName}</div>
-          <div className="text-xs text-muted-foreground">Free Plan</div>
+          <span
+            className={cn(
+              "mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+              plan.isAdmin
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : plan.isPaid
+                ? "bg-amber-400/15 text-amber-700 dark:text-amber-300 border border-amber-400/30"
+                : "bg-muted text-muted-foreground border border-border",
+            )}
+          >
+            {plan.isAdmin ? <ShieldCheck className="h-3 w-3" /> : plan.isPaid ? <Sparkles className="h-3 w-3" /> : null}
+            {planAd}
+          </span>
         </div>
         <Button
           onClick={() => signOut({ callbackUrl: "/" })}
@@ -36,30 +93,73 @@ export function AppSidebar({ userName }: { userName: string }) {
         </Button>
       </div>
 
-      {/* Nav: mobilde yatay kaydırılır pill'ler, masaüstünde dikey liste */}
+      {/* Nav: admin'de admin bölümleri, normal kullanıcıda araç sekmeleri. */}
       <nav className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:gap-1 md:overflow-visible md:pb-0">
-        {NAV.map((item) => {
-          const active = path === item.href;
+        {(plan.isAdmin ? ADMIN_NAV : NAV).map((item) => {
+          // Sondaki "/"'ı normalize edip TAM eşleşme (trailingSlash olsa da çalışır,
+          // parent rotayı çocuk sayfada yanlışlıkla aktifleştirmez).
+          const norm = (path || "/").replace(/\/+$/, "") || "/";
+          const active = norm === item.href;
+          // "Pro" etiketi yalnızca erişimi OLMAYAN (ücretsiz) kullanıcıya gösterilir;
+          // ücretli/admin kullanıcı zaten kullanabildiği için etiket kaldırılır.
+          const badge = plan.isPaid || plan.isAdmin ? undefined : item.badge;
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex shrink-0 items-center gap-2 px-3 py-2 rounded-md text-sm whitespace-nowrap transition-colors md:shrink",
-                active ? "bg-primary text-primary-foreground" : "bg-muted/50 md:bg-transparent hover:bg-muted",
+                "group relative flex shrink-0 items-center gap-2 px-3 py-2 rounded-md text-sm whitespace-nowrap transition-all md:shrink md:whitespace-normal",
+                active
+                  ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary md:font-medium"
+                  : "bg-muted/50 md:bg-transparent hover:bg-muted",
               )}
             >
-              <item.icon className="h-4 w-4" />
+              {active && (
+                <span className="hidden md:block absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary" />
+              )}
+              <item.icon
+                className={cn(
+                  "h-4 w-4 shrink-0 transition-transform group-hover:scale-110",
+                  active && "md:text-primary",
+                )}
+              />
               <span className="md:flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="text-[10px] uppercase tracking-wider rounded bg-accent/20 text-accent-foreground px-1.5 py-0.5">
-                  {item.badge}
+              {badge && (
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider rounded bg-amber-400 text-amber-950 px-1.5 py-0.5">
+                  {badge}
                 </span>
               )}
             </Link>
           );
         })}
       </nav>
+
+      {/* Ücretsiz araçlar — panelden hızlı erişim (admin'de gizli) */}
+      {!plan.isAdmin && (
+      <div className="pt-3 mt-3 border-t">
+        <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Ücretsiz Araçlar
+        </div>
+        <nav className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:gap-1 md:overflow-visible md:pb-0">
+          {ARACLAR.map((item) => {
+            const active = path === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "group flex shrink-0 items-center gap-2 px-3 py-2 rounded-md text-sm whitespace-nowrap transition-all md:shrink md:whitespace-normal",
+                  active ? "bg-primary text-primary-foreground" : "bg-muted/50 md:bg-transparent hover:bg-muted",
+                )}
+              >
+                <item.icon className="h-4 w-4 transition-transform group-hover:scale-110" />
+                <span className="md:flex-1">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+      )}
 
       {/* Masaüstü çıkış (mobilde üstte) */}
       <div className="hidden md:block pt-4 mt-4 border-t">

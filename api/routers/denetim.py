@@ -1,16 +1,24 @@
 """Belge Denetim endpoint'i."""
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
 
 from api.deps import rate_limit
+from api.auth import CurrentUser
+from api.kota import kota
 from api.concurrency import run_blocking
 from api.schemas import APIResponse
+from services.uretim_gunlugu import kaydet_uretim
 
 router = APIRouter()
 
 
 @router.post("/text", response_model=APIResponse, summary="Metin olarak yapıştırılan belgeyi denet")
-async def denetle_text(payload: dict, _: None = Depends(rate_limit)):
+async def denetle_text(
+    payload: dict,
+    background: BackgroundTasks,
+    _: None = Depends(rate_limit),
+    user: CurrentUser = Depends(kota("denetim")),  # Yapay Zeka denetim: Pro veya ek paket
+):
     """Belgeyi (dilekçe/ihtarname/sözleşme/genel) yapıştırarak gönder, AI denetimi al."""
     metin = payload.get("metin", "")
     tur = payload.get("tur", "dilekce")
@@ -22,6 +30,11 @@ async def denetle_text(payload: dict, _: None = Depends(rate_limit)):
     try:
         from services.belge_denetim import denetle
         result = await run_blocking(denetle, metin, tur=tur, k=k)
+        background.add_task(
+            kaydet_uretim, user.user_id, user.tenant_id, "denetim", log_usage=False,
+            alt_tur=tur, baslik=f"Belge denetimi — {tur}",
+            girdi_ozeti=metin, cikti=str(result)[:8000],
+        )
         return APIResponse(ok=True, data=result)
     except Exception as e:
         msg = str(e).lower()
@@ -32,9 +45,11 @@ async def denetle_text(payload: dict, _: None = Depends(rate_limit)):
 
 @router.post("/upload", response_model=APIResponse, summary="PDF/DOCX/TXT yükleyerek denet")
 async def denetle_upload(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     tur: str = Form("dilekce"),
     _: None = Depends(rate_limit),
+    user: CurrentUser = Depends(kota("denetim")),  # Yapay Zeka denetim: Pro veya ek paket
 ):
     """Dosya yükleyerek denet — sözleşme analizi için kullanılan parse mantığı."""
     if file.filename:
@@ -63,6 +78,11 @@ async def denetle_upload(
         result = await run_blocking(denetle, metin, tur=tur, k=5)
         result["dosya_adi"] = file.filename
         result["dosya_boyut"] = len(content)
+        background.add_task(
+            kaydet_uretim, user.user_id, user.tenant_id, "denetim", log_usage=False,
+            alt_tur=tur, baslik=f"Belge denetimi (dosya) — {file.filename}",
+            girdi_ozeti=file.filename, cikti=str(result)[:8000],
+        )
         return APIResponse(ok=True, data=result)
     except Exception as e:
         msg = str(e).lower()

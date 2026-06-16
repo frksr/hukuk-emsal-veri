@@ -1,19 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Scale, Search } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from "@/lib/seo";
+import { AiOzetButton } from "./ai-ozet-button";
 
 const API_BASE =
   process.env.API_INTERNAL_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000";
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 // ISR: karar metni değişmez — günde bir tazele yeterli.
 export const revalidate = 86400;
@@ -33,7 +34,7 @@ interface Karar {
   case_no?: string;
   decision_no?: string;
   decision_date?: string;
-  topic_tags?: string;
+  topic_tags?: string | string[];
   cleaned_text?: string;
   source_url?: string;
   anonymization_check?: string;
@@ -143,7 +144,10 @@ export default async function KararPage({
           {tarih && <span>Karar tarihi: {tarih}</span>}
           {karar.topic_tags && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {karar.topic_tags.split(",").filter(Boolean).slice(0, 8).map((t) => (
+              {(Array.isArray(karar.topic_tags)
+                ? karar.topic_tags
+                : karar.topic_tags.split(",")
+              ).filter(Boolean).slice(0, 8).map((t) => (
                 <span key={t} className="text-xs rounded-full bg-secondary px-2 py-0.5">
                   {t.trim()}
                 </span>
@@ -158,11 +162,7 @@ export default async function KararPage({
               <FileText className="h-3.5 w-3.5 mr-1.5" /> Bu kararla dilekçe oluştur
             </Link>
           </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/karar-ozet?id=${encodeURIComponent(karar.id)}`}>
-              <Scale className="h-3.5 w-3.5 mr-1.5" /> AI özetini çıkar
-            </Link>
-          </Button>
+          <AiOzetButton decisionId={karar.id} />
           <Button asChild size="sm" variant="outline">
             <Link href="/emsal-arama">
               <Search className="h-3.5 w-3.5 mr-1.5" /> Benzer karar ara
@@ -191,8 +191,8 @@ export default async function KararPage({
           Bu sayfadaki karar metni kamuya açık kaynaklardan derlenmiş ve kişisel
           veriler otomatik olarak anonimleştirilmiştir. Metin bilgilendirme
           amaçlıdır; hukuki tavsiye değildir. Hatalı anonimleştirme fark ederseniz{" "}
-          <a href="mailto:kvkk@hukukemsal.tr" className="text-primary hover:underline">
-            kvkk@hukukemsal.tr
+          <a href="mailto:kvkk@hukukcuyapayzekasi.com" className="text-primary hover:underline">
+            kvkk@hukukcuyapayzekasi.com
           </a>{" "}
           adresine bildirin.
         </div>

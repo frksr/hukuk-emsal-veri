@@ -1,17 +1,17 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { Check, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { buildMetadata, buildFaqJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
+import { PlanCta } from "@/components/plan-cta";
+import { PlanLimitler } from "./plan-limitler";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = buildMetadata({
   title: "Fiyatlandırma — Planlar ve Paketler | Hukuk Emsal",
   description:
-    "Ücretsiz başlayın; Pro ile sınırsız emsal arama, AI dilekçe ve UYAP dosya asistanı. Avukatlar ve hukuk büroları için aylık abonelik planları.",
+    "Ücretsiz başlayın; Pro ile sınırsız emsal arama, Yapay Zeka dilekçe ve UYAP dosya asistanı. Avukatlar ve hukuk büroları için aylık abonelik planları.",
   path: "/fiyatlandirma",
   keywords: [
     "hukuk asistanı fiyat",
@@ -21,34 +21,33 @@ export const metadata: Metadata = buildMetadata({
   ],
 });
 
+// NOT: emsal arama/dilekçe/özet/sözleşme gibi LİMİT satırları artık statik değil;
+// <PlanLimitler tier=.../> ile admin ayarlarından (public /billing/plan-limits)
+// dinamik üretilir. Aşağıdaki `features` yalnızca niteliksel (limit-dışı) maddeler.
 const PLANS = [
   {
     name: "Ücretsiz",
+    tier: "free",
     price: "0",
     period: "",
     tagline: "Bireysel deneme ve hafif kullanım",
     cta: { label: "Ücretsiz Başla", href: "/kayit" },
     highlight: false,
     features: [
-      "Günde 40 emsal arama",
-      "Günde 6 AI dilekçe taslağı",
       "Faiz + zamanaşımı hesaplayıcı (sınırsız)",
-      "Günde 5 karar özeti",
       "Arama geçmişi",
     ],
-    missing: ["UYAP dosya asistanı", "Sınırsız AI üretimi", "Ekip üyeleri"],
+    missing: ["UYAP dosya asistanı", "Ekip üyeleri"],
   },
   {
     name: "Pro Solo",
+    tier: "pro_solo",
     price: "499",
     period: "₺/ay",
     tagline: "Tek avukat — sınırsız araştırma",
     cta: { label: "Pro'ya Geç", href: "/kayit?plan=pro_solo" },
     highlight: true,
     features: [
-      "Sınırsız emsal arama",
-      "Sınırsız AI dilekçe / ihtarname / özet",
-      "Sınırsız sözleşme analizi",
       "Karşı argüman üretici",
       "Öncelikli işlem kuyruğu",
     ],
@@ -56,15 +55,15 @@ const PLANS = [
   },
   {
     name: "Pro + UYAP",
+    tier: "pro_solo_uyap",
     price: "799",
     period: "₺/ay",
     tagline: "Tek avukat + dosya asistanı",
     cta: { label: "Pro + UYAP Al", href: "/kayit?plan=pro_solo_uyap" },
     highlight: false,
     features: [
-      "Pro Solo'daki her şey",
       "UYAP dosya yükleme (PDF/DOCX)",
-      "Dosya içinde AI soru-cevap",
+      "Dosya içinde Yapay Zeka soru-cevap",
       "KVKK uyumlu şifreli saklama",
       "Dosya bazlı emsal eşleştirme",
     ],
@@ -72,6 +71,7 @@ const PLANS = [
   },
   {
     name: "Team",
+    tier: "team",
     price: "1.499",
     period: "₺/ay",
     tagline: "Hukuk büroları — 5 üyeye kadar",
@@ -79,7 +79,6 @@ const PLANS = [
     highlight: false,
     features: [
       "5 kullanıcı (ek üye eklenebilir)",
-      "Tüm Pro özellikleri herkese",
       "Ortak çalışma alanı",
       "Kullanım raporları",
       "UYAP seçeneği (+500₺/ay)",
@@ -92,7 +91,7 @@ const FAQS = [
   {
     question: "Ücretsiz plan ne kadar süre geçerli?",
     answer:
-      "Süresiz. Kredi kartı gerekmez; günlük limitler dahilinde dilediğiniz kadar kullanın. Limitler her gece sıfırlanır.",
+      "Süresiz. Kredi kartı gerekmez; aylık limitler dahilinde dilediğiniz kadar kullanın. Limitler her ay (hesabınızı açtığınız günün yıldönümünde) yenilenir.",
   },
   {
     question: "İstediğim zaman iptal edebilir miyim?",
@@ -107,17 +106,17 @@ const FAQS = [
   {
     question: "UYAP dosya asistanında verilerim güvende mi?",
     answer:
-      "Dosyalarınız tenant bazlı ayrı anahtarlarla şifrelenir (envelope encryption), KVKK kapsamında işlenir ve AI'a gönderilmeden önce kişisel veriler maskelenir.",
+      "Dosyalarınız tenant bazlı ayrı anahtarlarla şifrelenir (envelope encryption), KVKK kapsamında işlenir ve Yapay Zeka'ya gönderilmeden önce kişisel veriler maskelenir.",
   },
   {
-    question: "AI çıktıları hukuki tavsiye midir?",
+    question: "Yapay Zeka çıktıları hukuki tavsiye midir?",
     answer:
       "Hayır. Üretilen dilekçe, ihtarname ve özetler taslak niteliğindedir; mutlaka avukat kontrolünden geçirilmelidir. Platform hukuki danışmanlık hizmeti vermez.",
   },
   {
     question: "Enterprise / API erişimi var mı?",
     answer:
-      "Büyük ekipler ve entegrasyonlar (büro yönetim yazılımları, API erişimi) için satis@hukukemsal.tr adresinden bize ulaşın.",
+      "Büyük ekipler ve entegrasyonlar (büro yönetim yazılımları, API erişimi) için satis@hukukcuyapayzekasi.com adresinden bize ulaşın.",
   },
 ];
 
@@ -157,27 +156,33 @@ export default function FiyatlandirmaPage() {
                 <span className="text-3xl font-extrabold">{plan.price}</span>
                 <span className="text-muted-foreground text-sm"> {plan.period}</span>
               </div>
-              <ul className="space-y-2 text-sm flex-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex gap-2">
-                    <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-                {plan.missing.map((f) => (
-                  <li key={f} className="flex gap-2 text-muted-foreground/60">
-                    <X className="h-4 w-4 shrink-0 mt-0.5" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button
-                asChild
-                className="mt-6 w-full"
-                variant={plan.highlight ? "default" : "outline"}
-              >
-                <Link href={plan.cta.href}>{plan.cta.label}</Link>
-              </Button>
+              <div className="flex-1 space-y-2">
+                {/* Limit satırları — admin ayarlarından dinamik */}
+                <PlanLimitler tier={plan.tier} />
+                <ul className="space-y-2 text-sm">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex gap-2">
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                  {plan.missing.map((f) => (
+                    <li key={f} className="flex gap-2 text-muted-foreground/60">
+                      <X className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <PlanCta
+                planKey={
+                  plan.cta.href.includes("plan=")
+                    ? plan.cta.href.split("plan=")[1]
+                    : null
+                }
+                label={plan.cta.label}
+                highlight={plan.highlight}
+              />
             </Card>
           ))}
         </div>
@@ -197,8 +202,8 @@ export default function FiyatlandirmaPage() {
 
           <div className="mt-12 text-center text-sm text-muted-foreground">
             Sorunuz mu var?{" "}
-            <a href="mailto:satis@hukukemsal.tr" className="text-primary hover:underline">
-              satis@hukukemsal.tr
+            <a href="mailto:satis@hukukcuyapayzekasi.com" className="text-primary hover:underline">
+              satis@hukukcuyapayzekasi.com
             </a>
           </div>
         </div>

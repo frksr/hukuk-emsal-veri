@@ -75,8 +75,23 @@ async def lifespan(app: FastAPI):
         log.info("RAG model + Chroma yüklendi")
     except Exception as e:
         log.warning(f"RAG warmup başarısız: {e}")
+    # Hatırlatıcı dispatch — hafif arka plan döngüsü (60 sn'de bir bekleyenleri gönderir).
+    import asyncio as _asyncio
+
+    async def _hatirlatici_dongusu():
+        from services.hatirlatici_gonderim import bekleyen_hatirlaticilari_gonder
+        while True:
+            try:
+                await bekleyen_hatirlaticilari_gonder()
+            except Exception as e:
+                log.warning(f"Hatırlatıcı dispatch hatası: {e}")
+            await _asyncio.sleep(60)
+
+    _hatirlatici_task = _asyncio.create_task(_hatirlatici_dongusu())
+    log.info("Hatırlatıcı dispatch döngüsü başlatıldı (60 sn)")
     yield
     log.info("API kapatılıyor")
+    _hatirlatici_task.cancel()
     try:
         from api.db import close_pool
         await close_pool()
@@ -159,7 +174,7 @@ from api.routers import (
     arama, dilekce, ozet, faiz, zamanasimi,
     ihtarname, trend, karsi_argument, kvkk, sozlesme,
     denetim, me, auth_actions, billing, uyap, admin, feedback,
-    export, karar, v1,
+    export, karar, v1, notlar, hatirlatici,
 )
 
 app.include_router(arama.router, prefix="/api/arama", tags=["arama"])
@@ -179,6 +194,8 @@ app.include_router(trend.router, prefix="/api/trend", tags=["analytics"])
 app.include_router(karsi_argument.router, prefix="/api/karsi-argument", tags=["v3"])
 app.include_router(kvkk.router, prefix="/api/kvkk", tags=["v3"])
 app.include_router(sozlesme.router, prefix="/api/sozlesme", tags=["v3"])
+app.include_router(notlar.router, prefix="/api/notlar", tags=["notlar"])
+app.include_router(hatirlatici.router, prefix="/api/hatirlatici", tags=["hatirlatici"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
 app.include_router(karar.router, prefix="/api/karar", tags=["karar"])
 app.include_router(v1.router, prefix="/api/v1", tags=["public-api"])

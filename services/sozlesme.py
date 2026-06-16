@@ -42,6 +42,12 @@ TEK_CAGRI_SINIRI = 14000
 # Maddelerin LLM'e gönderilirken metnini kısaltma sınırı
 MADDE_MAX_KARAKTER = 3500
 
+# MALİYET KORUMASI: Tek bir sözleşme analizi için en fazla kaç madde-grubu (LLM
+# çağrısı) işlenir. Normal sözleşmeler birkaç chunk eder; bu sınır yalnızca aşırı
+# büyük/kötüye kullanım girdilerinde (yüzlerce sayfa) devreye girer ve maliyeti
+# sabitler. + 1 genel analiz çağrısı.
+MAX_ANALIZ_CHUNK = 16
+
 SOZLESME_TURLERI = {
     "genel": "Genel sözleşme",
     "hizmet": "Hizmet sözleşmesi",
@@ -589,7 +595,10 @@ def analiz_et(
     # 2) Madde analizini chunked LLM çağrılarıyla yap
     madde_analizleri: list[dict] = []
     if maddeler:
-        for grup in _chunk_madde_listesi(maddeler):
+        for i, grup in enumerate(_chunk_madde_listesi(maddeler)):
+            # Maliyet koruması: aşırı büyük sözleşmelerde LLM çağrı sayısını sınırla.
+            if i >= MAX_ANALIZ_CHUNK:
+                break
             madde_analizleri.extend(_madde_grubu_analiz(grup, sozlesme_turu))
 
     # 3) Genel analiz

@@ -4,9 +4,9 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { DenetimForm } from "./form";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Hukuki Belge Denetleyici | Dilekçe & Sözleşme AI Kontrol",
+  title: "Hukuki Belge Denetleyici | Dilekçe & Sözleşme Yapay Zeka Kontrol",
   description:
-    "Yazdığınız dilekçe, ihtarname veya sözleşmenin hukuki risklerini AI ile kontrol edin. Eksik madde, yanlış kanun referansı, emsal aykırılık tespiti.",
+    "Yazdığınız dilekçe, ihtarname veya sözleşmenin hukuki risklerini Yapay Zeka ile kontrol edin. Eksik madde, yanlış kanun referansı, emsal aykırılık tespiti.",
   path: "/belge-denetim",
   keywords: [
     "dilekçe denetimi", "dilekçe kontrol", "hukuki belge kontrol",
@@ -26,7 +26,7 @@ const FAQ = [
   },
   {
     q: "Çıktı bir avukatın yerine geçer mi?",
-    a: "Hayır. Bu sistem AI destekli ön kontrol sağlar. Mahkemeye sunmadan önce mutlaka bir avukatın incelemesi şarttır.",
+    a: "Hayır. Bu sistem Yapay Zeka destekli ön kontrol sağlar. Mahkemeye sunmadan önce mutlaka bir avukatın incelemesi şarttır.",
   },
 ];
 
@@ -44,12 +44,12 @@ export default function BelgeDenetimPage() {
         </nav>
         <h1 className="text-3xl md:text-4xl font-bold mb-3">Hukuki Belge Denetleyici</h1>
         <p className="text-muted-foreground mb-8 max-w-3xl">
-          Yazdığınız veya yüklediğiniz dilekçeyi, ihtarnameyi ya da sözleşmeyi AI ile denetleyin: yasal
+          Yazdığınız veya yüklediğiniz dilekçeyi, ihtarnameyi ya da sözleşmeyi Yapay Zeka ile denetleyin: yasal
           dayanak doğru mu, eksik bölüm var mı, Yargıtay emsallerine aykırı argüman var mı, karşı tarafın
           yakalayabileceği zayıflık ne?
         </p>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6 text-sm">
-          ⚠️ <strong>Yasal uyarı:</strong> AI denetimi, profesyonel hukuk inceleme servisinin yerine geçmez.
+          ⚠️ <strong>Yasal uyarı:</strong> Yapay Zeka denetimi, profesyonel hukuk inceleme servisinin yerine geçmez.
           Mahkemeye sunmadan önce avukat incelemesi şarttır.
         </div>
 

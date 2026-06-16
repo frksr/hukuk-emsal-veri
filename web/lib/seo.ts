@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 const SITE_NAME = "Hukuk Emsal";
 
 export interface BuildMetadataInput {
@@ -103,7 +103,7 @@ export function generateOgImageUrl(
  * Breadcrumb JSON-LD üreticisi.
  */
 export function buildBreadcrumbJsonLd(
-  items: Array<{ name: string; path: string }>
+  items: Array<{ name: string; path?: string; url?: string }>
 ) {
   return {
     "@context": "https://schema.org",
@@ -112,10 +112,13 @@ export function buildBreadcrumbJsonLd(
       "@type": "ListItem",
       position: i + 1,
       name: item.name,
-      item: `${SITE_URL}${item.path}`,
+      item: `${SITE_URL}${item.path ?? item.url ?? ""}`,
     })),
   };
 }
+
+// Geriye dönük uyumluluk alias'ları (sayfalar bu adlarla import ediyor)
+export const breadcrumbJsonLd = buildBreadcrumbJsonLd;
 
 /**
  * FAQ JSON-LD üreticisi.
@@ -136,6 +139,9 @@ export function buildFaqJsonLd(
     })),
   };
 }
+
+// Geriye dönük uyumluluk alias'ı
+export const faqJsonLd = buildFaqJsonLd;
 
 /**
  * Article JSON-LD üreticisi.

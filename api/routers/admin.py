@@ -103,6 +103,429 @@ async def dashboard(admin: CurrentUser = Depends(require_admin)):
     })
 
 
+@router.get("/health", response_model=APIResponse)
+async def system_health(admin: CurrentUser = Depends(require_admin)):
+    """Sistem sağlığı — DB, LLM, RAG, iyzico, mail ve arka plan (hatırlatıcı) durumu."""
+    import os
+    import time
+
+    now = datetime.now(timezone.utc)
+    db_ok = True
+    db_ms = None
+    pending = overdue = None
+    try:
+        t0 = time.perf_counter()
+        async with service_session() as conn:
+            await conn.fetchval("SELECT 1")
+            pending = await conn.fetchval("SELECT COUNT(*) FROM reminders WHERE status='pending'")
+            overdue = await conn.fetchval(
+                "SELECT COUNT(*) FROM reminders WHERE status='pending' AND remind_at < $1",
+                now - timedelta(minutes=10),
+            )
+        db_ms = round((time.perf_counter() - t0) * 1000)
+    except Exception as e:
+        db_ok = False
+        db_ms = None
+        log_msg = str(e)
+    else:
+        log_msg = None
+
+    try:
+        from llm.provider import status as llm_status
+        s = llm_status()
+        llm = {
+            "available": bool(s.get("anthropic") or s.get("gemini")),
+            "default": s.get("default"),
+            "anthropic": s.get("anthropic"),
+            "gemini": s.get("gemini"),
+        }
+    except Exception:
+        llm = {"available": False}
+    try:
+        from services.rag import get_collection_stats
+        rag = get_collection_stats()
+    except Exception:
+        rag = {"available": False}
+    try:
+        from services.billing import is_configured as iyzico_configured
+        iyzico_ok = bool(iyzico_configured())
+    except Exception:
+        iyzico_ok = False
+    try:
+        from services.email import SMTP_HOST
+        mail_ok = bool(SMTP_HOST)
+    except Exception:
+        mail_ok = bool(os.environ.get("SMTP_HOST"))
+
+    return APIResponse(ok=True, data={
+        "checked_at": now.isoformat(),
+        "db": {"ok": db_ok, "latency_ms": db_ms, "error": log_msg},
+        "llm": llm,
+        "rag": rag,
+        "iyzico": {"configured": iyzico_ok},
+        "mail": {"configured": mail_ok},
+        # Geciken bekleyen hatırlatıcı çoksa gönderim döngüsü tıkanmış olabilir.
+        "reminders": {"pending": pending, "overdue": overdue},
+    })
+
+
+@router.get("/issues", response_model=APIResponse)
+async def system_issues(admin: CurrentUser = Depends(require_admin), limit: int = 25):
+    """Hata/aksaklık akışı — başarısız ödeme/hatırlatıcı/webhook/üretim + audit hataları."""
+    now = datetime.now(timezone.utc)
+    d1 = now - timedelta(hours=24)
+    d7 = now - timedelta(days=7)
+    saatlik = now - timedelta(hours=1)
+    lim = min(int(limit), 100)
+
+    def _iso(x):
+        return x.isoformat() if x else None
+
+    async with service_session() as conn:
+        failed_payments = await conn.fetch(
+            "SELECT id, tenant_id, amount_try, status, created_at FROM payments "
+            "WHERE status <> 'success' AND created_at > $1 ORDER BY created_at DESC LIMIT $2",
+            d7, lim,
+        )
+        failed_reminders = await conn.fetch(
+            "SELECT id, baslik, status, remind_at, created_at FROM reminders "
+            "WHERE status='failed' ORDER BY created_at DESC LIMIT $1", lim,
+        )
+        webhook_err = await conn.fetch(
+            "SELECT id, event_type, process_error, processed, created_at FROM webhook_events "
+            "WHERE process_error IS NOT NULL OR processed = FALSE ORDER BY created_at DESC LIMIT $1", lim,
+        )
+        pending_orders = await conn.fetch(
+            "SELECT id, pack_key, amount_try, status, created_at FROM credit_orders "
+            "WHERE status='pending' AND created_at < $1 ORDER BY created_at DESC LIMIT $2", saatlik, lim,
+        )
+        audit_fail = await conn.fetch(
+            "SELECT id, action, user_id, ip_address, created_at FROM audit_log "
+            "WHERE success = FALSE AND created_at > $1 ORDER BY created_at DESC LIMIT $2", d1, lim,
+        )
+        c_fp = await conn.fetchval("SELECT COUNT(*) FROM payments WHERE status <> 'success' AND created_at > $1", d7)
+        c_fr = await conn.fetchval("SELECT COUNT(*) FROM reminders WHERE status='failed'")
+        c_we = await conn.fetchval("SELECT COUNT(*) FROM webhook_events WHERE process_error IS NOT NULL OR processed = FALSE")
+        c_po = await conn.fetchval("SELECT COUNT(*) FROM credit_orders WHERE status='pending' AND created_at < $1", saatlik)
+        c_af = await conn.fetchval("SELECT COUNT(*) FROM audit_log WHERE success = FALSE AND created_at > $1", d1)
+
+    return APIResponse(ok=True, data={
+        "ozet": {
+            "failed_payments_7d": c_fp or 0,
+            "failed_reminders": c_fr or 0,
+            "webhook_errors": c_we or 0,
+            "pending_orders": c_po or 0,
+            "audit_failures_24h": c_af or 0,
+        },
+        "failed_payments": [
+            {"id": str(r["id"]), "tenant_id": str(r["tenant_id"]) if r["tenant_id"] else None,
+             "amount_try": float(r["amount_try"] or 0), "status": r["status"], "created_at": _iso(r["created_at"])}
+            for r in failed_payments
+        ],
+        "failed_reminders": [
+            {"id": str(r["id"]), "baslik": r["baslik"], "status": r["status"],
+             "remind_at": _iso(r["remind_at"]), "created_at": _iso(r["created_at"])}
+            for r in failed_reminders
+        ],
+        "webhook_errors": [
+            {"id": str(r["id"]), "event_type": r["event_type"], "process_error": r["process_error"],
+             "processed": r["processed"], "created_at": _iso(r["created_at"])}
+            for r in webhook_err
+        ],
+        "pending_orders": [
+            {"id": str(r["id"]), "pack_key": r["pack_key"], "amount_try": float(r["amount_try"] or 0),
+             "status": r["status"], "created_at": _iso(r["created_at"])}
+            for r in pending_orders
+        ],
+        "audit_failures": [
+            {"id": r["id"], "action": r["action"], "user_id": str(r["user_id"]) if r["user_id"] else None,
+             "ip_address": str(r["ip_address"]) if r["ip_address"] else None, "created_at": _iso(r["created_at"])}
+            for r in audit_fail
+        ],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Tahmini Yapay Zeka maliyeti (₺/istek). GERÇEK fatura değil — kaba bir tahmin.
+# Sağlayıcı/model fiyatları değiştikçe burayı güncelleyin. Düşük, makul değerler:
+# her AI isteğinin tipik token tüketimine göre kabaca hesaplanmış ortalama maliyet.
+# (Hesaplayıcılar — faiz/zamanasimi — ve saf emsal arama LLM kullanmaz → maliyet 0.)
+# ---------------------------------------------------------------------------
+TAHMINI_MALIYET_TRY: dict[str, float] = {
+    "dilekce": 0.90,         # uzun üretim
+    "ihtarname": 0.55,
+    "ozet": 0.35,
+    "denetim": 0.60,
+    "karsi_argument": 0.70,
+    "sozlesme": 0.95,        # uzun belge analizi
+    "kvkk": 0.25,
+    "sorgu": 0.80,           # RAG + bağlam (UYAP)
+    # LLM kullanmayanlar (gösterim için 0):
+    "arama": 0.0, "faiz": 0.0, "zamanasimi": 0.0, "trend": 0.0,
+}
+_VARSAYILAN_AI_MALIYET = 0.50  # kataloğa eklenmemiş yeni AI event_type için
+
+
+@router.get("/analytics", response_model=APIResponse)
+async def analytics(admin: CurrentUser = Depends(require_admin)):
+    """Kapsamlı analitik — müşteriler, gelir, kredi, AI istekleri, araç kullanımı,
+    sağlayıcı dağılımı, tahmini maliyet ve en aktif müşteriler. Hepsi gerçek tablolardan.
+    """
+    from services.krediler import MODUL_ETIKET
+
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    # Hangi event_type'lar "Yapay Zeka isteği" sayılır (LLM kullanan modüller).
+    AI_EVENTS = (
+        "dilekce", "ihtarname", "ozet", "denetim",
+        "karsi_argument", "sozlesme", "kvkk", "sorgu",
+    )
+
+    def _iso(x):
+        return x.isoformat() if x else None
+
+    async with service_session() as conn:
+        # ---- a) Müşteriler -------------------------------------------------
+        total_users = await conn.fetchval("SELECT COUNT(*) FROM users WHERE is_active = TRUE")
+        new_24h = await conn.fetchval("SELECT COUNT(*) FROM users WHERE created_at > $1", day_ago)
+        new_7d = await conn.fetchval("SELECT COUNT(*) FROM users WHERE created_at > $1", week_ago)
+        new_30d = await conn.fetchval("SELECT COUNT(*) FROM users WHERE created_at > $1", month_ago)
+        dau = await conn.fetchval(
+            "SELECT COUNT(DISTINCT user_id) FROM usage_events WHERE created_at > $1 AND user_id IS NOT NULL",
+            day_ago,
+        )
+        mau = await conn.fetchval(
+            "SELECT COUNT(DISTINCT user_id) FROM usage_events WHERE created_at > $1 AND user_id IS NOT NULL",
+            month_ago,
+        )
+        tier_rows = await conn.fetch(
+            """SELECT plan_tier, COUNT(*) c FROM tenants
+               WHERE is_active = TRUE GROUP BY plan_tier ORDER BY c DESC"""
+        )
+
+        # ---- b) Gelir & paket alımları -------------------------------------
+        # Abonelik ödemeleri (30g, başarılı).
+        sub_row = await conn.fetchrow(
+            """SELECT COUNT(*) c, COALESCE(SUM(amount_try),0) toplam FROM payments
+               WHERE status = 'success' AND COALESCE(paid_at, created_at) > $1""",
+            month_ago,
+        )
+        # Ek paket alımları (credit_orders) — ödenmiş/yüklenmiş say.
+        pack_row = await conn.fetchrow(
+            """SELECT COUNT(*) c, COALESCE(SUM(amount_try),0) toplam FROM credit_orders
+               WHERE (status = 'paid' OR granted = TRUE) AND created_at > $1""",
+            month_ago,
+        )
+        # En çok satılan ek paketler (30g).
+        pack_top = await conn.fetch(
+            """SELECT pack_key, COUNT(*) adet, COALESCE(SUM(amount_try),0) toplam
+               FROM credit_orders
+               WHERE (status = 'paid' OR granted = TRUE) AND created_at > $1
+               GROUP BY pack_key ORDER BY adet DESC LIMIT 10""",
+            month_ago,
+        )
+
+        # ---- c) Kredi kullanımları (modül bazlı) ---------------------------
+        # purchase/grant = +delta (satın alınan/yüklenen), consume = -delta (tüketilen).
+        kredi_rows = await conn.fetch(
+            """SELECT module,
+                      COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END),0) satin_alinan,
+                      COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END),0) tuketilen
+               FROM credit_transactions
+               GROUP BY module
+               ORDER BY tuketilen DESC"""
+        )
+
+        # ---- d) Yapay Zeka istek sayısı + 7g günlük trend ------------------
+        ai_total = await conn.fetchval(
+            "SELECT COUNT(*) FROM usage_events WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon'",
+            list(AI_EVENTS),
+        )
+        ai_30d = await conn.fetchval(
+            "SELECT COUNT(*) FROM usage_events WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon' AND created_at > $2",
+            list(AI_EVENTS), month_ago,
+        )
+        ai_trend = await conn.fetch(
+            """SELECT (created_at AT TIME ZONE 'UTC')::date d, COUNT(*) c
+               FROM usage_events
+               WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon' AND created_at > $2
+               GROUP BY d ORDER BY d""",
+            list(AI_EVENTS), week_ago,
+        )
+
+        # ---- e) En çok kullanılan araçlar (toplam + 30g) -------------------
+        tool_total = await conn.fetch(
+            "SELECT event_type, COUNT(*) c FROM usage_events GROUP BY event_type ORDER BY c DESC"
+        )
+        tool_30d_rows = await conn.fetch(
+            """SELECT event_type, COUNT(*) c FROM usage_events
+               WHERE created_at > $1 GROUP BY event_type""",
+            month_ago,
+        )
+        tool_30d_map = {r["event_type"]: r["c"] for r in tool_30d_rows}
+
+        # ---- f) En aktif müşteriler (ilk 10) -------------------------------
+        aktif_rows = await conn.fetch(
+            """SELECT ue.user_id, u.email, u.name, COUNT(*) c,
+                      MAX(ue.created_at) son
+               FROM usage_events ue
+               JOIN users u ON u.id = ue.user_id
+               WHERE ue.user_id IS NOT NULL
+               GROUP BY ue.user_id, u.email, u.name
+               ORDER BY c DESC LIMIT 10"""
+        )
+
+        # ---- h) Sağlayıcı dağılımı (AI events, metadata->>'provider') ------
+        # Eski kayıtların provider'ı yok → 'bilinmiyor' altında toplanır.
+        provider_rows = await conn.fetch(
+            """SELECT COALESCE(NULLIF(metadata->>'provider',''), 'bilinmiyor') provider,
+                      COUNT(*) c
+               FROM usage_events
+               WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon'
+               GROUP BY provider ORDER BY c DESC""",
+            list(AI_EVENTS),
+        )
+        provider_30d_rows = await conn.fetch(
+            """SELECT COALESCE(NULLIF(metadata->>'provider',''), 'bilinmiyor') provider,
+                      COUNT(*) c
+               FROM usage_events
+               WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon' AND created_at > $2
+               GROUP BY provider ORDER BY c DESC""",
+            list(AI_EVENTS), month_ago,
+        )
+
+        # ---- g0) Maliyet için AI-only olay sayıları (sablon dilekçe hariç) --
+        # tool_total/tool_30d sablon olaylarını da içerir; maliyet onlara dahil
+        # edilmemeli. Bu yüzden maliyet için ayrı, sablon-hariç sayım haritası.
+        ai_cost_total_rows = await conn.fetch(
+            """SELECT event_type, COUNT(*) c FROM usage_events
+               WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon'
+               GROUP BY event_type""",
+            list(AI_EVENTS),
+        )
+        ai_cost_30d_rows = await conn.fetch(
+            """SELECT event_type, COUNT(*) c FROM usage_events
+               WHERE event_type = ANY($1::text[]) AND COALESCE(metadata->>'mode','') <> 'sablon'
+                     AND created_at > $2
+               GROUP BY event_type""",
+            list(AI_EVENTS), month_ago,
+        )
+
+    # ---- g) Tahmini Yapay Zeka maliyeti (toplam + 30g) --------------------
+    def _maliyet(rows_map: dict[str, int]) -> dict:
+        kalemler = []
+        toplam = 0.0
+        for et, adet in rows_map.items():
+            if et not in TAHMINI_MALIYET_TRY and et not in AI_EVENTS:
+                continue  # LLM kullanmayan araçları maliyet listesinden çıkar
+            birim = TAHMINI_MALIYET_TRY.get(et, _VARSAYILAN_AI_MALIYET)
+            tutar = round(birim * int(adet), 2)
+            if tutar <= 0:
+                continue
+            toplam += tutar
+            kalemler.append({
+                "event_type": et,
+                "etiket": MODUL_ETIKET.get(et, et),
+                "adet": int(adet),
+                "birim_try": birim,
+                "tutar_try": tutar,
+            })
+        kalemler.sort(key=lambda x: x["tutar_try"], reverse=True)
+        return {"toplam_try": round(toplam, 2), "kalemler": kalemler}
+
+    tool_total_map = {r["event_type"]: r["c"] for r in tool_total}
+    # Maliyet, sablon-hariç AI-only sayımlardan hesaplanır (sablon dilekçe dahil değil).
+    ai_cost_total_map = {r["event_type"]: r["c"] for r in ai_cost_total_rows}
+    ai_cost_30d_map = {r["event_type"]: r["c"] for r in ai_cost_30d_rows}
+    maliyet_toplam = _maliyet(ai_cost_total_map)
+    maliyet_30g = _maliyet(ai_cost_30d_map)
+
+    sub_count = int(sub_row["c"] or 0)
+    sub_toplam = float(sub_row["toplam"] or 0)
+    pack_count = int(pack_row["c"] or 0)
+    pack_toplam = float(pack_row["toplam"] or 0)
+
+    return APIResponse(ok=True, data={
+        "generated_at": now.isoformat(),
+        # a) Müşteriler
+        "musteriler": {
+            "toplam_aktif": total_users or 0,
+            "yeni_24s": new_24h or 0,
+            "yeni_7g": new_7d or 0,
+            "yeni_30g": new_30d or 0,
+            "dau": dau or 0,
+            "mau": mau or 0,
+            "plan_dagilimi": [{"plan": r["plan_tier"], "adet": r["c"]} for r in tier_rows],
+        },
+        # b) Gelir & paket alımları (30g)
+        "gelir": {
+            "abonelik_adet": sub_count,
+            "abonelik_toplam_try": round(sub_toplam, 2),
+            "ek_paket_adet": pack_count,
+            "ek_paket_toplam_try": round(pack_toplam, 2),
+            "tahmini_aylik_gelir_try": round(sub_toplam + pack_toplam, 2),
+            "en_cok_satilan_paketler": [
+                {"pack_key": r["pack_key"], "adet": r["adet"], "toplam_try": float(r["toplam"] or 0)}
+                for r in pack_top
+            ],
+        },
+        # c) Kredi kullanımları
+        "krediler": [
+            {
+                "module": r["module"],
+                "etiket": MODUL_ETIKET.get(r["module"], r["module"]),
+                "satin_alinan": int(r["satin_alinan"] or 0),
+                "tuketilen": int(r["tuketilen"] or 0),
+            }
+            for r in kredi_rows
+        ],
+        # d) Yapay Zeka istek sayısı + trend
+        "ai_istekleri": {
+            "toplam": ai_total or 0,
+            "son_30g": ai_30d or 0,
+            "gunluk_trend_7g": [
+                {"tarih": str(r["d"]), "adet": r["c"]} for r in ai_trend
+            ],
+        },
+        # e) En çok kullanılan araçlar
+        "araclar": [
+            {
+                "event_type": r["event_type"],
+                "etiket": MODUL_ETIKET.get(r["event_type"], r["event_type"]),
+                "toplam": r["c"],
+                "son_30g": tool_30d_map.get(r["event_type"], 0),
+            }
+            for r in tool_total
+        ],
+        # f) En aktif müşteriler
+        "en_aktif_musteriler": [
+            {
+                "user_id": str(r["user_id"]),
+                "email": r["email"],
+                "name": r["name"],
+                "islem_sayisi": r["c"],
+                "son_islem": _iso(r["son"]),
+            }
+            for r in aktif_rows
+        ],
+        # g) Tahmini Yapay Zeka maliyeti (TAHMİNİ — gerçek fatura değil)
+        "tahmini_maliyet": {
+            "tahmini": True,
+            "para_birimi": "TRY",
+            "toplam": maliyet_toplam,
+            "son_30g": maliyet_30g,
+        },
+        # h) Sağlayıcı dağılımı
+        "saglayici_dagilimi": {
+            "toplam": [{"provider": r["provider"], "adet": r["c"]} for r in provider_rows],
+            "son_30g": [{"provider": r["provider"], "adet": r["c"]} for r in provider_30d_rows],
+        },
+    })
+
+
 @router.get("/users", response_model=APIResponse)
 async def list_users(
     admin: CurrentUser = Depends(require_admin),
@@ -110,11 +533,13 @@ async def list_users(
     limit: int = 100,
     offset: int = 0,
 ):
-    where = "WHERE is_active = TRUE"
+    # NOT: is_active hem users hem tenants'ta var → tablo adıyla nitelendir
+    # (aksi halde "ambiguous column" hatası → endpoint 500 → liste boş görünür).
+    where = "WHERE u.is_active = TRUE"
     args: list = []
     if search:
         args.append(f"%{search}%")
-        where += f" AND (email ILIKE ${len(args)} OR name ILIKE ${len(args)})"
+        where += f" AND (u.email ILIKE ${len(args)} OR u.name ILIKE ${len(args)})"
     args.extend([limit, offset])
 
     async with service_session() as conn:
@@ -236,19 +661,22 @@ async def audit_log(
     args: list = []
     if action:
         args.append(action)
-        where_parts.append(f"action = ${len(args)}")
+        where_parts.append(f"a.action = ${len(args)}")
     if user_id:
         args.append(user_id)
-        where_parts.append(f"user_id = ${len(args)}::uuid")
+        where_parts.append(f"a.user_id = ${len(args)}::uuid")
     where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
     args.append(limit)
 
     async with service_session() as conn:
         rows = await conn.fetch(
-            f"""SELECT id, user_id, tenant_id, action, resource, ip_address,
-                       success, metadata, created_at
-                FROM audit_log {where}
-                ORDER BY created_at DESC LIMIT ${len(args)}""",
+            f"""SELECT a.id, a.user_id, a.tenant_id, a.action, a.resource, a.ip_address,
+                       a.success, a.metadata, a.created_at,
+                       u.email AS user_email, u.name AS user_name
+                FROM audit_log a
+                LEFT JOIN users u ON u.id = a.user_id
+                {where}
+                ORDER BY a.created_at DESC LIMIT ${len(args)}""",
             *args,
         )
 
@@ -257,6 +685,8 @@ async def audit_log(
             {
                 "id": r["id"],
                 "user_id": str(r["user_id"]) if r["user_id"] else None,
+                "user_email": r["user_email"],
+                "user_name": r["user_name"],
                 "tenant_id": str(r["tenant_id"]) if r["tenant_id"] else None,
                 "action": r["action"],
                 "resource": r["resource"],
@@ -355,6 +785,155 @@ async def update_feedback(
     return APIResponse(ok=True, message="Geri bildirim güncellendi.")
 
 
+# ---------------------------------------------------------------------------
+# Paketler & Limitler — plan limitleri ve ek paket kataloğu (DB-override'lı).
+# Admin panelden düzenlenir; ~30 sn cache TTL içinde uygulamaya yansır.
+# ---------------------------------------------------------------------------
+
+# Düzenlenebilir tier listesi (anonim hariç — anonimde plan satın alınmaz).
+_CONFIG_TIERS = [
+    "free", "pro_solo", "pro_solo_uyap", "team", "team_uyap", "enterprise",
+]
+# Limit düzenlenebilir araçlar.
+_CONFIG_TOOLS = [
+    "arama", "dilekce", "ihtarname", "ozet", "denetim",
+    "karsi_argument", "sozlesme", "kvkk",
+]
+
+
+@router.get("/config", response_model=APIResponse)
+async def get_config(admin: CurrentUser = Depends(require_admin)):
+    """Paketler & Limitler UI'ı için tüm konfigürasyon.
+
+    - tiers / tools: düzenlenebilir liste (etiketli).
+    - plan_limits: kaydedilmiş override (DB) — {tool: {tier: int|null}}.
+    - etkin_limitler: her (tool, tier) için ŞU AN geçerli limit (override yoksa
+      koddan gelen varsayılan; null = sınırsız).
+    - credit_packs: dinamik ek paket kataloğu (DB override varsa o, yoksa kod).
+    """
+    from api.rate_limit import tool_daily_limit
+    from services import app_config, krediler
+
+    override = await app_config.get_plan_limits()
+
+    etkin: dict[str, dict[str, int | None]] = {}
+    for tool in _CONFIG_TOOLS:
+        etkin[tool] = {}
+        for tier in _CONFIG_TIERS:
+            etkin[tool][tier] = tool_daily_limit(tier, tool, override)
+
+    paketler = await krediler.aktif_paketler()
+    packs = {
+        k: {
+            "ad": p.get("ad", ""),
+            "aciklama": p.get("aciklama", ""),
+            "modul": p.get("modul"),
+            "krediler": p.get("krediler") or {},
+            "amount": float(p.get("amount") or 0),
+        }
+        for k, p in paketler.items()
+    }
+
+    return APIResponse(ok=True, data={
+        "tiers": [{"key": t, "label": t} for t in _CONFIG_TIERS],
+        "tools": [
+            {"key": t, "label": krediler.MODUL_ETIKET.get(t, t)}
+            for t in _CONFIG_TOOLS
+        ],
+        "plan_limits": override,        # kaydedilmiş override (boş olabilir)
+        "etkin_limitler": etkin,        # şu an geçerli efektif limitler
+        "credit_packs": packs,          # dinamik katalog
+    })
+
+
+@router.put("/config/plan-limits", response_model=APIResponse)
+async def set_plan_limits(
+    payload: dict,
+    admin: CurrentUser = Depends(require_admin),
+):
+    """Plan limit override'ını kaydet. Body: {tool: {tier: int|null}}.
+
+    Bilinmeyen tool/tier yok sayılır; değer int veya null/-1 (sınırsız) olmalı.
+    """
+    temiz: dict[str, dict] = {}
+    for tool, tier_map in (payload or {}).items():
+        if tool not in _CONFIG_TOOLS or not isinstance(tier_map, dict):
+            continue
+        ic: dict[str, int | None] = {}
+        for tier, val in tier_map.items():
+            if tier not in _CONFIG_TIERS:
+                continue
+            if val is None:
+                ic[tier] = None
+                continue
+            if isinstance(val, bool):
+                continue  # bool'u sayı sayma
+            if isinstance(val, (int, float)):
+                v = int(val)
+                ic[tier] = None if v < 0 else v
+        if ic:
+            temiz[tool] = ic
+
+    from services import app_config
+    await app_config.set_value("plan_limits", temiz)
+    await audit(
+        action="admin.config.plan_limits_updated",
+        user_id=admin.user_id,
+        metadata={"tools": list(temiz.keys())},
+    )
+    return APIResponse(ok=True, message="Plan limitleri güncellendi.", data={"plan_limits": temiz})
+
+
+@router.put("/config/credit-packs", response_model=APIResponse)
+async def set_credit_packs(
+    payload: dict,
+    admin: CurrentUser = Depends(require_admin),
+):
+    """Ek paket kataloğunu kaydet. Body: {key: {ad, aciklama, modul, krediler, amount}}.
+
+    Tüm katalog gönderilir (ekle/çıkar). Geçersiz paketler atlanır.
+    """
+    temiz: dict[str, dict] = {}
+    for key, p in (payload or {}).items():
+        if not key or not isinstance(p, dict):
+            continue
+        krediler_map = p.get("krediler") or {}
+        if not isinstance(krediler_map, dict):
+            continue
+        ic_krediler: dict[str, int] = {}
+        for m, n in krediler_map.items():
+            if isinstance(n, bool):
+                continue
+            if isinstance(n, (int, float)) and int(n) > 0:
+                ic_krediler[str(m)] = int(n)
+        if not ic_krediler:
+            continue  # kredisi olmayan paket anlamsız → atla
+        try:
+            amount = float(p.get("amount") or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        modul = p.get("modul")
+        temiz[str(key)] = {
+            "ad": str(p.get("ad") or key)[:200],
+            "aciklama": str(p.get("aciklama") or "")[:500],
+            "modul": str(modul) if modul else None,
+            "krediler": ic_krediler,
+            "amount": round(amount, 2),
+        }
+
+    if not temiz:
+        raise HTTPException(400, "En az bir geçerli paket gerekli.")
+
+    from services import app_config
+    await app_config.set_value("credit_packs", temiz)
+    await audit(
+        action="admin.config.credit_packs_updated",
+        user_id=admin.user_id,
+        metadata={"packs": list(temiz.keys())},
+    )
+    return APIResponse(ok=True, message="Ek paket kataloğu güncellendi.", data={"credit_packs": temiz})
+
+
 @router.post("/beta-invite", response_model=APIResponse)
 async def beta_invite(
     payload: dict,
@@ -370,7 +949,7 @@ async def beta_invite(
     if not email:
         raise HTTPException(400, "Email zorunlu.")
 
-    site = "https://hukukemsal.tr"
+    site = "https://hukukcuyapayzekasi.com"
     body = (
         f"<p>Merhaba,</p>"
         f"<p><strong>{admin.name or admin.email}</strong> sizi Hukuk Emsal Beta programına davet etti.</p>"

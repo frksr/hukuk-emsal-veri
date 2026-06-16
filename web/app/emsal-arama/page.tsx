@@ -3,12 +3,12 @@ import Link from "next/link";
 
 import { buildMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
-import EmsalAramaClient from "./emsal-arama-client";
+import { AramaForm } from "./arama-form";
 
 export const metadata: Metadata = buildMetadata({
   title: "Türk Hukuk Emsal Karar Arama | Yargıtay, Danıştay, AİHM",
   description:
-    "10.000+ emsal karar arasında doğal dil ile arama yapın. İcra, tahsilat, ihtar konularında AI destekli emsal bulucu.",
+    "10.000+ emsal karar arasında doğal dil ile arama yapın. İcra, tahsilat, ihtar konularında Yapay Zeka destekli emsal bulucu.",
   path: "/emsal-arama",
   keywords: [
     "emsal karar arama",
@@ -23,7 +23,7 @@ export const metadata: Metadata = buildMetadata({
 });
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 const searchActionJsonLd = {
   "@context": "https://schema.org",
@@ -96,7 +96,7 @@ export default function EmsalAramaPage() {
           </p>
         </header>
 
-        <EmsalAramaClient />
+        <AramaForm />
       </main>
     </>
   );

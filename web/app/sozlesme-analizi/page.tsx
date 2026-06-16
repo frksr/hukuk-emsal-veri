@@ -4,9 +4,9 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { SozlesmeForm } from "./form";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Sözleşme Analizi | AI ile Madde Bazlı Risk Tespiti",
+  title: "Sözleşme Analizi | Yapay Zeka ile Madde Bazlı Risk Tespiti",
   description:
-    "PDF veya DOCX sözleşme yükleyin; AI madde madde risk analizi, eksik madde tespiti, fesih ve cezai şart kontrolü yapsın.",
+    "PDF veya DOCX sözleşme yükleyin; Yapay Zeka madde madde risk analizi, eksik madde tespiti, fesih ve cezai şart kontrolü yapsın.",
   path: "/sozlesme-analizi",
   keywords: [
     "sözleşme analizi", "ai sözleşme inceleme", "sözleşme risk analizi",
@@ -28,7 +28,7 @@ export default function SozlesmePage() {
           madde risk skorlasın, eksik maddeleri tespit etsin.
         </p>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6 text-sm">
-          ⚠️ AI analizi, hukuki danışmanlığın yerine geçmez.
+          ⚠️ Yapay Zeka analizi, hukuki danışmanlığın yerine geçmez.
         </div>
         <SozlesmeForm />
       </div>

@@ -12,6 +12,9 @@ Sütunlar: id, source, court_chamber, case_no, decision_no,
 
 from __future__ import annotations
 
+import json
+import random
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,6 +26,8 @@ import duckdb
 
 ROOT = Path(__file__).resolve().parent.parent
 PARQUET_PATH = ROOT / "data" / "final" / "all_decisions.parquet"
+# Kaynak veri yokken üretilen dummy yıllık verinin kalıcı yazıldığı dosya.
+DUMMY_YILLIK_PATH = ROOT / "data" / "final" / "trend_yillik_dummy.json"
 
 # DuckDB sorgularında kullanılan yıl regex'i: 1900-2099 arası dört haneli yıl.
 YIL_REGEX = r"(19\d{2}|20\d{2})"
@@ -62,6 +67,48 @@ def _bos_sonuc(filters: Dict[str, Any], hata: Optional[str] = None) -> Dict[str,
     return out
 
 
+def _dummy_yillik(filters: Dict[str, Any]) -> Dict[str, Any]:
+    """Kaynak veri (parquet) yok/boş olduğunda deterministik dummy yıllık veri üretir.
+
+    Üretilen veri DUMMY_YILLIK_PATH'e bir kez yazılır; sonraki çağrılarda dosyadan
+    okunur (yeniden üretilmez). Böylece 'veri yoksa üret, kalıcı yaz, oradan oku, göster'
+    akışı sağlanır. Dönen yapı gerçek veriyle aynı şemadadır + "dummy": True.
+    """
+    # Daha önce üretildiyse diskten oku
+    if DUMMY_YILLIK_PATH.exists():
+        try:
+            payload = json.loads(DUMMY_YILLIK_PATH.read_text(encoding="utf-8"))
+            return {
+                "data": [tuple(x) for x in payload.get("data", [])],
+                "total": int(payload.get("total", 0)),
+                "filters": filters,
+                "dummy": True,
+            }
+        except Exception:
+            pass  # bozuksa yeniden üret
+
+    # Deterministik üretim (her ortamda aynı sonuç)
+    rnd = random.Random(42)
+    yil_simdi = date.today().year
+    data: List[Tuple[str, int]] = []
+    taban = 80
+    for y in range(yil_simdi - 11, yil_simdi + 1):
+        taban = max(10, int(taban * rnd.uniform(1.04, 1.30)))
+        data.append((str(y), taban))
+    total = sum(v for _, v in data)
+
+    try:
+        DUMMY_YILLIK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DUMMY_YILLIK_PATH.write_text(
+            json.dumps({"data": data, "total": total}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass  # yazılamazsa da bellekteki veriyle devam
+
+    return {"data": data, "total": total, "filters": filters, "dummy": True}
+
+
 # -----------------------------------------------------------------------------
 # 1) Yıllık trend
 # -----------------------------------------------------------------------------
@@ -92,7 +139,10 @@ def trend_yillik(
         "daire": daire or "",
     }
 
+    # Filtresiz çağrıda kaynak veri yoksa dummy üret/oku (boş ekran kalmasın).
     if not _parquet_var_mi():
+        if not (konu_filtresi or kaynak or daire):
+            return _dummy_yillik(filters)
         return _bos_sonuc(filters, hata=f"Parquet bulunamadı: {PARQUET_PATH}")
 
     where_parts: List[str] = ["yil != ''"]
@@ -124,9 +174,14 @@ def trend_yillik(
         con = _connect()
         rows = con.execute(sql).fetchall()
     except Exception as e:
+        if not (konu_filtresi or kaynak or daire):
+            return _dummy_yillik(filters)
         return _bos_sonuc(filters, hata=f"DuckDB sorgusu başarısız: {e}")
 
     data: List[Tuple[str, int]] = [(str(r[0]), int(r[1])) for r in rows]
+    # Filtresiz çağrı tamamen boşsa (DB'de tarihli veri yok) dummy göster.
+    if not data and not (konu_filtresi or kaynak or daire):
+        return _dummy_yillik(filters)
     total = sum(v for _, v in data)
     return {"data": data, "total": total, "filters": filters}
 

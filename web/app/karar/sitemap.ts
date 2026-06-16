@@ -5,7 +5,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000";
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 const SAYFA_BOYU = 1000;
 const SAYFA_SAYISI = 10; // pilot: ilk 10K karar

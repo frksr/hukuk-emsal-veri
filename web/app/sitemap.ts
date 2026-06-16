@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 // Public sayfaların kanonik listesi — app/ klasöründeki GERÇEK route'larla
 // birebir aynı olmalı. Yeni sayfa eklendikçe buraya ekleyin.

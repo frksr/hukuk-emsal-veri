@@ -27,6 +27,7 @@ class CurrentUser:
         tenant_id: Optional[str] = None,
         tenant_plan: Optional[str] = None,
         tenant_role: Optional[str] = None,
+        email_verified: bool = False,
     ):
         self.user_id = user_id
         self.email = email
@@ -35,6 +36,7 @@ class CurrentUser:
         self.tenant_id = tenant_id
         self.tenant_plan = tenant_plan
         self.tenant_role = tenant_role
+        self.email_verified = email_verified
 
 
 def _decode_jwt(token: str) -> dict:
@@ -74,7 +76,7 @@ async def get_current_user(
     # çözmek gerekir (kim olduğunu burada belirliyoruz) → service_session.
     async with service_session() as conn:
         user_row = await conn.fetchrow(
-            "SELECT id, email, name, role, is_active FROM users WHERE id = $1",
+            "SELECT id, email, name, role, is_active, email_verified FROM users WHERE id = $1",
             user_id,
         )
         if not user_row or not user_row["is_active"]:
@@ -121,6 +123,7 @@ async def get_current_user(
         tenant_id=tenant_id,
         tenant_plan=tenant_plan,
         tenant_role=tenant_role,
+        email_verified=bool(user_row["email_verified"]),
     )
 
 

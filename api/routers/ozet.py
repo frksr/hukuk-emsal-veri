@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from api.deps import rate_limit
+from api.auth import CurrentUser
+from api.kota import kota
 from api.concurrency import run_blocking
 from api.schemas import APIResponse, OzetIstegi, OzetIstegiID
 from services.karar_ozet import ozet_uret
 from services.rag import get_full_decision
+from services.uretim_gunlugu import kaydet_uretim
 
 log = logging.getLogger("api.ozet")
 router = APIRouter()
@@ -24,7 +27,10 @@ def _llm_hata_mi(hata_msg: str) -> bool:
 @router.post("/text", response_model=APIResponse,
              summary="Serbest metinden karar özeti üret")
 async def ozet_metinden(
-    istek: OzetIstegi, _=Depends(rate_limit),
+    istek: OzetIstegi,
+    background: BackgroundTasks,
+    _=Depends(rate_limit),
+    user: CurrentUser = Depends(kota("ozet")),  # Yapay Zeka özet: Pro veya ek paket
 ) -> APIResponse:
     """Verilen karar metnini sade Türkçe ile özetler."""
     if istek.uzunluk not in GECERLI_UZUNLUK:
@@ -44,13 +50,23 @@ async def ozet_metinden(
             detail="LLM şu an erişilemez. Birkaç dakika sonra tekrar deneyin.",
         )
 
+    background.add_task(
+        kaydet_uretim, user.user_id, user.tenant_id, "ozet", log_usage=False,
+        alt_tur=istek.uzunluk,
+        baslik="Metin özeti",
+        girdi_ozeti=istek.karar_metni,
+        cikti=sonuc.get("ozet"),
+    )
     return APIResponse(ok=True, data=sonuc)
 
 
 @router.post("/by-id", response_model=APIResponse,
              summary="Decision ID'den karar özeti üret")
 async def ozet_by_id(
-    istek: OzetIstegiID, _=Depends(rate_limit),
+    istek: OzetIstegiID,
+    background: BackgroundTasks,
+    _=Depends(rate_limit),
+    user: CurrentUser = Depends(kota("ozet")),  # Yapay Zeka özet: Pro veya ek paket
 ) -> APIResponse:
     """Decision ID ile parquet'ten kararı çekip özetler."""
     if istek.uzunluk not in GECERLI_UZUNLUK:
@@ -97,4 +113,12 @@ async def ozet_by_id(
         )
 
     sonuc["decision_id"] = istek.decision_id
+    background.add_task(
+        kaydet_uretim, user.user_id, user.tenant_id, "ozet", log_usage=False,
+        alt_tur=istek.uzunluk,
+        baslik=f"Karar özeti — {istek.decision_id}",
+        girdi_ozeti=istek.decision_id,
+        cikti=sonuc.get("ozet"),
+        meta={"decision_id": istek.decision_id},
+    )
     return APIResponse(ok=True, data=sonuc)

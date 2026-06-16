@@ -8,7 +8,7 @@ import { buildMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMetadata({
   title: "Hoş Geldin — Hesabın Hazır | Hukuk Emsal",
   description:
-    "Hukuk Emsal hesabın hazır. Emsal karar arama, AI dilekçe taslağı ve faiz/zamanaşımı hesaplama araçlarına hemen başla.",
+    "Hukuk Emsal hesabın hazır. Emsal karar arama, Yapay Zeka dilekçe taslağı ve faiz/zamanaşımı hesaplama araçlarına hemen başla.",
   path: "/hosgeldin",
   noIndex: true,
 });
@@ -27,7 +27,7 @@ export default function HosgeldinPage() {
       <div className="grid md:grid-cols-3 gap-4 mb-10">
         {[
           { icon: Search, t: "40 emsal arama/gün", d: "Anonim'in 2 katı" },
-          { icon: FileText, t: "6 dilekçe/gün", d: "AI atıflı taslak" },
+          { icon: FileText, t: "6 dilekçe/gün", d: "Yapay Zeka atıflı taslak" },
           { icon: Calculator, t: "Sınırsız hesap", d: "Faiz + zamanaşımı" },
         ].map((x, i) => (
           <Card key={i}><CardContent className="p-5 text-center">

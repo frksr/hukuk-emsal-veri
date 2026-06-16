@@ -12,7 +12,7 @@ export default function YasalUyariPage() {
     <div className="container py-10 max-w-3xl prose prose-slate">
       <h1>Yasal Uyarı</h1>
       <p>
-        Hukuk Emsal platformu, hukuk profesyonellerine ve genel kullanıcılara yardımcı bir <strong>AI
+        Hukuk Emsal platformu, hukuk profesyonellerine ve genel kullanıcılara yardımcı bir <strong>Yapay Zeka
         destekli araç</strong>tır. Sunulan içerikler ve üretilen taslaklar profesyonel hukuk
         danışmanlığının yerine geçmez.
       </p>
@@ -26,7 +26,7 @@ export default function YasalUyariPage() {
       <h2>Veri Kaynakları</h2>
       <p>Tüm emsal kararlar resmi açık kaynaklardan toplanmıştır: Yargıtay karararama, Danıştay karararama ve HUDOC (AİHM).</p>
       <h2>İletişim</h2>
-      <p>Soru ve geri bildirimleriniz için <a href="mailto:info@hukukemsal.tr">info@hukukemsal.tr</a></p>
+      <p>Soru ve geri bildirimleriniz için <a href="mailto:info@hukukcuyapayzekasi.com">info@hukukcuyapayzekasi.com</a></p>
     </div>
   );
 }

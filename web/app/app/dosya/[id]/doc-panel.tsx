@@ -132,16 +132,16 @@ export function DocPanel({ docId }: { docId: string }) {
           <Shield className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-700" />
           <div className="text-amber-900">
             Bu dokümanda kişisel veri tespit edildi: <strong>{doc.pii_audit.types.join(", ")}</strong>.
-            AI sorgularında bu veriler otomatik maskelenir (Anthropic/Google görmeyecek).
+            Yapay Zeka sorgularında bu veriler otomatik maskelenir (Anthropic/Google görmeyecek).
           </div>
         </div>
       )}
 
-      {/* AI Sorgu */}
+      {/* Yapay Zeka Sorgu */}
       <Card className="border-accent/40 bg-accent/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-accent" /> Bu dosya hakkında AI'a sor
+            <Sparkles className="h-5 w-5 text-accent" /> Bu dosya hakkında Yapay Zeka'ya sor
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -160,12 +160,12 @@ export function DocPanel({ docId }: { docId: string }) {
         </CardContent>
       </Card>
 
-      {/* AI Yanıt */}
+      {/* Yapay Zeka Yanıt */}
       {answer && (
         <>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">AI Yanıtı</CardTitle>
+              <CardTitle className="text-base">Yapay Zeka Yanıtı</CardTitle>
             </CardHeader>
             <CardContent className="prose prose-sm max-w-none whitespace-pre-wrap">
               {answer.answer}

@@ -200,6 +200,101 @@ def _stub_dilekce(
     )
 
 
+DILEKCE_TURU_TALEP = {
+    "itirazin_iptali": (
+        "Yukarıda açıklanan nedenlerle; davalı borçlunun icra takibine yönelik "
+        "haksız ve kötüniyetli İTİRAZININ İPTALİNE, takibin devamına, alacağın "
+        "%20'sinden az olmamak üzere icra inkâr tazminatına hükmedilmesine, "
+        "yargılama giderleri ile vekâlet ücretinin davalıya yükletilmesine karar "
+        "verilmesini saygıyla talep ederiz."
+    ),
+    "ihalenin_feshi": (
+        "Yukarıda açıklanan nedenlerle; usulsüz gerçekleştirilen İHALENİN FESHİNE, "
+        "yargılama giderleri ile vekâlet ücretinin karşı tarafa yükletilmesine "
+        "karar verilmesini saygıyla talep ederiz."
+    ),
+    "menfi_tespit": (
+        "Yukarıda açıklanan nedenlerle; müvekkilin davalıya BORÇLU OLMADIĞININ "
+        "TESPİTİNE, yargılama giderleri ile vekâlet ücretinin davalıya "
+        "yükletilmesine karar verilmesini saygıyla talep ederiz."
+    ),
+    "tahsilat": (
+        "Yukarıda açıklanan nedenlerle; alacağımızın işleyecek faiziyle birlikte "
+        "davalıdan TAHSİLİNE, yargılama giderleri ile vekâlet ücretinin davalıya "
+        "yükletilmesine karar verilmesini saygıyla talep ederiz."
+    ),
+    "genel": (
+        "Yukarıda açıklanan nedenlerle; talebimizin KABULÜNE, yargılama giderleri "
+        "ile vekâlet ücretinin karşı tarafa yükletilmesine karar verilmesini "
+        "saygıyla talep ederiz."
+    ),
+}
+
+_TARAF_ROL = {
+    "itirazin_iptali": ("DAVACI (Alacaklı)", "DAVALI (Borçlu)"),
+    "ihalenin_feshi": ("DAVACI (Şikâyetçi)", "DAVALI"),
+    "menfi_tespit": ("DAVACI (Borçlu)", "DAVALI (Alacaklı)"),
+    "tahsilat": ("DAVACI (Alacaklı)", "DAVALI (Borçlu)"),
+    "genel": ("DAVACI", "DAVALI"),
+}
+
+
+def generate_dilekce_template(
+    durum: str,
+    dilekce_turu: str = "genel",
+    taraflar: dict | None = None,
+) -> dict:
+    """LLM/RAG KULLANMADAN, form alanlarından yapılandırılmış dilekçe iskeleti üretir.
+
+    Hızlı/ücretsiz mod: emsal kararlara atıf ve olaya özel hukuki argüman İÇERMEZ —
+    bu kısımlar 'AI + Emsal' (Pro) modunun değer katan tarafıdır.
+    """
+    from datetime import date
+
+    turu = dilekce_turu if dilekce_turu in DILEKCE_TURU_LABEL else "genel"
+    taraflar = taraflar or {}
+    davaci = (taraflar.get("alacakli") or "").strip() or "[DAVACI AD SOYAD / UNVAN]"
+    davali = (taraflar.get("borclu") or "").strip() or "[DAVALI AD SOYAD / UNVAN]"
+    davaci_rol, davali_rol = _TARAF_ROL.get(turu, _TARAF_ROL["genel"])
+
+    olay = (durum or "").strip() or "[Olay anlatımı buraya yazılacaktır.]"
+    paragraflar = [p.strip() for p in olay.split("\n") if p.strip()]
+    if len(paragraflar) <= 1:
+        aciklamalar = f"1. {olay}"
+    else:
+        aciklamalar = "\n".join(f"{i}. {p}" for i, p in enumerate(paragraflar, 1))
+
+    bugun = date.today().strftime("%d.%m.%Y")
+    metin = (
+        f"SAYIN ( ) NÖBETÇİ MAHKEMESİ'NE\n\n"
+        f"{davaci_rol} : {davaci}\n"
+        f"{davali_rol} : {davali}\n"
+        f"KONU : {DILEKCE_TURU_LABEL[turu]}\n\n"
+        f"AÇIKLAMALAR :\n{aciklamalar}\n\n"
+        f"HUKUKİ NEDENLER : {DILEKCE_TURU_HUKUKI_DAYANAK[turu]}\n\n"
+        f"DELİLLER : İcra dosyası, ilgili sözleşme/senet/çek, ticari defterler, "
+        f"tanık ve her türlü yasal delil.\n\n"
+        f"SONUÇ VE İSTEM : {DILEKCE_TURU_TALEP[turu]}\n\n"
+        f"{bugun}\n"
+        f"Davacı / Vekili\n"
+        f"{davaci}\n"
+    )
+
+    uyari = (
+        "Bu taslak hazır şablondan üretildi; olayınıza özel emsal karar atfı ve "
+        "gerekçeli hukuki argüman İÇERMEZ. Emsallere dayalı, olaya özel dilekçe "
+        "için 'AI + Emsal' (Pro) modunu kullanın. Mahkemeye sunmadan önce mutlaka "
+        "bir avukata danışın."
+    )
+
+    return {
+        "dilekce_metni": metin,
+        "kullanilan_emsaller": [],
+        "uyari": uyari,
+        "mode": "sablon",
+    }
+
+
 def generate_dilekce(
     durum: str,
     dilekce_turu: str = "genel",

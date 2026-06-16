@@ -17,10 +17,17 @@ COPY services/ ./services/
 COPY llm/ ./llm/
 COPY common/ ./common/
 COPY queries/ ./queries/
+# Operasyon scriptleri (migration, volume seed, admin oluşturma vb.)
+COPY scripts/ ./scripts/
 
-# Data (production'da bu volume mount edilebilir)
-COPY data/final/all_decisions.parquet ./data/final/all_decisions.parquet
-COPY data/chroma_db ./data/chroma_db
+# BÜYÜK VERİ IMAGE'A KOPYALANMAZ (.dockerignore ile de hariç tutulur).
+# Production: kalıcı volume'u /data'ya mount edip bir kez seed edin:
+#   CHROMA_DIR=/data/chroma_db python -m scripts.seed_volume --source <tgz|url|dizin>
+# ve env'leri volume'a yönlendirin:
+#   CHROMA_DIR=/data/chroma_db
+#   DECISIONS_PARQUET=/data/final/all_decisions.parquet
+# Detay: DEPLOY_VOLUME.md
+RUN mkdir -p data/final data/chroma_db data/tenant_storage
 
 EXPOSE 8000
 

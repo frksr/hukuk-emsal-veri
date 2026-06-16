@@ -6,7 +6,7 @@ import { KarsiArgumentForm } from "./form";
 export const metadata: Metadata = buildMetadata({
   title: "Karşı Argüman Öngörüsü | Davada Karşı Taraf Ne Diyebilir?",
   description:
-    "Davadan önce karşı tarafın hangi argümanları kullanabileceğini AI ile öngörün. Emsal kararlara dayalı rebuttal önerileri.",
+    "Davadan önce karşı tarafın hangi argümanları kullanabileceğini Yapay Zeka ile öngörün. Emsal kararlara dayalı rebuttal önerileri.",
   path: "/karsi-argument",
   keywords: ["karşı argüman", "dava stratejisi", "rebuttal", "davada karşı taraf", "ai hukuk asistanı"],
 });
@@ -21,7 +21,7 @@ export default function KarsiArgumentPage() {
         </nav>
         <h1 className="text-3xl md:text-4xl font-bold mb-3">Karşı Argüman Öngörüsü</h1>
         <p className="text-muted-foreground mb-8 max-w-3xl">
-          Kendi tezinizi yazın; AI emsal kararlara bakarak karşı tarafın olası argümanlarını sıralasın, her
+          Kendi tezinizi yazın; Yapay Zeka emsal kararlara bakarak karşı tarafın olası argümanlarını sıralasın, her
           biri için güç skoru ve rebuttal önerisi versin.
         </p>
         <KarsiArgumentForm />

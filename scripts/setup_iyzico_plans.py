@@ -16,11 +16,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # override=True → .env, oturumda 'set' ile tanımlı eski/yanlış değerleri EZER.
+    load_dotenv(override=True)
 except ImportError:
     pass
 
-from services.billing import _post
+from services.billing import _post, _get
 
 
 PRODUCTS = [
@@ -59,18 +60,32 @@ PRODUCTS = [
 ]
 
 
-async def list_existing_products() -> dict[str, str]:
-    """Mevcut ürünleri çek — duplicate önlemek için."""
+async def list_existing_products() -> dict[str, dict]:
+    """Mevcut ürünleri GET ile çek — duplicate önlemek için.
+
+    iyzico ürünü İSME göre tekiller ('Ürün zaten var'), bu yüzden isimle eşleriz.
+    Dönen: { ürün_adı: {"ref": referenceCode, "plans": {plan_adı: plan_ref}} }
+    """
+    mapping: dict[str, dict] = {}
     try:
-        result = await _post("/v2/subscription/products", {
-            "locale": "tr",
-            "page": 1, "count": 100,
-        })
-        items = result.get("data", {}).get("items", []) if isinstance(result.get("data"), dict) else []
-        return {it.get("productCode", ""): it.get("referenceCode", "") for it in items if it.get("productCode")}
+        result = await _get("/v2/subscription/products?page=1&count=100")
+        data = result.get("data")
+        items = data.get("items", []) if isinstance(data, dict) else []
+        if not items:
+            print(f"  [debug] GET ham yanıt: {json.dumps(result, ensure_ascii=False)[:900]}")
+        for it in items:
+            name = it.get("name", "")
+            if not name:
+                continue
+            plans = {
+                p.get("name", ""): p.get("referenceCode", "")
+                for p in (it.get("pricingPlans") or [])
+                if p.get("name")
+            }
+            mapping[name] = {"ref": it.get("referenceCode", ""), "plans": plans}
     except Exception as e:
         print(f"⚠ Mevcut ürün listesi alınamadı: {e}")
-        return {}
+    return mapping
 
 
 async def create_product(name: str, description: str, product_code: str) -> str | None:
@@ -84,6 +99,9 @@ async def create_product(name: str, description: str, product_code: str) -> str 
     result = await _post("/v2/subscription/products", body)
     if result.get("status") != "success":
         print(f"  ✗ '{name}' oluşturma hatası: {result.get('errorMessage')}")
+        print(f"     errorCode={result.get('errorCode')} "
+              f"errorGroup={result.get('errorGroup')} status={result.get('status')}")
+        print(f"     TAM YANIT: {json.dumps(result, ensure_ascii=False)[:800]}")
         return None
     return result.get("data", {}).get("referenceCode")
 
@@ -103,7 +121,10 @@ async def create_pricing_plan(
         "planPaymentType": "RECURRING",
         "trialPeriodDays": 0,
     }
-    result = await _post("/v2/subscription/pricing-plans", body)
+    # Pricing plan ürünün ALTINDA oluşturulur — endpoint product ref içerir.
+    result = await _post(
+        f"/v2/subscription/products/{product_ref}/pricing-plans", body,
+    )
     if result.get("status") != "success":
         print(f"  ✗ Pricing plan hatası: {result.get('errorMessage')}")
         return None
@@ -119,23 +140,40 @@ async def main():
     print("  iyzico Subscription Setup")
     print("=" * 60)
     print(f"  Base URL: {os.environ.get('IYZICO_BASE_URL')}")
+    _ak = os.environ.get("IYZICO_API_KEY", "")
+    _sk = os.environ.get("IYZICO_SECRET_KEY", "")
+    def _mask(s):
+        return f"{s[:10]}...{s[-4:]} (len={len(s)})" if s else "<BOŞ>"
+    print(f"  API key:    {_mask(_ak)}")
+    print(f"  Secret key: {_mask(_sk)}")
     print()
 
     # Mevcut ürünleri kontrol et
     print("→ Mevcut ürünler kontrol ediliyor...")
     existing = await list_existing_products()
     if existing:
-        print(f"  {len(existing)} mevcut ürün bulundu.")
+        print(f"  {len(existing)} mevcut ürün bulundu: {', '.join(existing.keys())}")
+    else:
+        print("  ⚠ GET ile hiç mevcut ürün dönmedi (liste yanıt formatı farklı olabilir).")
 
     results = {}
 
     for prod in PRODUCTS:
         print(f"\n→ '{prod['name']}' (₺{prod['price']}/ay)")
 
-        # Ürün zaten varsa atla
-        if prod["productCode"] in existing:
-            product_ref = existing[prod["productCode"]]
+        # Ürün zaten varsa (isimle eşleşiyorsa) onu kullan
+        existing_prod = existing.get(prod["name"])
+        plan_name = f"{prod['name']} - Aylık"
+        if existing_prod:
+            product_ref = existing_prod["ref"]
             print(f"  ⊙ Ürün zaten var: {product_ref}")
+            # Plan da zaten varsa tekrar oluşturma — mevcut referansı kullan
+            if plan_name in existing_prod["plans"]:
+                plan_ref = existing_prod["plans"][plan_name]
+                print(f"  ⊙ Pricing plan zaten var: {plan_ref}")
+                results[prod["env_var"]] = plan_ref
+                await asyncio.sleep(0.3)
+                continue
         else:
             product_ref = await create_product(
                 prod["name"], prod["description"], prod["productCode"],
@@ -144,10 +182,9 @@ async def main():
                 continue
             print(f"  ✓ Ürün oluşturuldu: {product_ref}")
 
-        # Pricing plan oluştur (her seferinde yeni — duplicate engelleme için kontrolü
-        # iyzico panelinden manuel yapmak gerekebilir)
+        # Pricing plan oluştur
         plan_ref = await create_pricing_plan(
-            product_ref, f"{prod['name']} - Aylık", prod["price"],
+            product_ref, plan_name, prod["price"],
         )
         if plan_ref:
             print(f"  ✓ Pricing plan: {plan_ref}")

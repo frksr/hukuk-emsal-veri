@@ -6,8 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { faizHesapla, type FaizSonuc } from "@/lib/api";
 import { formatTRY } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { usePlan, actionGateHref } from "@/lib/use-plan";
+import { useKayitDavet } from "@/components/kayit-davet";
 
 export function FaizForm() {
+  const router = useRouter();
+  const plan = usePlan();
+  const { davetGoster, dialog: kayitDialog } = useKayitDavet();
   const [anapara, setAnapara] = useState("100000");
   const [temerrut, setTemerrut] = useState("2024-01-01");
   const [vade, setVade] = useState(new Date().toISOString().slice(0, 10));
@@ -18,6 +24,9 @@ export function FaizForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const gate = actionGateHref(plan, false);
+    if (gate === "/kayit") { davetGoster(); return; }
+    if (gate) { router.push(gate); return; }
     setLoading(true);
     setError(null);
     try {
@@ -37,6 +46,7 @@ export function FaizForm() {
 
   return (
     <div className="grid lg:grid-cols-5 gap-6">
+      {kayitDialog}
       <Card className="lg:col-span-2 h-fit">
         <CardHeader><CardTitle>Hesaplama Bilgileri</CardTitle></CardHeader>
         <CardContent>

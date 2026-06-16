@@ -5,12 +5,15 @@ import logging
 from datetime import date
 from decimal import Decimal
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from api.deps import rate_limit
+from api.auth import CurrentUser
+from api.kota import kota
 from api.concurrency import run_blocking
 from api.schemas import APIResponse, IhtarnameIstegi
 from services.ihtarname import ihtarname_olustur, TUR_PROFILLERI
+from services.uretim_gunlugu import kaydet_uretim
 
 log = logging.getLogger("api.ihtarname")
 router = APIRouter()
@@ -29,9 +32,12 @@ def _json_safe(value: Any) -> Any:
 
 
 @router.post("/", response_model=APIResponse,
-             summary="Noter ihtarnamesi taslağı üret")
+             summary="Noter ihtarnamesi taslağı üret (Pro)")
 async def ihtarname_uret(
-    istek: IhtarnameIstegi, _=Depends(rate_limit),
+    istek: IhtarnameIstegi,
+    background: BackgroundTasks,
+    _=Depends(rate_limit),
+    user: CurrentUser = Depends(kota("ihtarname")),  # Yapay Zeka ihtarname: Pro veya ek paket
 ) -> APIResponse:
     """Tür ve taraflara göre LLM ile ihtarname taslağı üretir.
 
@@ -74,4 +80,11 @@ async def ihtarname_uret(
             )
         raise HTTPException(status_code=400, detail=hata_msg)
 
+    background.add_task(
+        kaydet_uretim, user.user_id, user.tenant_id, "ihtarname", log_usage=False,
+        alt_tur=istek.tur,
+        baslik=f"İhtarname — {istek.tur}",
+        girdi_ozeti=str(istek.taraflar),
+        cikti=sonuc.get("ihtarname_metni"),
+    )
     return APIResponse(ok=True, data=_json_safe(sonuc))

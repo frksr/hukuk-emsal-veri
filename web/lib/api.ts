@@ -221,16 +221,15 @@ function sleep(ms: number) {
 // Endpoint fonksiyonları
 // -----------------------------------------------------------------------------
 
-export function aramaCagir(
-  params: AramaParams,
+export async function aramaCagir(
+  params: { query: string; k?: number; source?: string | null; court_chamber?: string | null },
   init?: { signal?: AbortSignal }
-): Promise<AramaSonucu> {
-  return apiFetch<AramaSonucu>("/api/arama", {
-    method: "POST",
-    body: params,
-    signal: init?.signal,
-    retry: 1,
-  });
+): Promise<EmsalKarar[]> {
+  // Proxy üzerinden: NextAuth JWT eklenir → backend aramayı KULLANICIYA bağlı loglar
+  // (usage_events + user_searches). Böylece raporlara/dashboard'a yansır.
+  // proxyPost zaten zarfı açıp data'yı döndürür.
+  const arr = await proxyPost<EmsalKarar[]>("arama", params, init);
+  return Array.isArray(arr) ? arr : [];
 }
 
 export function dilekceCagir(
@@ -245,6 +244,15 @@ export function dilekceCagir(
   });
 }
 
+/** Hızlı şablon dilekçe (LLM'siz, ücretsiz). Backend zarfını açıp data döndürür. */
+export async function dilekceSablon(
+  params: DilekceParams,
+  init?: { signal?: AbortSignal }
+): Promise<{ dilekce_metni: string; kullanilan_emsaller: unknown[]; uyari?: string }> {
+  // Proxy üzerinden → kullanıcı token'ı gider, backend üretimi kullanıcıya bağlı loglar.
+  return proxyPost("dilekce/sablon", params, init);
+}
+
 export function ozetCagir(
   params: OzetParams,
   init?: { signal?: AbortSignal }
@@ -256,83 +264,92 @@ export function ozetCagir(
   });
 }
 
-export function faizHesapla(params: FaizParams): Promise<FaizSonucu> {
-  return apiFetch<FaizSonucu>("/api/faiz", {
-    method: "POST",
-    body: params,
-  });
+export async function faizHesapla(params: FaizParams): Promise<FaizSonucu> {
+  // Proxy üzerinden → kullanıcı token'ı gider, kullanım rapora yansır. data açılır.
+  return proxyPost<FaizSonucu>("faiz", params);
 }
 
-export function zamanasimiHesapla(
+export async function zamanasimiHesapla(
   params: ZamanasimiParams
 ): Promise<ZamanasimiSonucu> {
-  return apiFetch<ZamanasimiSonucu>("/api/zamanasimi", {
-    method: "POST",
-    body: params,
-  });
+  return proxyPost<ZamanasimiSonucu>("zamanasimi", params);
 }
 
-export function ihtarnameOlustur(
+export async function ihtarnameOlustur(
   params: IhtarnameParams,
   init?: { signal?: AbortSignal }
-): Promise<{ ihtarname_metni: string; pdf_url?: string }> {
-  return apiFetch("/api/ihtarname", {
+): Promise<{ ihtarname_metni: string; yasa_referanslari?: string[]; [k: string]: unknown }> {
+  // Proxy üzerinden: AI ihtarname Pro plan ister (auth JWT eklenir, backend kontrol eder).
+  const r = await fetch("/api/proxy/ihtarname", {
     method: "POST",
-    body: params,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
     signal: init?.signal,
-    timeoutMs: 60_000,
   });
+  if (r.status === 401 || r.status === 402) {
+    throw Object.assign(new Error("Yapay Zeka ihtarname Pro aboneliğe özeldir."), { status: r.status });
+  }
+  if (!r.ok) throw new Error("İhtarname üretilemedi. Lütfen tekrar deneyin.");
+  const j = await r.json();
+  return j?.data ?? j;
 }
 
-export function trendYillik(params: {
-  yil_baslangic?: number;
-  yil_bitis?: number;
-  konu?: string;
-  mahkeme?: Mahkeme;
-}): Promise<{ veriler: TrendData[] }> {
-  const qs = new URLSearchParams(
-    Object.entries(params)
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => [k, String(v)])
-  ).toString();
-  return apiFetch(`/api/trend/yillik${qs ? `?${qs}` : ""}`);
+export async function trendYillik(
+  query?: string
+): Promise<{ data: Array<[string, number]>; total: number; filters?: unknown; dummy?: boolean }> {
+  // query: hazır query string (örn. "konu_filtresi=icra&kaynak=yargitay")
+  const qs = query ? `?${query}` : "";
+  // Backend APIResponse zarfını ({ok,data}) açıp payload'ı döndür.
+  const res = await apiFetch<{ data: { data: Array<[string, number]>; total: number } }>(
+    `/api/trend/yillik${qs}`,
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (res?.data ?? res) as any;
 }
 
-export function karsiArgumentCagir(
-  params: KarsiArgumentParams,
+/**
+ * AI endpoint'leri için proxy POST: NextAuth JWT eklenir (Pro plan kontrolü backend'de).
+ * Backend zarfını ({ok,data,message}) açıp data döndürür. 401/402'de status'lu hata fırlatır.
+ */
+async function proxyPost<T = unknown>(
+  path: string,
+  body: unknown,
   init?: { signal?: AbortSignal }
-): Promise<{ karsi_argumanlar: Array<{ baslik: string; aciklama: string; emsal?: EmsalKarar[] }> }> {
-  return apiFetch("/api/karsi-argument", {
+): Promise<T> {
+  const r = await fetch(`/api/proxy/${path}`, {
     method: "POST",
-    body: params,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
     signal: init?.signal,
-    timeoutMs: 60_000,
   });
+  if (r.status === 401 || r.status === 402) {
+    throw Object.assign(new Error("Bu özellik Pro aboneliğe özeldir."), { status: r.status });
+  }
+  if (!r.ok) {
+    let detail = `İstek başarısız (${r.status})`;
+    try {
+      const j = await r.json();
+      if (j?.detail || j?.message) detail = String(j.detail ?? j.message);
+    } catch { /* ignore */ }
+    throw Object.assign(new Error(detail), { status: r.status });
+  }
+  const j = await r.json();
+  return (j?.data ?? j) as T;
 }
 
-export function kvkkChecklist(
-  params: KvkkChecklistParams
-): Promise<{ checklist: Array<{ madde: string; aciklama: string; tamamlandi?: boolean }> }> {
-  return apiFetch("/api/kvkk-checklist", {
-    method: "POST",
-    body: params,
-  });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function karsiArgumentCagir(params: KarsiArgumentParams, init?: { signal?: AbortSignal }): Promise<any> {
+  return proxyPost("karsi-argument", params, init);
 }
 
-export function sozlesmeAnaliz(
-  params: SozlesmeAnalizParams,
-  init?: { signal?: AbortSignal }
-): Promise<{
-  risk_skoru: number;
-  bulgular: Array<{ madde: string; risk: "dusuk" | "orta" | "yuksek"; aciklama: string }>;
-  oneriler?: string[];
-}> {
-  return apiFetch("/api/sozlesme-analiz", {
-    method: "POST",
-    body: params,
-    signal: init?.signal,
-    timeoutMs: 90_000,
-  });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function kvkkChecklist(params: KvkkChecklistParams): Promise<any> {
+  return proxyPost("kvkk/checklist", params);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function sozlesmeAnaliz(params: SozlesmeAnalizParams, init?: { signal?: AbortSignal }): Promise<any> {
+  return proxyPost("sozlesme/analyze-text", params, init);
 }
 
 // Belge Denetim ----------------------------------------------------------------
@@ -360,16 +377,12 @@ export type DenetimSonuc = {
   yasal_uyari: string;
 };
 
-export function belgeDenetText(
+export async function belgeDenetText(
   params: { metin: string; tur?: string; k?: number },
   init?: { signal?: AbortSignal }
 ): Promise<DenetimSonuc> {
-  return apiFetch<DenetimSonuc>("/api/denetim/text", {
-    method: "POST",
-    body: params,
-    signal: init?.signal,
-    timeoutMs: 90_000,
-  });
+  // Proxy üzerinden (auth + Pro kontrolü backend'de), zarfı açıp data döndür.
+  return proxyPost<DenetimSonuc>("denetim/text", params, init);
 }
 
 // -----------------------------------------------------------------------------
@@ -412,6 +425,12 @@ export interface DilekceStreamMeta {
   demo: boolean;
 }
 
+export interface DilekceSonuc {
+  dilekce_metni: string;
+  kullanilan_emsaller: Array<{ karar_id?: string; atif_text: string; ilgili_bolum: string }>;
+  uyari?: string;
+}
+
 export interface DilekceStreamHandlers {
   onMeta?: (meta: DilekceStreamMeta) => void;
   onDelta?: (text: string) => void;
@@ -428,7 +447,8 @@ export async function dilekceStream(
   handlers: DilekceStreamHandlers,
   init?: { signal?: AbortSignal }
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/dilekce/stream`, {
+  // Proxy üzerinden: NextAuth JWT eklenir (AI dilekçe Pro plan ister).
+  const res = await fetch(`/api/proxy/dilekce/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),

@@ -16,6 +16,8 @@ from services.billing import (
     retrieve_checkout_result,
     cancel_subscription,
     retrieve_subscription,
+    create_addon_checkout,
+    retrieve_addon_result,
     get_plan_info,
     PLAN_PRICING,
     verify_webhook_signature,
@@ -23,9 +25,50 @@ from services.billing import (
     get_authoritative_subscription,
     is_configured as iyzico_is_configured,
 )
+from services import krediler
 
 log = logging.getLogger("api.billing")
 router = APIRouter()
+
+
+async def _tenant_plani_uygula(conn, tenant_id, plan_tier: str) -> None:
+    """Tenant'ın plan_tier'ını ve plana bağlı limit kolonlarını ayarlar.
+    Callback/webhook/reconcile aynı mantığı kullansın diye merkezi."""
+    await conn.execute(
+        """UPDATE tenants SET
+           plan_tier = $1::plan_tier,
+           plan_started_at = COALESCE(plan_started_at, NOW()),
+           max_uyap_documents = CASE
+             WHEN $1 = 'pro_solo_uyap' THEN 50
+             WHEN $1 = 'team_uyap' THEN 250
+             WHEN $1 = 'enterprise' THEN 100000 ELSE 0 END,
+           max_monthly_queries = CASE
+             WHEN $1 = 'pro_solo_uyap' THEN 200
+             WHEN $1 = 'team_uyap' THEN 1000
+             WHEN $1 = 'enterprise' THEN 100000 ELSE 0 END,
+           max_users = CASE
+             WHEN $1::text LIKE 'team%' THEN 5
+             WHEN $1 = 'enterprise' THEN 50 ELSE 1 END
+           WHERE id = $2""",
+        plan_tier, tenant_id,
+    )
+
+
+def _require_verified(user: CurrentUser) -> None:
+    """Ödeme işlemleri için e-posta doğrulaması zorunlu (admin muaf)."""
+    if getattr(user, "role", None) == "admin":
+        return
+    if not getattr(user, "email_verified", False):
+        raise HTTPException(
+            403,
+            {
+                "error": "email_dogrulanmadi",
+                "message": (
+                    "Ödeme yapabilmek için önce e-posta adresinizi doğrulayın."
+                ),
+                "verify_url": "/giris/dogrulama",
+            },
+        )
 
 
 @router.get("/plans", response_model=APIResponse)
@@ -42,6 +85,27 @@ async def list_plans():
             for k, v in PLAN_PRICING.items()
         ],
     })
+
+
+@router.get("/plan-limits", response_model=APIResponse)
+async def public_plan_limits():
+    """Public: her (tier, araç) için ŞU AN geçerli aylık limit. null = sınırsız.
+
+    Admin'in 'Paketler & Limitler'den yaptığı değişiklikler buradan okunur →
+    Fiyatlandırma sayfası bu uçtan beslenir (statik metin yerine dinamik).
+    """
+    from api.rate_limit import tool_daily_limit
+    from services import app_config
+
+    override = await app_config.get_plan_limits()
+    tiers = ["free", "pro_solo", "pro_solo_uyap", "team", "team_uyap", "enterprise"]
+    tools = ["arama", "dilekce", "ihtarname", "ozet", "denetim",
+             "karsi_argument", "sozlesme", "kvkk"]
+    limits = {
+        t: {tool: tool_daily_limit(t, tool, override) for tool in tools}
+        for t in tiers
+    }
+    return APIResponse(ok=True, data={"limits": limits})
 
 
 class CheckoutReq(BaseModel):
@@ -92,6 +156,7 @@ async def checkout(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Subscription checkout başlat. Kullanıcı iyzico ödeme sayfasına yönlendirilir."""
+    _require_verified(user)
     if not user.tenant_id:
         raise HTTPException(400, "Aktif tenant gerekli.")
 
@@ -99,16 +164,13 @@ async def checkout(
     if not plan:
         raise HTTPException(400, "Geçersiz plan.")
 
-    # TR faturalama: gerçek kimlik/telefon/adres ZORUNLU (iyzico canlı modda).
-    # (Eskiden sahte 11111111111 / +905000000000 gönderiliyordu — fatura geçersiz
-    # olur ve KVKK/VUK açısından hatalı kayıt oluşurdu.)
+    # TR faturalama: iyzico canlı modda TC/adres/şehir ZORUNLU. Telefon ise iyzico'da
+    # OPSİYONEL olduğundan zorunlu tutulmaz (verilirse format kontrolü uygulanır).
     # Dev/mock modda (iyzico yapılandırılmamış) doğrulama esnetilir.
     phone = _normalize_phone(payload.phone)
     if iyzico_is_configured():
         if not _valid_tckn(payload.identity_no):
             raise HTTPException(400, "Geçerli bir TC Kimlik No (11 hane) gerekli.")
-        if not phone:
-            raise HTTPException(400, "Geçerli bir cep telefonu (5XXXXXXXXX) gerekli.")
         if not (payload.address and payload.address.strip()):
             raise HTTPException(400, "Fatura adresi gerekli.")
         if not (payload.city and payload.city.strip()):
@@ -188,32 +250,71 @@ async def callback(
     except Exception as e:
         raise HTTPException(503, f"İyzico sorgu hatası: {e}")
 
-    status = result.get("status")
-    iyzico_sub_ref = result.get("subscriptionReferenceCode")
-    iyzico_cust_ref = result.get("customerReferenceCode")
+    status = result.get("status")  # SADECE API sorgu durumu — ödeme durumu DEĞİL
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    iyzico_sub_ref = (
+        result.get("subscriptionReferenceCode") or result.get("referenceCode")
+        or data.get("subscriptionReferenceCode") or data.get("referenceCode")
+    )
+    iyzico_cust_ref = result.get("customerReferenceCode") or data.get("customerReferenceCode")
+    sub_status = (result.get("subscriptionStatus") or data.get("subscriptionStatus") or "").upper()
+    log.info(
+        "iyzico callback: status=%s sub_status=%s ref=%s raw=%s",
+        status, sub_status, iyzico_sub_ref, result,
+    )
 
-    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+    # Başarı belirleme (iyzico alan adları sürüme göre değişebildiği için sağlam):
+    #  - dev_mode → başarılı (mock).
+    #  - subscriptionStatus geldiyse: ACTIVE/ACTIVATED → başarılı.
+    #  - gelmediyse: sorgu başarılı + abonelik referansı oluşmuşsa başarılı
+    #    (başarısız ödemede iyzico abonelik referansı üretmez → plan aktifleşmez).
+    if result.get("dev_mode"):
+        basarili = True
+    elif sub_status:
+        basarili = sub_status in ("ACTIVE", "ACTIVATED")
+    else:
+        basarili = (status == "success") and bool(iyzico_sub_ref)
+
+    # Ayrıcalıklı işlemler (tenant plan yükseltme, ödeme kaydı) → service_session
+    # (BYPASSRLS), webhook ile aynı. Sahiplik aşağıda açıkça doğrulanır.
+    async with service_session() as conn:
         sub = await conn.fetchrow(
-            """SELECT id, plan_tier, tenant_id FROM subscriptions
+            """SELECT id, plan_tier, tenant_id, amount_try FROM subscriptions
                WHERE metadata->>'checkout_token' = $1 LIMIT 1""",
             payload.token,
         )
         if not sub:
             raise HTTPException(404, "Subscription bulunamadı.")
-        if sub["tenant_id"] != user.tenant_id and not result.get("dev_mode"):
+        # tenant_id asyncpg'den UUID nesnesi, user.tenant_id string → stringe çevirip
+        # karşılaştır (aksi halde UUID != str hep True olur ve yanlış 403 verir).
+        if str(sub["tenant_id"]) != str(user.tenant_id) and not result.get("dev_mode"):
             raise HTTPException(403, "Bu subscription size ait değil.")
 
-        if status == "success":
+        if basarili:
             async with conn.transaction():
                 await conn.execute(
                     """UPDATE subscriptions SET
                        status = 'active',
                        iyzico_subscription_ref = $1,
                        iyzico_customer_ref = $2,
-                       started_at = NOW(),
+                       started_at = COALESCE(started_at, NOW()),
+                       current_period_start = NOW(),
+                       current_period_end = NOW() + INTERVAL '1 month',
                        updated_at = NOW()
                        WHERE id = $3""",
                     iyzico_sub_ref, iyzico_cust_ref, sub["id"],
+                )
+                # Ödeme kaydı — webhook gelmese de (lokal/sandbox) raporlarda görünsün.
+                # Idempotent: aynı checkout token için tek satır (ON CONFLICT).
+                await conn.execute(
+                    """INSERT INTO payments
+                       (subscription_id, tenant_id, iyzico_payment_id,
+                        amount_try, currency, status, paid_at)
+                       VALUES ($1, $2, $3, $4, 'TRY', 'success', NOW())
+                       ON CONFLICT (iyzico_payment_id) DO NOTHING""",
+                    sub["id"], sub["tenant_id"],
+                    f"sub-{payload.token}",
+                    float(sub["amount_try"] or 0),
                 )
                 await conn.execute(
                     """UPDATE tenants SET
@@ -234,7 +335,7 @@ async def callback(
                          ELSE 0
                        END,
                        max_users = CASE
-                         WHEN $1 LIKE 'team%' THEN 5
+                         WHEN $1::text LIKE 'team%' THEN 5
                          WHEN $1 = 'enterprise' THEN 50
                          ELSE 1
                        END
@@ -242,24 +343,39 @@ async def callback(
                     sub["plan_tier"], iyzico_cust_ref, iyzico_sub_ref, sub["tenant_id"],
                 )
         else:
+            # Zaten aktifleşmiş bir aboneliği, tüketilmiş token'la gelen ikinci
+            # (bayat) sorgu 'failed'e ÇEVİRMESİN — yalnızca aktif değilse işaretle.
             await conn.execute(
-                "UPDATE subscriptions SET status = 'failed', updated_at = NOW() WHERE id = $1",
+                "UPDATE subscriptions SET status = 'failed', updated_at = NOW() "
+                "WHERE id = $1 AND status <> 'active'",
                 sub["id"],
+            )
+            # Başarısız ödeme kaydı (admin → Sistem → "başarısız ödemeler"de görünsün).
+            # Idempotent: aynı checkout token için tek 'failure' satırı.
+            await conn.execute(
+                """INSERT INTO payments
+                   (subscription_id, tenant_id, iyzico_payment_id,
+                    amount_try, currency, status, failure_reason)
+                   VALUES ($1, $2, $3, $4, 'TRY', 'failure', $5)
+                   ON CONFLICT (iyzico_payment_id) DO NOTHING""",
+                sub["id"], sub["tenant_id"], f"sub-fail-{payload.token}",
+                float(sub["amount_try"] or 0),
+                (result.get("errorMessage") or sub_status or "Ödeme alınamadı")[:300],
             )
 
     await audit(
-        action=f"billing.subscription_{'activated' if status == 'success' else 'failed'}",
+        action=f"billing.subscription_{'activated' if basarili else 'failed'}",
         user_id=user.user_id,
         tenant_id=user.tenant_id,
         request=request,
-        success=(status == "success"),
+        success=basarili,
         metadata={"iyzico_sub_ref": iyzico_sub_ref},
     )
 
     return APIResponse(
-        ok=(status == "success"),
-        data={"status": status, "subscription_id": str(sub["id"])},
-        message="Aboneliğiniz aktif!" if status == "success" else "Ödeme başarısız oldu.",
+        ok=basarili,
+        data={"status": "active" if basarili else "failed", "subscription_id": str(sub["id"])},
+        message="Aboneliğiniz aktif!" if basarili else "Ödeme onaylanamadı.",
     )
 
 
@@ -305,23 +421,55 @@ async def cancel(request: Request, user: CurrentUser = Depends(get_current_user)
 
 @router.get("/current", response_model=APIResponse)
 async def current_subscription(user: CurrentUser = Depends(get_current_user)):
-    """Tenant'ın mevcut subscription bilgisi."""
+    """Tenant'ın mevcut subscription bilgisi (+ kendi kendine onarım).
+
+    Aktif abonelik varsa tenant.plan_tier ve ödeme kaydı onunla SENKRONLANIR —
+    eski/eksik aktivasyonlardan kalan 'abonelik aktif ama tenant free / ödeme yok'
+    tutarsızlığını giderir. Ayrıcalıklı işlem → service_session.
+    """
     if not user.tenant_id:
         return APIResponse(ok=True, data=None)
-    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+    async with service_session() as conn:
         sub = await conn.fetchrow(
             """SELECT id, plan_tier, status, started_at, current_period_end,
-                      cancel_at_period_end, amount_try, currency
+                      cancel_at_period_end, amount_try, currency, tenant_id
                FROM subscriptions
                WHERE tenant_id = $1
                ORDER BY created_at DESC LIMIT 1""",
             user.tenant_id,
         )
+        if sub and sub["status"] == "active":
+            # 1) Tenant planı abonelikten farklıysa senkronla.
+            tenant_plan = await conn.fetchval(
+                "SELECT plan_tier FROM tenants WHERE id = $1", user.tenant_id,
+            )
+            if str(tenant_plan) != str(sub["plan_tier"]):
+                await _tenant_plani_uygula(conn, user.tenant_id, sub["plan_tier"])
+            # 2) Bu abonelik için ödeme kaydı yoksa geri-doldur (raporlarda görünsün).
+            pay_var = await conn.fetchval(
+                "SELECT 1 FROM payments WHERE subscription_id = $1 LIMIT 1", sub["id"],
+            )
+            if not pay_var and sub["amount_try"]:
+                await conn.execute(
+                    """INSERT INTO payments
+                       (subscription_id, tenant_id, iyzico_payment_id,
+                        amount_try, currency, status, paid_at)
+                       VALUES ($1, $2, $3, $4, 'TRY', 'success', COALESCE($5, NOW()))
+                       ON CONFLICT (iyzico_payment_id) DO NOTHING""",
+                    sub["id"], sub["tenant_id"], f"sub-backfill-{sub['id']}",
+                    float(sub["amount_try"] or 0), sub["started_at"],
+                )
+        # "Mevcut Plan" = tenant'ın GERÇEK hakkı (ödeme alınmadıysa free). Abonelik
+        # kaydının plan_tier'ı (pending/failed olabilir) bunu belirlemez.
+        tenant_plani = await conn.fetchval(
+            "SELECT plan_tier FROM tenants WHERE id = $1", user.tenant_id,
+        )
     if not sub:
         return APIResponse(ok=True, data=None)
     return APIResponse(ok=True, data={
         "id": str(sub["id"]),
-        "plan": sub["plan_tier"],
+        "plan": str(tenant_plani or "free"),
+        "subscription_plan": sub["plan_tier"],
         "status": sub["status"],
         "started_at": sub["started_at"].isoformat() if sub["started_at"] else None,
         "period_end": sub["current_period_end"].isoformat() if sub["current_period_end"] else None,
@@ -333,10 +481,11 @@ async def current_subscription(user: CurrentUser = Depends(get_current_user)):
 
 @router.get("/invoices", response_model=APIResponse)
 async def list_invoices(user: CurrentUser = Depends(get_current_user)):
-    """Tenant'ın geçmiş ödemeleri."""
+    """Tenant'ın geçmiş ödemeleri. Açık tenant filtresiyle service_session
+    (ödeme kayıtları RLS'e takılmadan güvenle listelenir)."""
     if not user.tenant_id:
         return APIResponse(ok=True, data={"payments": []})
-    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+    async with service_session() as conn:
         rows = await conn.fetch(
             """SELECT id, amount_try, currency, status, paid_at,
                       invoice_number, invoice_pdf_url
@@ -359,6 +508,272 @@ async def list_invoices(user: CurrentUser = Depends(get_current_user)):
             for r in rows
         ],
     })
+
+
+# ===========================================================================
+# Ek/kredi paketleri — tek seferlik satın alma, krediler hesaba yüklenir.
+# ===========================================================================
+
+@router.get("/addons", response_model=APIResponse)
+async def list_addons():
+    """Satın alınabilir ek paket kataloğu (dinamik — admin panelden düzenlenebilir)."""
+    paketler = await krediler.aktif_paketler()
+    return APIResponse(ok=True, data={
+        "packs": [
+            {
+                "key": k,
+                "ad": p["ad"],
+                "aciklama": p["aciklama"],
+                "modul": p["modul"],
+                "krediler": p["krediler"],
+                "amount_try": float(p["amount"]),
+                "currency": "TRY",
+                "bundle": p["modul"] is None,
+            }
+            for k, p in paketler.items()
+        ],
+    })
+
+
+class AddonCheckoutReq(BaseModel):
+    pack_key: str
+    identity_no: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    city: str | None = None
+    zip_code: str | None = None
+
+
+async def _kredi_yukle(conn, order_row) -> None:
+    """Siparişin kredilerini hesaba yükle — eşzamanlı çağrılara karşı idempotent.
+
+    'granted' bayrağını FALSE→TRUE'ya ATOMİK olarak çevirebilen ilk çağrı kredileri
+    yükler; aynı anda gelen ikinci çağrı (çift callback / StrictMode / reconcile
+    yarışı) hiçbir satır güncelleyemez ve hiçbir şey yüklemez. Böylece çift yükleme
+    (ör. 100 yerine 200) önlenir."""
+    claimed = await conn.fetchval(
+        """UPDATE credit_orders SET status='paid', granted=TRUE, updated_at=NOW()
+           WHERE id = $1 AND granted = FALSE
+           RETURNING id""",
+        order_row["id"],
+    )
+    if not claimed:
+        return  # başka bir çağrı zaten yükledi → tekrar yükleme
+
+    krediler_map = order_row["credits"]
+    if isinstance(krediler_map, str):
+        krediler_map = json.loads(krediler_map)
+    try:
+        await krediler.ekle(
+            user_id=str(order_row["user_id"]),
+            tenant_id=str(order_row["tenant_id"]) if order_row["tenant_id"] else None,
+            krediler=krediler_map,
+            reason="purchase",
+            ref=str(order_row["id"]),
+        )
+    except Exception:
+        # Yükleme başarısızsa claim'i geri al ki reconcile sonradan tekrar deneyebilsin.
+        await conn.execute(
+            "UPDATE credit_orders SET granted = FALSE WHERE id = $1", order_row["id"],
+        )
+        raise
+
+
+@router.post("/addons/checkout", response_model=APIResponse)
+async def addon_checkout(
+    payload: AddonCheckoutReq,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Ek paket satın alma başlat. Dev modda (iyzico yok) krediler hemen yüklenir."""
+    _require_verified(user)
+    pack = await krediler.paket_bilgi_async(payload.pack_key)
+    if not pack:
+        raise HTTPException(400, "Geçersiz paket.")
+
+    # Telefon iyzico'da OPSİYONEL — zorunlu tutmuyoruz. Verilirse format kontrolü
+    # uygulanır; verilmezse gönderilmez (TC ve adres iyzico gereği zorunlu kalır).
+    phone = _normalize_phone(payload.phone)
+    if iyzico_is_configured():
+        if not _valid_tckn(payload.identity_no):
+            raise HTTPException(400, "Geçerli bir TC Kimlik No (11 hane) gerekli.")
+        if not (payload.address and payload.address.strip()):
+            raise HTTPException(400, "Fatura adresi gerekli.")
+
+    full_name = (user.name or user.email.split("@")[0]).strip()
+    parts = full_name.split(" ", 1)
+    first = parts[0]
+    last = parts[1] if len(parts) > 1 else "—"
+
+    # Sipariş kaydı (pending)
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        order = await conn.fetchrow(
+            """INSERT INTO credit_orders
+                   (user_id, tenant_id, pack_key, amount_try, credits, status)
+               VALUES ($1, $2, $3, $4, $5::jsonb, 'pending')
+               RETURNING id, user_id, tenant_id, credits, granted""",
+            user.user_id, user.tenant_id, payload.pack_key,
+            float(pack["amount"]), json.dumps(pack["krediler"]),
+        )
+        order_id = str(order["id"])
+
+    try:
+        result = await create_addon_checkout(
+            order_id=order_id,
+            user={
+                "name": first, "surname": last, "email": user.email,
+                "phone": phone or "+905000000000",
+                "identity_no": payload.identity_no or "11111111111",
+                "city": (payload.city or "İstanbul").strip(),
+                "address": (payload.address or "—").strip(),
+                "zip": payload.zip_code or "34000",
+                "buyer_id": str(user.user_id),
+            },
+            pack={**pack, "key": payload.pack_key},
+        )
+    except Exception as e:
+        log.exception("ek paket checkout başarısız")
+        raise HTTPException(503, f"Ödeme servisi şu an erişilemez: {e}")
+
+    token = result.get("token")
+    # Token'ı siparişe işle
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        await conn.execute(
+            "UPDATE credit_orders SET iyzico_token=$1, updated_at=NOW() WHERE id=$2",
+            token, order["id"],
+        )
+
+    # Dev/mock mod: gerçek ödeme yok → krediyi hemen yükle.
+    if result.get("dev_mode"):
+        async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+            fresh = await conn.fetchrow(
+                "SELECT id, user_id, tenant_id, credits, granted FROM credit_orders WHERE id=$1",
+                order["id"],
+            )
+            await _kredi_yukle(conn, fresh)
+        await audit(action="billing.addon_granted_dev", user_id=user.user_id,
+                    tenant_id=user.tenant_id, request=request,
+                    metadata={"pack": payload.pack_key, "order": order_id})
+        return APIResponse(ok=True, data={
+            "order_id": order_id, "dev_mode": True, "granted": True,
+        }, message="Ek paket hesabınıza tanımlandı.")
+
+    if result.get("status") not in ("success", None):
+        raise HTTPException(400, result.get("errorMessage", "Ödeme başlatılamadı."))
+
+    await audit(action="billing.addon_checkout_initiated", user_id=user.user_id,
+                tenant_id=user.tenant_id, request=request,
+                metadata={"pack": payload.pack_key, "order": order_id})
+    return APIResponse(ok=True, data={
+        "order_id": order_id,
+        "payment_page_url": result.get("paymentPageUrl"),
+        "checkout_form_content": result.get("checkoutFormContent"),
+        "token": token,
+        "dev_mode": False,
+    })
+
+
+class AddonCallbackReq(BaseModel):
+    token: str
+
+
+@router.post("/addons/callback", response_model=APIResponse)
+async def addon_callback(
+    payload: AddonCallbackReq,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """iyzico dönüşü — ödeme başarılıysa kredileri yükle (idempotent)."""
+    try:
+        result = await retrieve_addon_result(payload.token)
+    except Exception as e:
+        raise HTTPException(503, f"İyzico sorgu hatası: {e}")
+
+    basarili = (
+        result.get("paymentStatus") == "SUCCESS"
+        or result.get("status") == "success"
+    )
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        order = await conn.fetchrow(
+            """SELECT id, user_id, tenant_id, credits, granted, status
+               FROM credit_orders WHERE iyzico_token=$1 LIMIT 1""",
+            payload.token,
+        )
+        if not order:
+            raise HTTPException(404, "Sipariş bulunamadı.")
+        if str(order["user_id"]) != str(user.user_id):
+            raise HTTPException(403, "Bu sipariş size ait değil.")
+
+        if basarili:
+            await _kredi_yukle(conn, order)
+        elif order["status"] == "pending":
+            await conn.execute(
+                "UPDATE credit_orders SET status='failed', updated_at=NOW() WHERE id=$1",
+                order["id"],
+            )
+
+    await audit(
+        action=f"billing.addon_{'granted' if basarili else 'failed'}",
+        user_id=user.user_id, tenant_id=user.tenant_id, request=request,
+        success=basarili, metadata={"order": str(order["id"])},
+    )
+    return APIResponse(
+        ok=basarili,
+        data={"order_id": str(order["id"]), "granted": basarili},
+        message="Ek paket hesabınıza tanımlandı." if basarili else "Ödeme başarısız oldu.",
+    )
+
+
+@router.get("/addons/orders", response_model=APIResponse)
+async def addon_orders(user: CurrentUser = Depends(get_current_user)):
+    """Kullanıcının ek paket satın alma kayıtları (ödeme geçmişinde göstermek için)."""
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        rows = await conn.fetch(
+            """SELECT id, pack_key, amount_try, currency, status, created_at
+               FROM credit_orders WHERE user_id = $1
+               ORDER BY created_at DESC LIMIT 100""",
+            user.user_id,
+        )
+    orders = []
+    paketler = await krediler.aktif_paketler()
+    for r in rows:
+        pack = paketler.get(r["pack_key"])
+        orders.append({
+            "id": str(r["id"]),
+            "pack_key": r["pack_key"],
+            "ad": pack["ad"] if pack else r["pack_key"],
+            "amount_try": float(r["amount_try"]),
+            "currency": r["currency"],
+            "status": r["status"],
+            "created_at": r["created_at"].isoformat(),
+        })
+    return APIResponse(ok=True, data={"orders": orders})
+
+
+@router.post("/addons/reconcile", response_model=APIResponse)
+async def addon_reconcile(user: CurrentUser = Depends(get_current_user)):
+    """Ödenmiş ama kredisi yüklenmemiş (callback ulaşmamış) siparişleri iyzico'dan
+    doğrulayıp kredileri yükler. Ek paketler sayfası açıldığında çağrılır → kaçan
+    ödemeler kendiliğinden telafi edilir. Idempotent (granted flag)."""
+    yuklenen = 0
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        orders = await conn.fetch(
+            """SELECT id, user_id, tenant_id, credits, granted, status, iyzico_token
+               FROM credit_orders
+               WHERE user_id=$1 AND granted=FALSE AND iyzico_token IS NOT NULL
+                 AND created_at > NOW() - INTERVAL '7 days'
+               ORDER BY created_at DESC LIMIT 10""",
+            user.user_id,
+        )
+        for o in orders:
+            try:
+                res = await retrieve_addon_result(o["iyzico_token"])
+            except Exception:
+                continue
+            if res.get("paymentStatus") == "SUCCESS" or res.get("status") == "success":
+                await _kredi_yukle(conn, o)
+                yuklenen += 1
+    return APIResponse(ok=True, data={"yuklenen": yuklenen})
 
 
 # Webhook — GÜVENLİK:
@@ -455,6 +870,30 @@ async def webhook(request: Request):
                     auth_state.get("current_period_end"),
                     sub_ref,
                 )
+                # Ödeme yeniden alındı → tenant planını abonelikteki tier'a GERİ YÜKLE.
+                # (Önceki bir başarısız ödeme tenant'ı 'free'e düşürmüş olabilir;
+                # yenileme başarılı olunca paket hakları geri açılır.)
+                await conn.execute(
+                    """UPDATE tenants t SET
+                       plan_tier = s.plan_tier,
+                       max_uyap_documents = CASE
+                         WHEN s.plan_tier = 'pro_solo_uyap' THEN 50
+                         WHEN s.plan_tier = 'team_uyap' THEN 250
+                         WHEN s.plan_tier = 'enterprise' THEN 100000
+                         ELSE 0 END,
+                       max_monthly_queries = CASE
+                         WHEN s.plan_tier = 'pro_solo_uyap' THEN 200
+                         WHEN s.plan_tier = 'team_uyap' THEN 1000
+                         WHEN s.plan_tier = 'enterprise' THEN 100000
+                         ELSE 0 END,
+                       max_users = CASE
+                         WHEN s.plan_tier::text LIKE 'team%' THEN 5
+                         WHEN s.plan_tier = 'enterprise' THEN 50
+                         ELSE 1 END
+                       FROM subscriptions s
+                       WHERE s.iyzico_subscription_ref = $1 AND t.id = s.tenant_id""",
+                    sub_ref,
+                )
                 # Payment kaydı — tutar payload'tan DEĞİL, kayıtlı amount_try'dan.
                 sub_row = await conn.fetchrow(
                     "SELECT id, tenant_id, amount_try FROM subscriptions WHERE iyzico_subscription_ref = $1",
@@ -473,11 +912,45 @@ async def webhook(request: Request):
                     )
 
             elif real_status == "failed":
+                # Ödeme alınamadı → aboneliği işaretle VE tenant'ı 'free'e düşür.
+                # Böylece ücretli özellikler ödeme alınana kadar kullanılamaz
+                # (kota sistemi tenant.plan_tier'a göre çalışır).
                 await conn.execute(
                     """UPDATE subscriptions SET status = 'failed', updated_at = NOW()
                        WHERE iyzico_subscription_ref = $1""",
                     sub_ref,
                 )
+                fail_row = await conn.fetchrow(
+                    """SELECT tenant_id, plan_tier, amount_try
+                       FROM subscriptions WHERE iyzico_subscription_ref = $1""",
+                    sub_ref,
+                )
+                if fail_row:
+                    await conn.execute(
+                        """UPDATE tenants SET plan_tier = 'free',
+                           max_uyap_documents = 0, max_monthly_queries = 0, max_users = 1
+                           WHERE id = $1""",
+                        fail_row["tenant_id"],
+                    )
+                    # Tenant sahibine "ödeme alınamadı" e-postası gönder.
+                    owner = await conn.fetchrow(
+                        """SELECT u.email, u.name
+                           FROM tenant_members tm JOIN users u ON u.id = tm.user_id
+                           WHERE tm.tenant_id = $1 AND tm.role = 'owner'
+                           ORDER BY tm.created_at LIMIT 1""",
+                        fail_row["tenant_id"],
+                    )
+                    if owner and owner["email"]:
+                        try:
+                            from services.email import send_payment_failed_email
+                            await send_payment_failed_email(
+                                to=owner["email"],
+                                name=owner["name"],
+                                plan_tier=str(fail_row["plan_tier"]),
+                                amount_try=float(fail_row["amount_try"] or 0),
+                            )
+                        except Exception as e:
+                            log.warning("payment-failed email gönderilemedi: %s", e)
 
             elif real_status in ("canceled", "expired"):
                 await conn.execute(

@@ -6,7 +6,7 @@ import { IhtarnameForm } from "./ihtarname-form";
 export const metadata: Metadata = buildMetadata({
   title: "İhtarname Üretici | Noter Onayına Hazır İhtarname Örneği",
   description:
-    "TBK 117 ve İİK 51 referanslı ihtarname örneği üretin. Alacak temerrütü, kira tahliye, çek, fesih ihtarnameleri AI ile dakikalarda hazır.",
+    "TBK 117 ve İİK 51 referanslı ihtarname örneği üretin. Alacak temerrütü, kira tahliye, çek, fesih ihtarnameleri Yapay Zeka ile dakikalarda hazır.",
   path: "/ihtarname",
   keywords: [
     "ihtarname örneği", "noter ihtarnamesi", "tbk 117 ihtarname",
@@ -29,7 +29,7 @@ export default function IhtarnamePage() {
           hazır ihtarname taslağı üretsin.
         </p>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6 text-sm">
-          ⚠️ <strong>Yasal uyarı:</strong> AI taslağı, noter onayından önce avukat incelemesi gerekir.
+          ⚠️ <strong>Yasal uyarı:</strong> Yapay Zeka taslağı, noter onayından önce avukat incelemesi gerekir.
         </div>
         <IhtarnameForm />
       </div>

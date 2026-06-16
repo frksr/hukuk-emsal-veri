@@ -149,4 +149,33 @@
   .text-pretty {
     text-wrap: pretty;
   }
+
+  /* Panel kartlarına ortak hafif hover — yumuşak kalkma + gölge. */
+  .hover-lift {
+    @apply transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  /* Sıralı (stagger) giriş: doğrudan çocuklar peş peşe belirir. */
+  .stagger > * {
+    animation: slide-up 0.4s ease-out both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 360ms; }
+}
+
+/* Erişilebilirlik: "hareketi azalt" tercihinde animasyon/geçişleri sustur. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

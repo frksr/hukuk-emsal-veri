@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 /**
  * "Bu aracı sitenize ekleyin" bölümü — hukuk bürosu siteleri için iframe kodu.
@@ -18,7 +18,7 @@ export function EmbedKodu({ path = "/embed/faiz", baslik = "Faiz Hesaplayıcı" 
 }) {
   const [copied, setCopied] = useState(false);
 
-  const kod = `<iframe src="${SITE_URL}${path}" width="100%" height="640" style="border:1px solid #e2e8f0;border-radius:8px;" title="${baslik} — hukukemsal.tr" loading="lazy"></iframe>`;
+  const kod = `<iframe src="${SITE_URL}${path}" width="100%" height="640" style="border:1px solid #e2e8f0;border-radius:8px;" title="${baslik} — hukukcuyapayzekasi.com" loading="lazy"></iframe>`;
 
   function copy() {
     navigator.clipboard.writeText(kod);

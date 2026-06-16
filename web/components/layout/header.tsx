@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Menu, X, Scale } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
+import { Menu, X, Scale, LogOut, LayoutDashboard, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthUser } from "@/components/auth-context";
+import { ProfileMenu } from "@/components/layout/profile-menu";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV = [
   { href: "/emsal-arama", label: "Emsal Arama" },
@@ -17,13 +22,23 @@ const NAV = [
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  // Giriş durumu SUNUCUDAN gelir (ilk render'da doğru) → titreme yok.
+  const user = useAuthUser();
+  const isLoggedIn = !!user;
+  const name = user?.name ?? null;
+  const email = user?.email ?? null;
+  const panelHref = user?.role === "admin" ? "/app/admin" : "/app";
+  const pathname = usePathname();
+  // Menüyü yalnızca /app (hesap) alanında gizle — orada sol sidebar var.
+  // Ana sayfa ve diğer genel sayfalarda menü her zaman görünür.
+  const menuGoster = !(pathname?.startsWith("/app") ?? false);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container-main flex h-16 items-center justify-between gap-4">
         <Link
           href="/"
-          className="flex items-center gap-2 font-heading text-lg font-bold text-primary-700 hover:text-primary-600"
+          className="flex items-center gap-2 font-heading text-lg font-bold text-primary-700 dark:text-primary-300 hover:text-primary-600 dark:hover:text-primary-200"
           aria-label="Hukuk Emsal anasayfa"
         >
           <Scale className="h-6 w-6 text-accent-500" aria-hidden="true" />
@@ -34,7 +49,8 @@ export function Header() {
           aria-label="Ana navigasyon"
           className="hidden items-center gap-1 md:flex"
         >
-          {NAV.map((item) => (
+          {/* Menü genel sayfalarda görünür; /app alanında sidebar var, gizli */}
+          {menuGoster && NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -43,24 +59,55 @@ export function Header() {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/emsal-arama"
-            className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
-          >
-            Hemen Ara
-          </Link>
+          {/* Tema değiştirme */}
+          <ThemeToggle className="ml-1" />
+          {/* Oturum durumu — SSR'dan bilindiği için doğrudan render (titreme yok).
+              Pazarlama sayfalarında kimlik gösterilmez; sadece "Panele Git" (best
+              practice). Hesap menüsü /app içindedir. */}
+          {isLoggedIn ? (
+            menuGoster ? (
+              <Link
+                href={panelHref}
+                className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
+              >
+                Panele Git
+              </Link>
+            ) : (
+              <div className="ml-2">
+                <ProfileMenu name={name} email={email} />
+              </div>
+            )
+          ) : (
+            <div className="ml-2 flex items-center gap-2">
+              <Link
+                href="/giris"
+                className="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-foreground/80 hover:bg-secondary hover:text-foreground"
+              >
+                Giriş
+              </Link>
+              <Link
+                href="/kayit"
+                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
+              >
+                Kayıt ol
+              </Link>
+            </div>
+          )}
         </nav>
 
-        <button
-          type="button"
-          aria-label={open ? "Menüyü kapat" : "Menüyü aç"}
-          aria-expanded={open}
-          aria-controls="mobile-menu"
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border text-foreground md:hidden"
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-2 md:hidden">
+          <ThemeToggle className="h-10 w-10" />
+          <button
+            type="button"
+            aria-label={open ? "Menüyü kapat" : "Menüyü aç"}
+            aria-expanded={open}
+            aria-controls="mobile-menu"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-secondary"
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       <div
@@ -74,7 +121,7 @@ export function Header() {
           aria-label="Mobil navigasyon"
           className="container-main flex flex-col gap-1 py-3"
         >
-          {NAV.map((item) => (
+          {menuGoster && NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -84,13 +131,50 @@ export function Header() {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/emsal-arama"
-            onClick={() => setOpen(false)}
-            className="mt-2 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-600"
-          >
-            Hemen Ara
-          </Link>
+          <div className="mt-2 border-t border-border pt-2">
+            {isLoggedIn ? (
+              <>
+                <Link
+                  href={panelHref}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-foreground/90 hover:bg-secondary"
+                >
+                  <LayoutDashboard className="h-4 w-4" /> Panelim
+                </Link>
+                <Link
+                  href="/app/ayarlar"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-foreground/90 hover:bg-secondary"
+                >
+                  <Settings className="h-4 w-4" /> Ayarlar
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); signOut({ callbackUrl: "/" }); }}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-destructive hover:bg-secondary"
+                >
+                  <LogOut className="h-4 w-4" /> Çıkış yap
+                </button>
+              </>
+            ) : (
+              <div className="flex gap-2">
+                <Link
+                  href="/giris"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium hover:bg-secondary"
+                >
+                  Giriş
+                </Link>
+                <Link
+                  href="/kayit"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-600"
+                >
+                  Kayıt ol
+                </Link>
+              </div>
+            )}
+          </div>
         </nav>
       </div>
     </header>

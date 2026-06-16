@@ -1,0 +1,43 @@
+# =============================================================================
+# Production backend image (Cloud Run) — FastAPI + gömülü ChromaDB/parquet.
+#
+# Vektör verisi git'te DEĞİL; Cloud Build build'den önce GCS'ten `seed_data/`
+# içine indirir (bkz. cloudbuild.yaml fetch-data adımı), bu image'a gömülür.
+# tenant_storage prod'da GCS volume olarak /app/data/tenant_storage'a mount edilir.
+# =============================================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+
+# psycopg/pypdf/chromadb için sistem bağımlılıkları
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Kaynak kod
+COPY api/ ./api/
+COPY services/ ./services/
+COPY llm/ ./llm/
+COPY common/ ./common/
+COPY queries/ ./queries/
+COPY scripts/ ./scripts/
+
+# Vektör deposu (ChromaDB) + kararlar parquet'i image'a gömülür.
+# Cloud Build bu klasörü GCS'ten doldurur; lokal build için de aynı yola koyabilirsin.
+COPY seed_data/chroma_db/ ./data/chroma_db/
+COPY seed_data/all_decisions.parquet ./data/final/all_decisions.parquet
+
+# UYAP belgeleri için yazılabilir dizin (prod'da GCS volume mount edilir).
+RUN mkdir -p data/tenant_storage
+
+ENV CHROMA_DIR=/app/data/chroma_db \
+    DECISIONS_PARQUET=/app/data/final/all_decisions.parquet \
+    TENANT_STORAGE_ROOT=/app/data/tenant_storage
+
+# Cloud Run $PORT enjekte eder (varsayılan 8080). Shell formu ile genişlet.
+EXPOSE 8080
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers ${WEB_CONCURRENCY:-2}"]

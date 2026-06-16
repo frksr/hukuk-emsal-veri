@@ -7,8 +7,23 @@ from api.audit import audit
 from api.auth import CurrentUser, get_current_user
 from api.db import db_session
 from api.schemas import APIResponse
+from services import krediler
 
 router = APIRouter()
+
+
+@router.get("/krediler", response_model=APIResponse, summary="Modül bazlı kredi bakiyeleri")
+async def kredilerim(user: CurrentUser = Depends(get_current_user)):
+    """Kullanıcının ek paket kredileri (modül bazlı bakiye) + son hareketler."""
+    bakiyeler = await krediler.tum_bakiyeler(user.user_id)
+    hareketler = await krediler.hareketler(user.user_id, limit=30)
+    return APIResponse(ok=True, data={
+        "bakiyeler": [
+            {"module": m, "modul_etiket": krediler.MODUL_ETIKET.get(m, m), "balance": b}
+            for m, b in sorted(bakiyeler.items())
+        ],
+        "hareketler": hareketler,
+    })
 
 
 @router.get("/", response_model=APIResponse)
@@ -16,10 +31,14 @@ async def me(user: CurrentUser = Depends(get_current_user)):
     async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
         row = await conn.fetchrow(
             """SELECT email_verified, kvkk_accepted_at, marketing_consent,
-                      created_at, last_login_at
+                      history_enabled, billing, created_at, last_login_at
                FROM users WHERE id = $1""",
             user.user_id,
         )
+    import json as _json
+    _billing = {}
+    if row and row["billing"]:
+        _billing = row["billing"] if isinstance(row["billing"], dict) else _json.loads(row["billing"])
     return APIResponse(ok=True, data={
         "user": {
             "id": user.user_id,
@@ -28,6 +47,8 @@ async def me(user: CurrentUser = Depends(get_current_user)):
             "role": user.role,
             "email_verified": bool(row and row["email_verified"]),
             "marketing_consent": bool(row and row["marketing_consent"]),
+            "history_enabled": bool(row["history_enabled"]) if row and row["history_enabled"] is not None else True,
+            "billing": _billing,
             "created_at": row["created_at"].isoformat() if row else None,
             "last_login_at": row["last_login_at"].isoformat() if row and row["last_login_at"] else None,
         },
@@ -42,6 +63,9 @@ async def me(user: CurrentUser = Depends(get_current_user)):
 class UpdateProfileReq(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     marketing_consent: bool | None = None
+    history_enabled: bool | None = None
+    # Fatura bilgileri (profil): {unvan, vergi_no, vergi_dairesi, adres, sehir, posta, telefon}
+    billing: dict | None = None
 
 
 @router.patch("/", response_model=APIResponse)
@@ -58,6 +82,16 @@ async def update_profile(
     if payload.marketing_consent is not None:
         updates.append(f"marketing_consent = ${len(args) + 1}")
         args.append(payload.marketing_consent)
+    if payload.history_enabled is not None:
+        updates.append(f"history_enabled = ${len(args) + 1}")
+        args.append(payload.history_enabled)
+    if payload.billing is not None:
+        import json as _json
+        # Yalnızca beklenen alanları al (güvenlik), stringe çevir.
+        izinli = {"unvan", "vergi_no", "vergi_dairesi", "adres", "sehir", "posta", "telefon"}
+        temiz = {k: str(v)[:300] for k, v in payload.billing.items() if k in izinli and v is not None}
+        updates.append(f"billing = ${len(args) + 1}::jsonb")
+        args.append(_json.dumps(temiz, ensure_ascii=False))
     if not updates:
         return APIResponse(ok=True, message="Değişiklik yok.")
 
@@ -71,6 +105,102 @@ async def update_profile(
 
     await audit(action="profile.updated", user_id=user.user_id, request=request)
     return APIResponse(ok=True, message="Profil güncellendi.")
+
+
+@router.get("/rapor", response_model=APIResponse)
+async def kullanim_raporu(user: CurrentUser = Depends(get_current_user)):
+    """Dinamik kullanım raporu — her araç için toplam/30g/7g kullanım sayısı.
+
+    usage_events (her AI kullanımı + arama) + generated_documents + user_searches'ten
+    beslenir; kullanıcı bir özelliği kullandığında anında yansır.
+    """
+    now = datetime.now(timezone.utc)
+    # Kota penceresi: ücretli kullanıcı için abonelik gününe, free için kayıt
+    # gününe demirlenmiş AYLIK pencere (kota.py ile birebir aynı mantık).
+    from api.rate_limit import kullanici_donem_penceresi
+    d1, donem_bitis, _ = await kullanici_donem_penceresi(user.user_id, user.tenant_id)
+    d7 = now - timedelta(days=7)
+    d30 = now - timedelta(days=30)
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        toplam = await conn.fetch(
+            "SELECT event_type, COUNT(*) c FROM usage_events WHERE user_id=$1 GROUP BY event_type",
+            user.user_id,
+        )
+        s30 = await conn.fetch(
+            "SELECT event_type, COUNT(*) c FROM usage_events WHERE user_id=$1 AND created_at>$2 GROUP BY event_type",
+            user.user_id, d30,
+        )
+        s7 = await conn.fetch(
+            "SELECT event_type, COUNT(*) c FROM usage_events WHERE user_id=$1 AND created_at>$2 GROUP BY event_type",
+            user.user_id, d7,
+        )
+        # Bu ay (takvim ayı başından) — aylık plan kotasından kalanı hesaplamak için.
+        s1 = await conn.fetch(
+            "SELECT event_type, COUNT(*) c FROM usage_events WHERE user_id=$1 AND created_at>=$2 GROUP BY event_type",
+            user.user_id, d1,
+        )
+        uretim_toplam = await conn.fetchval(
+            "SELECT COUNT(*) FROM generated_documents WHERE user_id=$1", user.user_id,
+        )
+        arama_toplam = await conn.fetchval(
+            "SELECT COUNT(*) FROM user_searches WHERE user_id=$1", user.user_id,
+        )
+
+    from api.rate_limit import tool_daily_limit
+    from services import app_config
+
+    # Plan limit override (admin panelden ayarlanabilir) — bir kez çek.
+    override = await app_config.get_plan_limits()
+
+    tmap = {r["event_type"]: r["c"] for r in toplam}
+    m30 = {r["event_type"]: r["c"] for r in s30}
+    m7 = {r["event_type"]: r["c"] for r in s7}
+    m1 = {r["event_type"]: r["c"] for r in s1}
+    araclar = ["arama", "dilekce", "ihtarname", "ozet", "denetim",
+               "karsi_argument", "sozlesme", "kvkk", "faiz", "zamanasimi"]
+    for ev in tmap:
+        if ev not in araclar:
+            araclar.append(ev)
+
+    # Modül bazlı ek-paket kredi bakiyeleri (kalan kullanım hakları) — rapora yansır.
+    kredi_bakiyeleri = await krediler.tum_bakiyeler(user.user_id)
+
+    # Her araç için kalan = AYLIK plan limitinden kalan (bu ay) + ek-paket kredisi.
+    # Pahalı araçlar (sözleşme) Pro'da bile plan limitine tabidir; diğer AI araçları
+    # Pro+ sınırsız; faiz/zamanaşımı pratikte sınırsız. Ek paket kredisi süresizdir.
+    # Admin → sistemi izleyen ana kullanıcı, her şey sınırsız (enterprise).
+    tier = "enterprise" if user.role == "admin" else (user.tenant_plan or "free")
+
+    def _kalan(tool: str) -> dict:
+        kredi = kredi_bakiyeleri.get(tool, 0)
+        limit = tool_daily_limit(tier, tool, override)  # None → sınırsız
+        if limit is None or limit >= 10_000:
+            return {"sinirsiz": True, "plan_kalan": None, "kalan_toplam": None}
+        plan_kalan = max(int(limit) - m1.get(tool, 0), 0)
+        return {"sinirsiz": False, "plan_kalan": plan_kalan,
+                "gunluk_limit": int(limit), "kalan_toplam": plan_kalan + kredi}
+
+    breakdown = [
+        {
+            "tool": t,
+            "toplam": tmap.get(t, 0),
+            "son30": m30.get(t, 0),
+            "son7": m7.get(t, 0),
+            "kredi": kredi_bakiyeleri.get(t, 0),
+            **_kalan(t),
+        }
+        for t in araclar
+    ]
+    return APIResponse(ok=True, data={
+        "tier": tier,
+        "uretim_toplam": uretim_toplam or 0,
+        "arama_toplam": arama_toplam or 0,
+        "toplam_kullanim": sum(tmap.values()),
+        "araclar": breakdown,
+        "krediler": kredi_bakiyeleri,
+        "donem_bitis": donem_bitis.isoformat(),
+        "guncel": now.isoformat(),
+    })
 
 
 @router.get("/usage", response_model=APIResponse)
@@ -183,6 +313,96 @@ async def my_searches(
     })
 
 
+@router.get("/uretimler", response_model=APIResponse)
+async def my_generations(
+    user: CurrentUser = Depends(get_current_user),
+    limit: int = 50,
+    tool: str | None = None,
+):
+    """AI üretim geçmişi (dilekçe/ihtarname/özet/denetim vb.)."""
+    where = "WHERE user_id = $1"
+    params: list = [user.user_id]
+    if tool:
+        where += " AND tool = $2"
+        params.append(tool)
+    params.append(min(limit, 200))
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        rows = await conn.fetch(
+            f"""SELECT id, tool, alt_tur, baslik, girdi_ozeti, cikti, created_at
+                FROM generated_documents {where}
+                ORDER BY created_at DESC LIMIT ${len(params)}""",
+            *params,
+        )
+    return APIResponse(ok=True, data={
+        "uretimler": [
+            {
+                "id": str(r["id"]),
+                "tool": r["tool"],
+                "alt_tur": r["alt_tur"],
+                "baslik": r["baslik"],
+                "girdi_ozeti": r["girdi_ozeti"],
+                "cikti": r["cikti"],
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in rows
+        ],
+    })
+
+
+@router.delete("/uretimler/{kayit_id}", response_model=APIResponse,
+               summary="Geçmişten tek kaydı sil")
+async def uretim_sil(
+    kayit_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Kullanıcının kendi geçmiş kaydını siler (RLS ile kendi satırı)."""
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        result = await conn.execute(
+            "DELETE FROM generated_documents WHERE id = $1 AND user_id = $2",
+            kayit_id, user.user_id,
+        )
+    if result.endswith("0"):
+        raise HTTPException(404, "Kayıt bulunamadı.")
+    return APIResponse(ok=True, message="Kayıt silindi.")
+
+
+@router.delete("/uretimler", response_model=APIResponse,
+               summary="Geçmişi temizle (tümü veya araç bazlı)")
+async def uretim_temizle(
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    tool: str | None = None,
+):
+    """Kullanıcının geçmişini siler. `tool` verilirse yalnızca o araç, yoksa tümü.
+
+    'arama' kayıtları hem generated_documents hem user_searches'te tutulduğundan,
+    tümü temizlenirken (veya tool='arama') user_searches de temizlenir.
+    """
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        async with conn.transaction():
+            if tool:
+                res = await conn.execute(
+                    "DELETE FROM generated_documents WHERE user_id = $1 AND tool = $2",
+                    user.user_id, tool,
+                )
+                if tool == "arama":
+                    await conn.execute(
+                        "DELETE FROM user_searches WHERE user_id = $1", user.user_id,
+                    )
+            else:
+                res = await conn.execute(
+                    "DELETE FROM generated_documents WHERE user_id = $1", user.user_id,
+                )
+                await conn.execute(
+                    "DELETE FROM user_searches WHERE user_id = $1", user.user_id,
+                )
+    silinen = res.rsplit(" ", 1)[-1] if res else "0"
+    await audit(action="history.cleared", user_id=user.user_id,
+                tenant_id=user.tenant_id, request=request,
+                metadata={"tool": tool or "all", "count": silinen})
+    return APIResponse(ok=True, message="Geçmiş temizlendi.", data={"silinen": silinen})
+
+
 @router.post("/searches/{search_id}/favorite", response_model=APIResponse)
 async def toggle_favorite(
     search_id: str,
@@ -216,7 +436,7 @@ async def delete_account(
                 """UPDATE users SET is_active = FALSE, email = $1, name = '[silindi]',
                           password_hash = NULL, metadata = metadata || '{"deleted_at": "' || NOW() || '"}'::jsonb
                    WHERE id = $2""",
-                f"deleted-{user.user_id}@hukukemsal.tr",
+                f"deleted-{user.user_id}@hukukcuyapayzekasi.com",
                 user.user_id,
             )
             await conn.execute(

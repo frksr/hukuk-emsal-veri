@@ -13,7 +13,7 @@ export default function KullanimPage() {
       <h1>Kullanım Şartları</h1>
       <p>Bu platformu kullanarak aşağıdaki şartları kabul etmiş sayılırsınız.</p>
       <h2>Hizmetin Niteliği</h2>
-      <p>Hukuk Emsal, AI destekli hukuki bilgi ve taslak üretim platformudur. <strong>Hukuki danışmanlık hizmeti vermez.</strong></p>
+      <p>Hukuk Emsal, Yapay Zeka destekli hukuki bilgi ve taslak üretim platformudur. <strong>Hukuki danışmanlık hizmeti vermez.</strong></p>
       <h2>Kullanıcı Yükümlülükleri</h2>
       <ul>
         <li>Platformu yasalara aykırı amaçlarla kullanmamak</li>
@@ -26,7 +26,7 @@ export default function KullanimPage() {
       <h2>Hizmet Değişiklikleri</h2>
       <p>Hizmet kapsamı önceden bildirim yapılmaksızın değiştirilebilir. Önemli değişiklikler kullanıcılara e-posta veya site bildirimi ile duyurulur.</p>
       <h2>İletişim</h2>
-      <p><a href="mailto:info@hukukemsal.tr">info@hukukemsal.tr</a></p>
+      <p><a href="mailto:info@hukukcuyapayzekasi.com">info@hukukcuyapayzekasi.com</a></p>
     </div>
   );
 }

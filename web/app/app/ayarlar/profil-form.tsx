@@ -14,7 +14,9 @@ export function ProfilForm({
 }) {
   const [name, setName] = useState(initialName);
   const [marketing, setMarketing] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
+  // null = henüz bilinmiyor (yüklenirken). Yanlış "Doğrulanmamış"ı önce
+  // göstermemek için yüklenene kadar nötr durum gösterilir.
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -81,8 +83,12 @@ export function ProfilForm({
           <div>
             <label className="text-sm font-medium mb-1.5 block">E-posta</label>
             <Input value={initialEmail} disabled />
-            <div className="mt-2 flex items-center justify-between text-xs">
-              {emailVerified ? (
+            <div className="mt-2 flex items-center justify-between text-xs min-h-[20px]">
+              {emailVerified === null ? (
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Doğrulama durumu kontrol ediliyor…
+                </span>
+              ) : emailVerified ? (
                 <span className="text-emerald-600 flex items-center gap-1">
                   <CheckCircle2 className="h-3 w-3" /> Doğrulanmış
                 </span>

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const title = (searchParams.get("title") ?? SITE_NAME).slice(0, 120);
   const subtitle = (
     searchParams.get("subtitle") ??
-    "Yargıtay · Danıştay · AİHM emsal kararları + AI hukuki araçlar"
+    "Yargıtay · Danıştay · AİHM emsal kararları + Yapay Zeka hukuki araçlar"
   ).slice(0, 160);
 
   return new ImageResponse(
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
             color: "#8fa3bd",
           }}
         >
-          <div>hukukemsal.tr</div>
+          <div>hukukcuyapayzekasi.com</div>
           <div>İcra · Tahsilat · İhtar · KVKK</div>
         </div>
       </div>

@@ -5,6 +5,10 @@ import { Loader2, Send, Sparkles, FileText, Lock, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePlan } from "@/lib/use-plan";
+
+// UYAP eklentisi içeren planlar — yalnızca bunlarda /uyap istekleri atılır.
+const UYAP_PLANLARI = ["pro_solo_uyap", "team_uyap", "enterprise"];
 
 type Doc = { id: string; title: string; doc_type: string; case_no: string | null };
 type Answer = {
@@ -29,8 +33,17 @@ export function SorguPanel() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
+  const plan = usePlan();
+  const uyapVar = UYAP_PLANLARI.includes(plan.plan ?? "");
 
   useEffect(() => {
+    if (plan.loading) return;
+    // UYAP planı yoksa istek HİÇ atılmaz (gereksiz 402 + konsol hatası önlenir).
+    if (!uyapVar) {
+      setPlanError("UYAP entegrasyonu yalnızca UYAP eklentili pakette mevcuttur.");
+      return;
+    }
+    setPlanError(null);
     (async () => {
       try {
         const [docsR, histR] = await Promise.all([
@@ -38,7 +51,7 @@ export function SorguPanel() {
           fetch("/api/proxy/uyap/sorgu/gecmis?limit=10"),
         ]);
         if (docsR.status === 402) {
-          const j = await docsR.json();
+          const j = await docsR.json().catch(() => ({}));
           setPlanError(j.message || "UYAP planı gerekli");
           return;
         }
@@ -50,7 +63,7 @@ export function SorguPanel() {
         }
       } catch { /* sessiz */ }
     })();
-  }, []);
+  }, [plan.loading, uyapVar]);
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();

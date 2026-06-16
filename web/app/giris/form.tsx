@@ -26,12 +26,25 @@ export function GirisForm() {
       password,
       redirect: false,
     });
-    setLoading(false);
     if (res?.error) {
+      setLoading(false);
       setError("E-posta veya şifre hatalı.");
       return;
     }
-    router.push(callbackUrl);
+    // Varsayılan hedefte (belirli bir callbackUrl yoksa) admin'i doğrudan
+    // admin paneline yönlendir; diğer kullanıcıları panele.
+    let hedef = callbackUrl;
+    if (callbackUrl === "/app") {
+      try {
+        const r = await fetch("/api/proxy/me", { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          if (j?.data?.user?.role === "admin") hedef = "/app/admin";
+        }
+      } catch { /* yok say → panele */ }
+    }
+    setLoading(false);
+    router.push(hedef);
     router.refresh();
   }
 

@@ -2,7 +2,18 @@
 
 Çalıştır:
   python scripts/init_db.py
-  python scripts/init_db.py --reset    # tüm tabloları drop edip yeniden kur (DİKKAT)
+  python scripts/init_db.py --reset          # tüm tabloları drop edip yeniden kur (DİKKAT)
+  python scripts/init_db.py --local-roles    # 08_local_roles.sql'i de uygula (SADECE lokal dev)
+
+DSN seçimi:
+  Migration'lar tablo owner'ı / admin rolü ile koşmalıdır (app_user RLS'e tabi,
+  DDL yetkisi yok). Öncelik sırası: ADMIN_DATABASE_URL > DATABASE_URL.
+  Production'da ADMIN_DATABASE_URL'e provider'ın admin DSN'ini verin.
+
+NOT: Lokal Docker'da infra/db/ klasörü docker-entrypoint-initdb.d'ye mount
+edildiği için İLK kurulumda tüm .sql dosyaları otomatik uygulanır; bu script
+yalnızca sonradan eklenen migration'lar, --reset veya production (managed
+Postgres) için gerekir.
 """
 from __future__ import annotations
 import argparse
@@ -28,8 +39,22 @@ MIGRATIONS = [
     "04_migration_002.sql",
     "05_migration_003.sql",
     "06_migration_004.sql",
+    "07_rls_hardening.sql",      # FORCE RLS + app_user/app_service rolleri
+    # 08_local_roles.sql        → SADECE lokal dev (--local-roles flag'i ile)
+    "09_rls_fix_recursion.sql",  # RLS infinite recursion düzeltmesi
     "10_saved_decisions.sql",
+    "11_generated_documents.sql",
+    "12_user_notes.sql",
+    "13_usage_credits.sql",
+    "14_reminders.sql",
+    "15_history_pref.sql",
+    "16_billing_profile.sql",
+    "17_app_config.sql",
+    "18_email_verification.sql",  # e-posta doğrulama (kod + link)
 ]
+
+# Lokal dev rol parolaları — production'da ASLA uygulanmaz.
+LOCAL_ONLY_MIGRATION = "08_local_roles.sql"
 
 
 async def reset_database(conn: asyncpg.Connection):
@@ -65,12 +90,20 @@ async def apply_migration(conn: asyncpg.Connection, filename: str) -> bool:
 async def main():
     p = argparse.ArgumentParser()
     p.add_argument("--reset", action="store_true", help="Tüm tabloları drop et (DİKKAT)")
+    p.add_argument(
+        "--local-roles", action="store_true",
+        help="08_local_roles.sql'i de uygula (SADECE lokal dev — zayıf parolalar!)",
+    )
     args = p.parse_args()
 
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = os.environ.get("ADMIN_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
-        print("✗ DATABASE_URL env eksik. .env dosyasını kontrol et.")
+        print("✗ ADMIN_DATABASE_URL veya DATABASE_URL env eksik.")
         sys.exit(1)
+    if "app_user" in dsn or "app_service" in dsn:
+        print("⚠ DSN app_user/app_service rolü içeriyor — migration'lar tablo OWNER")
+        print("  rolü ister (lokal: 'hukuk', cloud: provider admin kullanıcısı).")
+        print("  ADMIN_DATABASE_URL env'ine owner DSN'i verin.")
 
     print("=" * 60)
     print("  Hukuk Emsal — DB Migration")
@@ -94,9 +127,16 @@ async def main():
                 print("İptal edildi.")
                 return
 
+        migrations = list(MIGRATIONS)
+        if args.local_roles:
+            # 08, 07'nin oluşturduğu rollere parola atar → 07'den hemen sonra
+            idx = migrations.index("07_rls_hardening.sql") + 1
+            migrations.insert(idx, LOCAL_ONLY_MIGRATION)
+            print("⚠ --local-roles: 08_local_roles.sql uygulanacak (lokal dev parolaları)")
+
         print("Migration'lar uygulanıyor:")
         ok = 0
-        for m in MIGRATIONS:
+        for m in migrations:
             if await apply_migration(conn, m):
                 ok += 1
 
@@ -112,7 +152,7 @@ async def main():
             )
             print(f"  ✓ {t['table_name']} ({count} satır)")
 
-        print(f"\n✓ {ok}/{len(MIGRATIONS)} migration uygulandı.")
+        print(f"\n✓ {ok}/{len(migrations)} migration uygulandı.")
         print()
         print("Sonraki adım: 'uvicorn api.main:app --reload --port 8000'")
     finally:

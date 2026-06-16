@@ -1,0 +1,131 @@
+# =============================================================================
+# Cloud Build — git push → build (api+web) → Artifact Registry → Cloud Run deploy.
+#
+# Önce bir kez yapılacaklar (DEPLOY_GCP.md): API'leri aç, Artifact Registry repo,
+# Cloud SQL instance, GCS bucket'lar (veri tohumu + tenant storage), Secret Manager
+# sırları, migration. Sonra bu trigger her push'ta çalışır.
+#
+# Substitution'ları trigger'da (veya --substitutions ile) ayarla.
+# =============================================================================
+substitutions:
+  _REGION: "europe-west1"
+  _AR_REPO: "hukuk"                         # Artifact Registry repo adı
+  _DATA_BUCKET: "REPLACE-data-bucket"       # vektör tohum verisi (chroma_db + parquet)
+  _TS_BUCKET: "REPLACE-tenant-storage"      # UYAP belgeleri (yazılabilir)
+  _SQL_INSTANCE: "PROJECT:REGION:INSTANCE"  # Cloud SQL bağlantı adı
+  _API_SERVICE: "hukuk-api"
+  _WEB_SERVICE: "hukuk-web"
+  _SITE_URL: "https://hukukcuyapayzekasi.com"        # frontend genel URL (NEXTAUTH/CORS)
+  _API_PUBLIC_URL: "https://api.hukukcuyapayzekasi.com"  # backend genel URL (NEXT_PUBLIC_API_URL)
+
+options:
+  machineType: "E2_HIGHCPU_8"   # 2GB+ image build için güçlü makine
+  dynamicSubstitutions: true
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # 1) Vektör verisini GCS'ten indir → image'a gömülecek (git'te yok).
+  - id: fetch-data
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        mkdir -p seed_data/chroma_db
+        gsutil -m rsync -r "gs://${_DATA_BUCKET}/chroma_db" seed_data/chroma_db
+        gsutil cp "gs://${_DATA_BUCKET}/all_decisions.parquet" seed_data/all_decisions.parquet
+
+  # 2) Backend image (vektör verisi gömülü)
+  - id: build-api
+    name: "gcr.io/cloud-builders/docker"
+    args:
+      - build
+      - -f
+      - Dockerfile.api
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/api:$SHORT_SHA"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/api:latest"
+      - .
+    waitFor: ["fetch-data"]
+
+  # 3) Frontend image (NEXT_PUBLIC_* derleme anında)
+  - id: build-web
+    name: "gcr.io/cloud-builders/docker"
+    args:
+      - build
+      - -f
+      - web/Dockerfile
+      - --build-arg
+      - "NEXT_PUBLIC_SITE_URL=${_SITE_URL}"
+      - --build-arg
+      - "NEXT_PUBLIC_API_URL=${_API_PUBLIC_URL}"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/web:$SHORT_SHA"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/web:latest"
+      - web
+    waitFor: ["-"]   # fetch-data'yı beklemeden paralel başlayabilir
+
+  # 4) Push
+  - id: push-api
+    name: "gcr.io/cloud-builders/docker"
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/api"]
+    waitFor: ["build-api"]
+  - id: push-web
+    name: "gcr.io/cloud-builders/docker"
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/web"]
+    waitFor: ["build-web"]
+
+  # 5) Backend deploy (Cloud SQL + tenant-storage GCS volume + secrets)
+  - id: deploy-api
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_API_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/api:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--port=8080"
+      - "--memory=4Gi"
+      - "--cpu=2"
+      - "--min-instances=1"          # 2GB image → soğuk başlatmayı önle
+      - "--max-instances=4"
+      - "--no-cpu-throttling"
+      - "--allow-unauthenticated"
+      - "--add-cloudsql-instances=${_SQL_INSTANCE}"
+      - "--add-volume=name=ts,type=cloud-storage,bucket=${_TS_BUCKET}"
+      - "--add-volume-mount=volume=ts,mount-path=/app/data/tenant_storage"
+      - "--set-env-vars=APP_ENV=production,ALLOWED_ORIGINS=${_SITE_URL},NEXT_PUBLIC_SITE_URL=${_SITE_URL},TENANT_STORAGE_ROOT=/app/data/tenant_storage,IYZICO_BASE_URL=https://api.iyzipay.com"
+      - "--set-secrets=DATABASE_URL=DATABASE_URL:latest,SERVICE_DATABASE_URL=SERVICE_DATABASE_URL:latest,ADMIN_DATABASE_URL=ADMIN_DATABASE_URL:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,MASTER_ENCRYPTION_KEY=MASTER_ENCRYPTION_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,IYZICO_API_KEY=IYZICO_API_KEY:latest,IYZICO_SECRET_KEY=IYZICO_SECRET_KEY:latest,IYZICO_WEBHOOK_SECRET=IYZICO_WEBHOOK_SECRET:latest,IYZICO_PLAN_PRO_SOLO=IYZICO_PLAN_PRO_SOLO:latest,IYZICO_PLAN_PRO_UYAP=IYZICO_PLAN_PRO_UYAP:latest,IYZICO_PLAN_TEAM=IYZICO_PLAN_TEAM:latest,IYZICO_PLAN_TEAM_UYAP=IYZICO_PLAN_TEAM_UYAP:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASS=SMTP_PASS:latest,SMTP_FROM=SMTP_FROM:latest,ADMIN_EMAIL=ADMIN_EMAIL:latest"
+    waitFor: ["push-api"]
+
+  # 6) Frontend deploy
+  - id: deploy-web
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_WEB_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/web:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--port=8080"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--min-instances=1"
+      - "--max-instances=4"
+      - "--allow-unauthenticated"
+      - "--set-env-vars=NODE_ENV=production,NEXT_PUBLIC_SITE_URL=${_SITE_URL},NEXT_PUBLIC_API_URL=${_API_PUBLIC_URL},API_INTERNAL_URL=${_API_PUBLIC_URL},NEXTAUTH_URL=${_SITE_URL}"
+      - "--set-secrets=NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
+    waitFor: ["push-web"]
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/api:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/web:$SHORT_SHA"
+
+timeout: "2400s"

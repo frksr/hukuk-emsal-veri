@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { zamanasimiHesapla } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { usePlan, actionGateHref } from "@/lib/use-plan";
+import { useKayitDavet } from "@/components/kayit-davet";
 
 const KATEGORILER: Record<string, { label: string; altTipler: { value: string; label: string }[] }> = {
   alacak: {
@@ -42,6 +45,9 @@ const KATEGORILER: Record<string, { label: string; altTipler: { value: string; l
 };
 
 export function ZamanasimiForm() {
+  const router = useRouter();
+  const plan = usePlan();
+  const { davetGoster, dialog: kayitDialog } = useKayitDavet();
   const [kategori, setKategori] = useState("alacak");
   const [altTip, setAltTip] = useState("genel");
   const [olayTarihi, setOlayTarihi] = useState(new Date().toISOString().slice(0, 10));
@@ -52,13 +58,33 @@ export function ZamanasimiForm() {
 
   const altTipler = KATEGORILER[kategori]?.altTipler || [];
 
+  const bugun = new Date().toISOString().slice(0, 10);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true); setError(null);
+    const gate = actionGateHref(plan, false);
+    if (gate === "/kayit") { davetGoster(); return; }
+    if (gate) { router.push(gate); return; }
+    setError(null);
+
+    // Kesilme tarihi doğrulaması: olay tarihi ≤ kesilme ≤ bugün
+    const dolu = kesilmeler.filter(Boolean);
+    for (const k of dolu) {
+      if (k < olayTarihi) {
+        setError("Kesilme tarihi olay tarihinden önce olamaz (zamanaşımı olaydan sonra kesilir).");
+        return;
+      }
+      if (k > bugun) {
+        setError("Kesilme tarihi gelecekte olamaz — kesilme ancak gerçekleşmiş (bugüne kadarki) bir işlemle olur.");
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
       const data = await zamanasimiHesapla({
         kategori, alt_tip: altTip, olay_tarihi: olayTarihi,
-        kesilme_tarihleri: kesilmeler.filter(Boolean),
+        kesilme_tarihleri: dolu,
       });
       setSonuc(data);
     } catch (err) {
@@ -75,6 +101,7 @@ export function ZamanasimiForm() {
 
   return (
     <div className="grid lg:grid-cols-5 gap-6">
+      {kayitDialog}
       <Card className="lg:col-span-2 h-fit">
         <CardHeader><CardTitle>Dava Bilgileri</CardTitle></CardHeader>
         <CardContent>
@@ -95,7 +122,7 @@ export function ZamanasimiForm() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Olay Tarihi</label>
-              <Input type="date" value={olayTarihi} onChange={(e) => setOlayTarihi(e.target.value)} />
+              <Input type="date" value={olayTarihi} max={bugun} onChange={(e) => setOlayTarihi(e.target.value)} />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -106,7 +133,7 @@ export function ZamanasimiForm() {
               </div>
               {kesilmeler.map((d, i) => (
                 <div key={i} className="flex gap-2 mb-2">
-                  <Input type="date" value={d} onChange={(e) => {
+                  <Input type="date" value={d} min={olayTarihi} max={bugun} onChange={(e) => {
                     const arr = [...kesilmeler]; arr[i] = e.target.value; setKesilmeler(arr);
                   }} />
                   <Button type="button" variant="ghost" size="icon" onClick={() => setKesilmeler(kesilmeler.filter((_, j) => j !== i))}>

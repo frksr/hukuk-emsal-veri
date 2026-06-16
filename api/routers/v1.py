@@ -58,7 +58,7 @@ async def require_api_key(
             raise HTTPException(
                 429,
                 f"Günlük API kotası aşıldı ({row['daily_quota']} istek/gün). "
-                "Limit artışı için satis@hukukemsal.tr",
+                "Limit artışı için satis@hukukcuyapayzekasi.com",
             )
         await conn.execute(
             "UPDATE api_keys SET last_used_at = NOW() WHERE id = $1", row["id"])

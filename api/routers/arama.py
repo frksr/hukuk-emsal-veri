@@ -15,12 +15,18 @@ from api.auth import CurrentUser, get_optional_user
 from api.cache import arama_cache, stats_cache
 from api.concurrency import run_blocking
 from api.db import db_session
-from api.rate_limit import rate_limit_for
+from api.kota import kota
 from api.schemas import APIResponse, AramaIstegi, EmsalKarar
 from services.rag import search, get_collection_stats, get_full_decision
+from services.uretim_gunlugu import kaydet_uretim, gecmis_acik_mi
 
 log = logging.getLogger("api.arama")
 router = APIRouter()
+
+# /full yanıtından çıkarılacak iç alanlar:
+#  - raw_html_path: sunucu disk yolunu sızdırır (güvenlik)
+#  - raw_text: frontend cleaned_text kullanır; bu büyük kopya gereksiz
+_INTERNAL_FIELDS = {"raw_html_path", "raw_text"}
 
 
 def _to_emsal_karar(item: dict) -> dict:
@@ -44,7 +50,13 @@ def _to_emsal_karar(item: dict) -> dict:
 async def _kaydet_gecmis(
     user_id: str, tenant_id: str, query: str, result_count: int, filtreler: dict,
 ) -> None:
-    """Arama geçmişini DB'ye yaz — background task olarak çalışır."""
+    """Arama geçmişini DB'ye yaz — background task olarak çalışır.
+
+    Kullanıcı 'geçmişimi tut' tercihini kapattıysa yeni kayıt yazılmaz
+    (kota/limit mantığı ayrı; burada yalnızca kişisel geçmiş yazımı ele alınır).
+    """
+    if not await gecmis_acik_mi(user_id):
+        return
     try:
         async with db_session(user_id=user_id, tenant_id=tenant_id) as conn:
             await conn.execute(
@@ -61,8 +73,7 @@ async def arama_yap(
     istek: AramaIstegi,
     request: Request,
     background: BackgroundTasks,
-    user: CurrentUser | None = Depends(get_optional_user),
-    _=Depends(rate_limit_for("arama")),
+    user: CurrentUser | None = Depends(kota("arama")),
 ) -> APIResponse:
     """Verilen sorgu için top-k emsal karar döndürür.
 
@@ -107,6 +118,17 @@ async def arama_yap(
             _kaydet_gecmis,
             user.user_id, user.tenant_id, istek.query, len(validated), filtreler,
         )
+        # Birleşik "Geçmişim" görünümü için generated_documents'e de yaz.
+        # usage_events zaten kota("arama") ile loglanıyor → log_usage=False.
+        filtre_ozet = ", ".join(f"{k}: {v}" for k, v in filtreler.items()) or "filtre yok"
+        background.add_task(
+            kaydet_uretim, user.user_id, user.tenant_id, "arama",
+            baslik=istek.query,
+            girdi_ozeti=f"{len(validated)} sonuç · {filtre_ozet}",
+            cikti=None,
+            meta={"result_count": len(validated), "filters": filtreler},
+            log_usage=False,
+        )
 
     return APIResponse(ok=True, data=validated, message=f"{len(validated)} sonuç")
 
@@ -141,4 +163,8 @@ async def full_karar(
 
     if not karar:
         raise HTTPException(status_code=404, detail=f"Karar bulunamadı: {decision_id}")
+
+    # İç sistem alanlarını yanıttan çıkar — sunucu disk yolu (raw_html_path) sızdırılmamalı.
+    if isinstance(karar, dict):
+        karar = {k: v for k, v in karar.items() if k not in _INTERNAL_FIELDS}
     return APIResponse(ok=True, data=karar)

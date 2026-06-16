@@ -1,9 +1,12 @@
 "use client";
-import { useState } from "react";
-import { Loader2, Shield, CheckCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Shield, Sparkles, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { kvkkChecklist } from "@/lib/api";
+import { usePlan } from "@/lib/use-plan";
+import { useKayitDavet } from "@/components/kayit-davet";
 
 const SEKTORLER = [
   ["saglik", "Sağlık"], ["fintech", "Fintech / Banka"], ["egitim", "Eğitim"],
@@ -21,9 +24,17 @@ const VERI_TURLERI = [
 ];
 
 export function KVKKForm() {
+  const router = useRouter();
+  const { loading: planLoading, isPaid, isLoggedIn } = usePlan();
+  const { davetGoster, dialog: kayitDialog } = useKayitDavet();
   const [sektor, setSektor] = useState("e_ticaret");
   const [veriTurleri, setVeriTurleri] = useState<string[]>(["kisisel", "musteri"]);
   const [llmEk, setLlmEk] = useState(true);
+
+  // Ücretsiz kullanıcıda Yapay Zeka ek maddeler kapalı kalsın (temel checklist serbest).
+  useEffect(() => {
+    if (!planLoading && !isPaid) setLlmEk(false);
+  }, [planLoading, isPaid]);
   const [loading, setLoading] = useState(false);
   const [sonuc, setSonuc] = useState<any>(null);
   const [tamamlananlar, setTamamlananlar] = useState<Set<number>>(new Set());
@@ -31,13 +42,17 @@ export function KVKKForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isLoggedIn) { davetGoster(); return; }
     setLoading(true); setError(null);
     try {
-      const data = await kvkkChecklist({ sektor, veri_turleri: veriTurleri, llm_ek: llmEk });
+      // Yapay Zeka ek maddeler yalnızca ücretli planda; aksi halde temel checklist (llm_ek=false).
+      const data = await kvkkChecklist({ sektor, veri_turleri: veriTurleri, llm_ek: isPaid && llmEk });
       setSonuc(data);
       setTamamlananlar(new Set());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Hata");
+      const status = (err as { status?: number })?.status;
+      if (status === 402 || status === 401) setError("Yapay Zeka ile sektöre özel ek maddeler Pro aboneliğe özeldir.");
+      else setError(err instanceof Error ? err.message : "Hata");
     } finally { setLoading(false); }
   }
 
@@ -65,6 +80,7 @@ export function KVKKForm() {
 
   return (
     <div className="grid lg:grid-cols-5 gap-6">
+      {kayitDialog}
       <Card className="lg:col-span-2 h-fit">
         <CardHeader><CardTitle>Şirket Bilgileri</CardTitle></CardHeader>
         <CardContent>
@@ -89,10 +105,26 @@ export function KVKKForm() {
                 ))}
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={llmEk} onChange={(e) => setLlmEk(e.target.checked)} />
-              AI ile sektöre özel ek maddeler üret
-            </label>
+            {isPaid ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={llmEk} onChange={(e) => setLlmEk(e.target.checked)} />
+                <Sparkles className="h-3.5 w-3.5 text-primary" /> Yapay Zeka ile sektöre özel ek maddeler üret
+              </label>
+            ) : (
+              <div className="flex items-center justify-between gap-2 text-sm rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Lock className="h-3.5 w-3.5" /> Yapay Zeka ile sektöre özel ek maddeler
+                  <span className="text-[10px] rounded-full bg-primary/10 text-primary px-1.5 py-0.5">Pro</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => router.push("/fiyatlandirma")}
+                  className="text-primary underline text-xs shrink-0"
+                >
+                  Pro&apos;ya geç
+                </button>
+              </div>
+            )}
             <Button type="submit" disabled={loading} className="w-full" size="lg">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shield className="mr-2 h-4 w-4" />}
               Checklist Üret

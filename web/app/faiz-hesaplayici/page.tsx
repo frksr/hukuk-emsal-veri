@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { buildMetadata, breadcrumbJsonLd, faqJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
 import { FaizForm } from "./faiz-form";
-import { EmbedKodu } from "@/components/embed-kodu";
 
 export const metadata: Metadata = buildMetadata({
   title: "İcra Faiz Hesaplama | Yasal & Ticari Avans Faizi 2026",
@@ -58,8 +57,6 @@ export default function FaizPage() {
             ))}
           </div>
         </section>
-
-        <EmbedKodu path="/embed/faiz" baslik="Faiz Hesaplayıcı" />
       </div>
     </>
   );

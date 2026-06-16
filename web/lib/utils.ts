@@ -102,7 +102,7 @@ export function truncate(text: string, max: number, suffix = "…"): string {
  */
 export function absoluteUrl(path: string): string {
   const base =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+    process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalized}`;
 }

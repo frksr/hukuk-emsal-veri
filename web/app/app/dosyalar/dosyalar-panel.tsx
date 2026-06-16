@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { ListSkeleton } from "@/components/list-skeleton";
 
 type Doc = {
   id: string;
@@ -165,7 +166,7 @@ export function DosyalarPanel() {
         <div>
           Dosyalarınız <strong>AES-256 ile şifreli</strong> olarak Türkiye lokasyonunda saklanır.
           Her dosya size özel anahtarla şifrelidir, başka kullanıcılar veya biz okuyamayız.
-          AI sorgusunda kişisel veriler (TC, IBAN, telefon) maskelenerek işlenir.
+          Yapay Zeka sorgusunda kişisel veriler (TC, IBAN, telefon) maskelenerek işlenir.
         </div>
       </div>
 
@@ -177,11 +178,7 @@ export function DosyalarPanel() {
       )}
 
       {loading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded-lg border bg-muted/30 animate-pulse" />
-          ))}
-        </div>
+        <ListSkeleton rows={3} />
       ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
@@ -195,11 +192,11 @@ export function DosyalarPanel() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 stagger">
           {filtered.map((doc) => {
             const st = STATUS_LABEL[doc.status] || STATUS_LABEL.uploaded;
             return (
-              <Card key={doc.id} className="hover:border-primary/50 transition-colors">
+              <Card key={doc.id} className="hover-lift hover:border-primary/50">
                 <CardContent className="p-4 flex items-start gap-3">
                   <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <FileText className="h-5 w-5 text-primary" />

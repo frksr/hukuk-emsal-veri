@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FaizForm } from "@/app/faiz-hesaplayici/faiz-form";
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 // Embed sayfası — iframe içinde gösterilir; indekslenmemeli.
 export const metadata: Metadata = {
@@ -21,7 +21,7 @@ export default function EmbedFaizPage() {
           rel="noopener"
           className="hover:underline"
         >
-          ⚖️ hukukemsal.tr — emsal karar arama ve hukuki hesaplama araçları
+          ⚖️ hukukcuyapayzekasi.com — emsal karar arama ve hukuki hesaplama araçları
         </a>
       </div>
     </div>

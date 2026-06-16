@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = buildMetadata({
   title:
-    "Türk Hukuk Emsal Karar Arama | İcra, Tahsilat, İhtar AI Asistanı",
+    "Türk Hukuk Emsal Karar Arama | İcra, Tahsilat, İhtar Yapay Zeka Asistanı",
   description:
-    "Yargıtay, Danıştay ve AİHM emsal kararları arasında AI destekli arama. İcra takibi, tahsilat, ihtarname ve faiz hesaplama için Türk hukukuna özel asistan.",
+    "Yargıtay, Danıştay ve AİHM emsal kararları arasında Yapay Zeka destekli arama. İcra takibi, tahsilat, ihtarname ve faiz hesaplama için Türk hukukuna özel asistan.",
   path: "/",
   keywords: [
     "yargıtay kararları",
@@ -39,12 +39,12 @@ export const metadata: Metadata = buildMetadata({
     "dilekçe örneği",
     "icra faiz hesaplama",
     "yasal faiz oranı 2026",
-    "AI hukuk asistanı",
+    "Yapay Zeka hukuk asistanı",
   ],
 });
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
 
 const websiteJsonLd = {
   "@context": "https://schema.org",
@@ -53,7 +53,7 @@ const websiteJsonLd = {
   url: SITE_URL,
   inLanguage: "tr-TR",
   description:
-    "Türk hukuk sisteminde Yargıtay, Danıştay ve AİHM emsal kararlarını AI ile arayın; dilekçe, ihtarname ve faiz hesaplama araçları.",
+    "Türk hukuk sisteminde Yargıtay, Danıştay ve AİHM emsal kararlarını Yapay Zeka ile arayın; dilekçe, ihtarname ve faiz hesaplama araçları.",
   potentialAction: {
     "@type": "SearchAction",
     target: {
@@ -71,7 +71,7 @@ const organizationJsonLd = {
   url: SITE_URL,
   logo: `${SITE_URL}/logo.png`,
   description:
-    "İcra ve tahsilat hukuku odaklı AI destekli emsal karar arama platformu.",
+    "İcra ve tahsilat hukuku odaklı Yapay Zeka destekli emsal karar arama platformu.",
   sameAs: [
     "https://twitter.com/hukukemsal",
     "https://www.linkedin.com/company/hukuk-emsal",
@@ -99,7 +99,7 @@ const features: Feature[] = [
     icon: FileText,
     title: "Emsal-Bağlamlı Dilekçe",
     description:
-      "Davanızı anlatın, AI ilgili Yargıtay emsallerine atıfla profesyonel dilekçe taslağı hazırlasın. İtirazın iptali, menfi tespit, ihalenin feshi destekli.",
+      "Davanızı anlatın, Yapay Zeka ilgili Yargıtay emsallerine atıfla profesyonel dilekçe taslağı hazırlasın. İtirazın iptali, menfi tespit, ihalenin feshi destekli.",
     href: "/dilekce",
   },
   {
@@ -141,15 +141,22 @@ const features: Feature[] = [
     icon: Shield,
     title: "Karşı Argüman Öngörüsü",
     description:
-      "Dilekçenize karşı tarafın olası savunmalarını AI ile öngörün, hazırlığınızı güçlendirin.",
+      "Dilekçenize karşı tarafın olası savunmalarını Yapay Zeka ile öngörün, hazırlığınızı güçlendirin.",
     href: "/karsi-argument",
   },
   {
     icon: ScrollText,
-    title: "KVKK Uyum + Sözleşme Analizi",
+    title: "KVKK Uyum Checklist",
     description:
-      "Sözleşmelerinizi KVKK ve Türk Borçlar Kanunu açısından analiz edin; riskli maddeleri tespit edin.",
-    href: "/kvkk-sozlesme",
+      "Sektör ve veri türlerinize göre KVKK uyum maddelerinizi çıkarın; uyum skorunuzu görün.",
+    href: "/kvkk",
+  },
+  {
+    icon: ScrollText,
+    title: "Sözleşme Analizi",
+    description:
+      "Sözleşmelerinizi madde madde risk analizinden geçirin; eksik ve riskli maddeleri tespit edin.",
+    href: "/sozlesme-analizi",
   },
 ];
 
@@ -170,7 +177,7 @@ const howItWorks = [
   },
   {
     step: "02",
-    title: "AI emsallere bakar",
+    title: "Yapay Zeka emsallere bakar",
     description:
       "Sistem, vektör arama ile 10.000+ Yargıtay, Danıştay ve AİHM kararını analiz eder.",
     icon: Database,
@@ -223,7 +230,7 @@ const faqs = [
     a: "Yasal faiz oranı, 3095 sayılı Kanun çerçevesinde Cumhurbaşkanlığı kararıyla belirlenir ve dönemlere göre değişir. Hesaplayıcımız güncel resmi oranları otomatik olarak uygular; geçmiş dönem hesapları için tarih aralığına göre değişen oranları doğru biçimde dikkate alır.",
   },
   {
-    q: "AI ile hazırlanan dilekçe avukat denetimi gerektirir mi?",
+    q: "Yapay Zeka ile hazırlanan dilekçe avukat denetimi gerektirir mi?",
     a: "Evet. Platform; emsal karar atıflarıyla zenginleştirilmiş bir taslak hazırlar fakat bu içerik hukuki danışmanlık niteliği taşımaz. Mahkemeye sunulmadan önce mutlaka bir avukatın denetiminden geçirilmesini öneririz.",
   },
   {
@@ -250,20 +257,20 @@ export default function HomePage() {
         {/* HERO */}
         <section
           aria-labelledby="hero-heading"
-          className="relative overflow-hidden border-b bg-gradient-to-b from-slate-50 to-white"
+          className="relative overflow-hidden border-b bg-gradient-to-b from-secondary/60 to-background"
         >
           <div className="mx-auto flex max-w-6xl flex-col items-center px-4 py-20 text-center sm:py-28">
-            <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 shadow-sm">
-              <Sparkles className="h-4 w-4 text-amber-500" aria-hidden />
-              AI destekli Türk hukuk asistanı
+            <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-sm font-medium text-foreground/80 shadow-sm">
+              <Sparkles className="h-4 w-4 text-accent" aria-hidden />
+              Yapay Zeka destekli Türk hukuk asistanı
             </span>
             <h1
               id="hero-heading"
-              className="max-w-4xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl md:text-6xl"
+              className="max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl"
             >
-              İcra ve Tahsilat Hukukunda Emsal Kararları AI ile Arayın
+              İcra ve Tahsilat Hukukunda Emsal Kararları Yapay Zeka ile Arayın
             </h1>
-            <p className="mt-6 max-w-2xl text-lg text-slate-600 sm:text-xl">
+            <p className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
               Yargıtay, Danıştay ve AİHM kararları arasında doğal dilde arama
               yapın; dilekçe, ihtarname ve faiz hesaplamalarınızı saniyeler
               içinde tamamlayın.
@@ -287,10 +294,10 @@ export default function HomePage() {
             >
               {trustedItems.map((item) => (
                 <div key={item.label} className="flex flex-col items-center">
-                  <span className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                  <span className="text-2xl font-bold text-foreground sm:text-3xl">
                     {item.value}
                   </span>
-                  <span className="mt-1 text-sm text-slate-500">
+                  <span className="mt-1 text-sm text-muted-foreground">
                     {item.label}
                   </span>
                 </div>
@@ -307,11 +314,11 @@ export default function HomePage() {
           <div className="mb-12 text-center">
             <h2
               id="features-heading"
-              className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
+              className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
             >
               Avukatlar için 9 güçlü araç
             </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
               Emsal karar aramadan dilekçe üretimine, faiz hesaplamadan KVKK
               sözleşme analizine kadar pratik avukatlığa özel modüller.
             </p>
@@ -329,7 +336,7 @@ export default function HomePage() {
                     <div
                       className={cn(
                         "flex h-11 w-11 items-center justify-center rounded-lg",
-                        "bg-slate-100 text-slate-700 group-hover:bg-slate-900 group-hover:text-white",
+                        "bg-secondary text-secondary-foreground group-hover:bg-primary group-hover:text-primary-foreground",
                         "transition-colors"
                       )}
                       aria-hidden
@@ -337,20 +344,20 @@ export default function HomePage() {
                       <Icon className="h-5 w-5" />
                     </div>
                     {feature.badge ? (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                      <span className="rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent-foreground dark:text-accent">
                         {feature.badge}
                       </span>
                     ) : null}
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900">
+                  <h3 className="text-lg font-semibold text-foreground">
                     {feature.title}
                   </h3>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
                     {feature.description}
                   </p>
                   <Link
                     href={feature.href}
-                    className="mt-4 inline-flex items-center text-sm font-medium text-slate-900 hover:underline"
+                    className="mt-4 inline-flex items-center text-sm font-medium text-primary hover:underline"
                     aria-label={`${feature.title} sayfasına git`}
                   >
                     Aracı kullan
@@ -369,17 +376,17 @@ export default function HomePage() {
         <section
           id="nasil-calisir"
           aria-labelledby="how-heading"
-          className="border-y bg-slate-50"
+          className="border-y bg-secondary/40"
         >
           <div className="mx-auto w-full max-w-6xl px-4 py-20">
             <div className="mb-12 text-center">
               <h2
                 id="how-heading"
-                className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
+                className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
               >
                 Nasıl çalışır?
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+              <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
                 3 adımda Türk hukukunda emsal karar bulun ve dilekçenize atıfla
                 hazırlayın.
               </p>
@@ -392,18 +399,18 @@ export default function HomePage() {
                   <li key={step.step} className="relative">
                     <Card className="h-full p-6">
                       <div className="mb-4 flex items-center gap-3">
-                        <span className="text-2xl font-bold text-slate-300">
+                        <span className="text-2xl font-bold text-muted-foreground/50">
                           {step.step}
                         </span>
                         <Icon
-                          className="h-6 w-6 text-slate-700"
+                          className="h-6 w-6 text-primary"
                           aria-hidden
                         />
                       </div>
-                      <h3 className="text-lg font-semibold text-slate-900">
+                      <h3 className="text-lg font-semibold text-foreground">
                         {step.title}
                       </h3>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         {step.description}
                       </p>
                     </Card>
@@ -422,11 +429,11 @@ export default function HomePage() {
           <div className="mb-12 text-center">
             <h2
               id="sources-heading"
-              className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
+              className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
             >
               Güvenilir veri kaynakları
             </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
               Sadece resmi yargı veritabanlarından beslenen güncel içtihat
               havuzu.
             </p>
@@ -436,15 +443,15 @@ export default function HomePage() {
             {dataSources.map((source) => {
               const Icon = source.icon;
               return (
-                <Card key={source.name} className="p-6">
+                <Card key={source.name} className="p-6 transition-shadow hover:shadow-md">
                   <Icon
-                    className="h-8 w-8 text-slate-700"
+                    className="h-8 w-8 text-primary"
                     aria-hidden
                   />
-                  <h3 className="mt-4 text-lg font-semibold text-slate-900">
+                  <h3 className="mt-4 text-lg font-semibold text-foreground">
                     {source.name}
                   </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     {source.description}
                   </p>
                 </Card>
@@ -456,17 +463,17 @@ export default function HomePage() {
         {/* FAQ */}
         <section
           aria-labelledby="faq-heading"
-          className="border-y bg-slate-50"
+          className="border-y bg-secondary/40"
         >
           <div className="mx-auto w-full max-w-3xl px-4 py-20">
             <div className="mb-12 text-center">
               <h2
                 id="faq-heading"
-                className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
+                className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
               >
                 Sıkça sorulan sorular
               </h2>
-              <p className="mt-4 text-lg text-slate-600">
+              <p className="mt-4 text-lg text-muted-foreground">
                 Türk hukukunda emsal karar arama, dilekçe ve faiz hesaplama
                 konularında yanıtlar.
               </p>
@@ -476,17 +483,17 @@ export default function HomePage() {
               {faqs.map((item, idx) => (
                 <details
                   key={item.q}
-                  className="group rounded-lg border bg-white p-5 [&_summary::-webkit-details-marker]:hidden"
+                  className="group rounded-lg border bg-card p-5 transition-shadow hover:shadow-sm [&_summary::-webkit-details-marker]:hidden"
                   {...(idx === 0 ? { open: true } : {})}
                 >
-                  <summary className="flex cursor-pointer items-center justify-between text-base font-semibold text-slate-900">
+                  <summary className="flex cursor-pointer items-center justify-between text-base font-semibold text-foreground">
                     <h3 className="pr-4">{item.q}</h3>
                     <ArrowRight
-                      className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90"
+                      className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
                       aria-hidden
                     />
                   </summary>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                     {item.a}
                   </p>
                 </details>
@@ -498,16 +505,16 @@ export default function HomePage() {
         {/* CTA FOOTER */}
         <section
           aria-labelledby="cta-heading"
-          className="bg-slate-900 text-white"
+          className="bg-primary-900 text-white dark:bg-primary-950"
         >
           <div className="mx-auto flex w-full max-w-4xl flex-col items-center px-4 py-20 text-center">
             <h2
               id="cta-heading"
               className="text-3xl font-bold tracking-tight sm:text-4xl"
             >
-              Hukuk pratiğinizi AI ile hızlandırın
+              Hukuk pratiğinizi Yapay Zeka ile hızlandırın
             </h2>
-            <p className="mt-4 max-w-2xl text-lg text-slate-300">
+            <p className="mt-4 max-w-2xl text-lg text-slate-300 dark:text-slate-400">
               Ücretsiz hesap oluşturun, ilk 50 emsal karar aramanız bizden.
               Kredi kartı gerekmez.
             </p>

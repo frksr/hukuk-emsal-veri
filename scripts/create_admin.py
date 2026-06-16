@@ -1,7 +1,7 @@
 """Admin kullanıcı oluştur veya mevcut kullanıcıyı admin'e çevir.
 
 Çalıştır:
-  python scripts/create_admin.py --email admin@hukukemsal.tr --password yourpass --name "Sen"
+  python scripts/create_admin.py --email admin@hukukcuyapayzekasi.com --password yourpass --name "Sen"
   python scripts/create_admin.py --promote your@email.com    # mevcut user'ı admin yap
 """
 from __future__ import annotations

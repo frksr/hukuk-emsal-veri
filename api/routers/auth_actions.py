@@ -110,43 +110,73 @@ async def reset_password(payload: ResetPasswordReq, request: Request):
     return APIResponse(ok=True, message="Şifre güncellendi. Yeniden giriş yapabilirsiniz.")
 
 
-class VerifyEmailReq(BaseModel):
-    token: str
+# --- E-posta doğrulama: 6 haneli KOD (birincil) + tek-tık LİNK (yedek) ---------
+import hashlib
+
+CODE_EXPIRE_MINUTES = 10        # kod kısa ömürlü (best practice)
+MAX_CODE_ATTEMPTS = 5           # brute-force koruması: 5 yanlış → kod iptal
+RESEND_COOLDOWN_SECONDS = 60    # spam koruması: gönderimler arası bekleme
+DAILY_SEND_CAP = 10             # 24 saatte azami gönderim
 
 
-@router.post("/verify-email", response_model=APIResponse)
-async def verify_email(payload: VerifyEmailReq, request: Request):
-    async with service_session() as conn:
-        row = await conn.fetchrow(
-            """SELECT identifier, expires FROM verification_tokens WHERE token = $1""",
-            payload.token,
-        )
-        if not row:
-            raise HTTPException(400, "Geçersiz doğrulama bağlantısı.")
-        if row["expires"] < datetime.now(timezone.utc):
-            raise HTTPException(400, "Bağlantı süresi dolmuş. Yeniden talep edin.")
-
-        async with conn.transaction():
-            await conn.execute(
-                "UPDATE users SET email_verified = NOW() WHERE email = $1",
-                row["identifier"],
-            )
-            await conn.execute(
-                "DELETE FROM verification_tokens WHERE token = $1",
-                payload.token,
-            )
-
-    await audit(action="email.verified", request=request, metadata={"email": row["identifier"]})
-    return APIResponse(ok=True, message="E-posta doğrulandı.")
+def _gen_code() -> str:
+    """Kriptografik güvenli 6 haneli kod (000000–999999)."""
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
-@router.post("/resend-verification", response_model=APIResponse)
-async def resend_verification(
+def _hash_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+async def _kod_olustur_gonder(conn, user_id: str, email: str, name) -> None:
+    """Doğrulama kaydı oluşturur (hash'li kod + link token) ve e-posta gönderir.
+
+    Cooldown ve günlük tavanı uygular. RuntimeError fırlatırsa çağıran 429 döner.
+    """
+    from services.email import send_verification_email
+
+    now = datetime.now(timezone.utc)
+    son = await conn.fetchrow(
+        """SELECT created_at FROM email_verifications
+           WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1""",
+        user_id,
+    )
+    if son and (now - son["created_at"]).total_seconds() < RESEND_COOLDOWN_SECONDS:
+        raise RuntimeError("cooldown")
+    gunluk = await conn.fetchval(
+        """SELECT COUNT(*) FROM email_verifications
+           WHERE user_id = $1 AND created_at > $2""",
+        user_id, now - timedelta(hours=24),
+    )
+    if int(gunluk or 0) >= DAILY_SEND_CAP:
+        raise RuntimeError("daily_cap")
+
+    code = _gen_code()
+    link_token = _token()
+    expires = now + timedelta(minutes=CODE_EXPIRE_MINUTES)
+    # Önceki bekleyen (kullanılmamış) kodları geçersiz kıl.
+    await conn.execute(
+        "UPDATE email_verifications SET consumed_at = NOW() "
+        "WHERE user_id = $1 AND consumed_at IS NULL",
+        user_id,
+    )
+    await conn.execute(
+        """INSERT INTO email_verifications
+           (user_id, email, code_hash, link_token, expires_at)
+           VALUES ($1, $2, $3, $4, $5)""",
+        user_id, email, _hash_code(code), link_token, expires,
+    )
+    await send_verification_email(
+        email, name, code, token=link_token, expires_minutes=CODE_EXPIRE_MINUTES,
+    )
+
+
+@router.post("/send-code", response_model=APIResponse)
+async def send_code(
     request: Request,
     user: CurrentUser = Depends(get_current_user),
 ):
-    from services.email import send_verification_email
-
+    """Giriş yapmış kullanıcıya 6 haneli doğrulama kodu (+ link) gönderir."""
     async with service_session() as conn:
         verified = await conn.fetchval(
             "SELECT email_verified IS NOT NULL FROM users WHERE id = $1",
@@ -154,27 +184,132 @@ async def resend_verification(
         )
         if verified:
             return APIResponse(ok=True, message="E-postanız zaten doğrulanmış.")
+        try:
+            await _kod_olustur_gonder(conn, user.user_id, user.email, user.name)
+        except RuntimeError as e:
+            if str(e) == "cooldown":
+                raise HTTPException(429, "Çok sık talep ettiniz. Lütfen biraz bekleyin.")
+            raise HTTPException(429, "Günlük doğrulama e-postası sınırına ulaşıldı.")
 
-        # Eski tokenları temizle, yenisini at
-        await conn.execute(
-            "DELETE FROM verification_tokens WHERE identifier = $1",
-            user.email,
-        )
-        token = _token()
-        expires = datetime.now(timezone.utc) + timedelta(hours=VERIFICATION_TOKEN_HOURS)
-        await conn.execute(
-            """INSERT INTO verification_tokens (identifier, token, expires)
-               VALUES ($1, $2, $3)""",
-            user.email, token, expires,
-        )
+    await audit(action="email.code_sent", user_id=user.user_id, request=request)
+    return APIResponse(ok=True, message="Doğrulama kodu e-postanıza gönderildi.")
 
-    await send_verification_email(user.email, user.name, token)
-    await audit(
-        action="email.verification_resent",
-        user_id=user.user_id,
-        request=request,
-    )
-    return APIResponse(ok=True, message="Doğrulama e-postası gönderildi.")
+
+# Geriye dönük uyum: eski "resend-verification" çağrıları send-code gibi davranır.
+@router.post("/resend-verification", response_model=APIResponse)
+async def resend_verification(
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await send_code(request, user)
+
+
+class VerifyCodeReq(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+@router.post("/verify-code", response_model=APIResponse)
+async def verify_code(
+    payload: VerifyCodeReq,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Kullanıcının girdiği 6 haneli kodu doğrular."""
+    kod = payload.code.strip()
+    if not kod.isdigit() or len(kod) != 6:
+        raise HTTPException(400, "Kod 6 haneli olmalı.")
+
+    async with service_session() as conn:
+        already = await conn.fetchval(
+            "SELECT email_verified IS NOT NULL FROM users WHERE id = $1", user.user_id,
+        )
+        if already:
+            return APIResponse(ok=True, message="E-postanız zaten doğrulanmış.")
+
+        row = await conn.fetchrow(
+            """SELECT id, code_hash, expires_at, attempts FROM email_verifications
+               WHERE user_id = $1 AND consumed_at IS NULL
+               ORDER BY created_at DESC LIMIT 1""",
+            user.user_id,
+        )
+        if not row:
+            raise HTTPException(400, "Aktif kod yok. Yeni kod isteyin.")
+        if row["expires_at"] < datetime.now(timezone.utc):
+            raise HTTPException(400, "Kodun süresi doldu. Yeni kod isteyin.")
+        if row["attempts"] >= MAX_CODE_ATTEMPTS:
+            await conn.execute(
+                "UPDATE email_verifications SET consumed_at = NOW() WHERE id = $1",
+                row["id"],
+            )
+            raise HTTPException(429, "Çok fazla hatalı deneme. Yeni kod isteyin.")
+
+        # Sabit-zamanlı karşılaştırma (timing attack koruması).
+        if not secrets.compare_digest(row["code_hash"], _hash_code(kod)):
+            await conn.execute(
+                "UPDATE email_verifications SET attempts = attempts + 1 WHERE id = $1",
+                row["id"],
+            )
+            kalan = MAX_CODE_ATTEMPTS - (row["attempts"] + 1)
+            await audit(action="email.verify_failed", user_id=user.user_id,
+                        request=request, success=False)
+            raise HTTPException(
+                400,
+                f"Kod hatalı. {kalan} deneme hakkınız kaldı." if kalan > 0
+                else "Kod hatalı. Yeni kod isteyin.",
+            )
+
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE users SET email_verified = NOW() WHERE id = $1", user.user_id,
+            )
+            await conn.execute(
+                "UPDATE email_verifications SET consumed_at = NOW() WHERE id = $1",
+                row["id"],
+            )
+
+    await audit(action="email.verified", user_id=user.user_id, request=request)
+    return APIResponse(ok=True, message="E-posta doğrulandı.")
+
+
+class VerifyEmailReq(BaseModel):
+    token: str
+
+
+@router.post("/verify-email", response_model=APIResponse)
+async def verify_email(payload: VerifyEmailReq, request: Request):
+    """Tek-tık link ile doğrulama (e-postadaki 'Tek Tıkla Doğrula' butonu)."""
+    async with service_session() as conn:
+        row = await conn.fetchrow(
+            """SELECT id, user_id, email, expires_at, consumed_at
+               FROM email_verifications WHERE link_token = $1""",
+            payload.token,
+        )
+        if not row:
+            raise HTTPException(400, "Geçersiz doğrulama bağlantısı.")
+        if row["consumed_at"]:
+            # Zaten doğrulanmışsa kullanıcıyı bilgilendir (link tekrar tıklandı).
+            verified = await conn.fetchval(
+                "SELECT email_verified IS NOT NULL FROM users WHERE id = $1",
+                row["user_id"],
+            )
+            if verified:
+                return APIResponse(ok=True, message="E-postanız zaten doğrulanmış.")
+            raise HTTPException(400, "Bu bağlantı kullanılmış. Yeni kod isteyin.")
+        if row["expires_at"] < datetime.now(timezone.utc):
+            raise HTTPException(400, "Bağlantı süresi dolmuş. Yeni kod isteyin.")
+
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE users SET email_verified = NOW() WHERE id = $1", row["user_id"],
+            )
+            await conn.execute(
+                "UPDATE email_verifications SET consumed_at = NOW() WHERE id = $1",
+                row["id"],
+            )
+
+    await audit(action="email.verified", user_id=str(row["user_id"]), request=request,
+                metadata={"via": "link"})
+    return APIResponse(ok=True, message="E-posta doğrulandı.")
 
 
 class ChangePasswordReq(BaseModel):
