@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift } from "lucide-react";
+import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/app/admin/feedback", label: "Geri Bildirim", icon: MessageSquare },
   { href: "/app/admin/audit", label: "Audit Log", icon: FileWarning },
   { href: "/app/admin/beta", label: "Beta Davet", icon: Gift },
+  { href: "/app/admin/bekleme-listesi", label: "Bekleme Listesi", icon: ListOrdered },
   { href: "/app/ayarlar", label: "Ayarlar", icon: Settings },
 ];
 

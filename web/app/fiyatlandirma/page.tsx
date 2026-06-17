@@ -127,12 +127,15 @@ export default function FiyatlandirmaPage() {
 
       <div className="container py-12 md:py-16">
         <div className="text-center max-w-2xl mx-auto mb-12">
+          <div className="inline-flex items-center gap-2 bg-primary/10 text-primary text-xs font-semibold px-3 py-1 rounded-full mb-4 uppercase tracking-wide">
+            Erken Erişim
+          </div>
           <h1 className="text-3xl md:text-4xl font-bold mb-4">
-            Basit, şeffaf fiyatlandırma
+            Seçili avukatlara özel erken erişim
           </h1>
           <p className="text-muted-foreground">
-            Ücretsiz başlayın, ihtiyacınız büyüdükçe yükseltin. Tüm planlarda
-            Yargıtay, Danıştay ve AİHM emsal veritabanının tamamına erişirsiniz.
+            Hukuk Emsal şu an davetli beta aşamasındadır. Bekleme listesine katılın,
+            uygun görülen kullanıcılar öncelikli erişim davetini alacak.
           </p>
         </div>
 
@@ -153,8 +156,7 @@ export default function FiyatlandirmaPage() {
               <h2 className="text-lg font-bold">{plan.name}</h2>
               <p className="text-sm text-muted-foreground mb-4">{plan.tagline}</p>
               <div className="mb-6">
-                <span className="text-3xl font-extrabold">{plan.price}</span>
-                <span className="text-muted-foreground text-sm"> {plan.period}</span>
+                <span className="text-sm text-muted-foreground italic">Erken erişim fiyatı açıklanacak</span>
               </div>
               <div className="flex-1 space-y-2">
                 {/* Limit satırları — admin ayarlarından dinamik */}
