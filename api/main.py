@@ -67,6 +67,25 @@ async def lifespan(app: FastAPI):
         log.info("Postgres pool hazır")
     except Exception as e:
         log.warning(f"DB başlatma başarısız: {e}")
+    # Waitlist tablosu — yoksa oluştur (migration'a gerek kalmadan)
+    try:
+        from api.db import service_session
+        async with service_session() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS waitlist (
+                    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name       TEXT NOT NULL,
+                    email      TEXT NOT NULL,
+                    plan       TEXT,
+                    ip         TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS waitlist_email_uniq ON waitlist(email);
+                CREATE INDEX IF NOT EXISTS waitlist_created_idx ON waitlist(created_at DESC);
+            """)
+        log.info("Waitlist tablosu hazır")
+    except Exception as e:
+        log.warning(f"Waitlist tablo oluşturma başarısız: {e}")
     # Embedding modelini önceden yükle
     try:
         from services.rag import _load_model, _load_collection
