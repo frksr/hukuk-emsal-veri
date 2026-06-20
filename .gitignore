@@ -14,6 +14,10 @@ venv/
 .env
 .env.local
 web/.env.local
+# GCP deploy değerleri / sırlar (örnek hariç)
+infra/gcp/deploy.env
+infra/gcp/secrets.env
+infra/gcp/cloud-sql-proxy
 
 # ============================================================================
 # Üretilen / büyük veri — git'te TUTULMAZ (pipeline ile yeniden üretilir)
