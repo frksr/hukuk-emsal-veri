@@ -303,7 +303,7 @@ export async function trendYillik(
   const res = await apiFetch<{ data: { data: Array<[string, number]>; total: number } }>(
     `/api/trend/yillik${qs}`,
   );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // any: dinamik tip (lint eklentisi yok)
   return (res?.data ?? res) as any;
 }
 
@@ -337,17 +337,17 @@ async function proxyPost<T = unknown>(
   return (j?.data ?? j) as T;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// any: dinamik tip (lint eklentisi yok)
 export function karsiArgumentCagir(params: KarsiArgumentParams, init?: { signal?: AbortSignal }): Promise<any> {
   return proxyPost("karsi-argument", params, init);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// any: dinamik tip (lint eklentisi yok)
 export function kvkkChecklist(params: KvkkChecklistParams): Promise<any> {
   return proxyPost("kvkk/checklist", params);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// any: dinamik tip (lint eklentisi yok)
 export function sozlesmeAnaliz(params: SozlesmeAnalizParams, init?: { signal?: AbortSignal }): Promise<any> {
   return proxyPost("sozlesme/analyze-text", params, init);
 }

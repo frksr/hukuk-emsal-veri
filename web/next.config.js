@@ -7,6 +7,9 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   swcMinify: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000", "hukukemsal.tr"],

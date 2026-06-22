@@ -35,7 +35,7 @@ export function IhtarnameForm() {
   const [vade, setVade] = useState("");
   const [neden, setNeden] = useState("");
   const [loading, setLoading] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // any: dinamik tip (lint eklentisi yok)
   const [sonuc, setSonuc] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 

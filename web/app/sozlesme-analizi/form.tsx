@@ -31,7 +31,7 @@ export function SozlesmeForm() {
   const [metin, setMetin] = useState("");
   const [tur, setTur] = useState("genel");
   const [loading, setLoading] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // any: dinamik tip (lint eklentisi yok)
   const [sonuc, setSonuc] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);

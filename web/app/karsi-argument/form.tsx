@@ -19,7 +19,7 @@ export function KarsiArgumentForm() {
   const [tur, setTur] = useState("");
   const [k, setK] = useState(5);
   const [loading, setLoading] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // any: dinamik tip (lint eklentisi yok)
   const [sonuc, setSonuc] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 

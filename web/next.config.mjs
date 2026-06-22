@@ -5,6 +5,11 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   swcMinify: true,
+  // ESLint config'i @typescript-eslint eklentisine atif yapiyor ama eklenti kurulu
+  // degil; production image build'inde lint'i atla (lint dev/CI'da calistirilsin).
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000", "hukukemsal.tr"],
