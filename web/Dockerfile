@@ -24,7 +24,10 @@ RUN npm run build
 
 FROM node:20-slim AS runner
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080
+# HOSTNAME=0.0.0.0 ZORUNLU: Next standalone server.js process.env.HOSTNAME'e bind eder;
+# Docker bunu konteyner ID'sine ayarlar → 0.0.0.0:8080 yerine yanlis host'a baglanip
+# dinleyemez (Cloud Run "failed to listen on PORT 8080"). 0.0.0.0'a sabitle.
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080 HOSTNAME=0.0.0.0
 # Standalone çıktı (next.config: output: "standalone")
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
