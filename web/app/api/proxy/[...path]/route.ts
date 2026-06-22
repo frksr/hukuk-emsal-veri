@@ -6,6 +6,7 @@
  * ile doğrular.
  */
 import { NextResponse } from "next/server";
+import type { Session } from "next-auth";
 import { auth } from "@/auth";
 import { SignJWT } from "jose";
 
@@ -19,7 +20,7 @@ const API_URL = (
 ).replace("//localhost", "//127.0.0.1");
 const SECRET = process.env.NEXTAUTH_SECRET || "";
 
-async function buildToken(session: Awaited<ReturnType<typeof auth>>) {
+async function buildToken(session: Session | null) {
   if (!session?.user) return null;
   const user = session.user as { id?: string; email?: string; name?: string; role?: string };
   if (!user.id) return null;
