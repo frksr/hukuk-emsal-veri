@@ -25,7 +25,7 @@ substitutions:
   _TS_BUCKET: "hukuk-emsal-tenant"           # UYAP belgeleri (yazilabilir)
   _SQL_INSTANCE_ID: "hukuk-emsal"            # Cloud SQL instance ADI (baglanti adi otomatik)
   _API_SERVICE: "hukuk-api"
-  _WEB_SERVICE: "hukuk-web"
+  _WEB_SERVICE: "hukuk-emsal"   # mevcut kok domain bu servise bagli -> frontend buraya gelsin
   _SITE_URL: "https://hukukcuyapayzekasi.com"            # frontend genel URL (NEXTAUTH/CORS)
   _API_PUBLIC_URL: "https://api.hukukcuyapayzekasi.com"  # backend genel URL (NEXT_PUBLIC_API_URL)
 
