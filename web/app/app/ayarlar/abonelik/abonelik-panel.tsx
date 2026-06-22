@@ -596,4 +596,19 @@ export function AbonelikPanel() {
                       className="w-full"
                     >
                       {checkingOut === p.key ? (
+                        "Yükleniyor…"
+                      ) : (
+                        "Bu Plana Geç"
+                      )}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
   
