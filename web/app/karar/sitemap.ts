@@ -29,12 +29,22 @@ export default async function sitemap({
     const json = await res.json();
     const kararlar: Array<{ id: string; decision_date?: string }> =
       json?.data ?? [];
-    return kararlar.map((k) => ({
-      url: `${SITE_URL}/karar/${encodeURIComponent(k.id)}`,
-      lastModified: k.decision_date ? new Date(k.decision_date) : undefined,
-      changeFrequency: "yearly" as const,
-      priority: 0.5,
-    }));
+    return kararlar.map((k) => {
+      // Gecersiz/bozuk decision_date -> Invalid Date olur ve Next sitemap'i XML'e
+      // cevirirken toISOString() ile cokerdi ("Invalid time value"). Sadece GECERLI
+      // tarihleri lastModified olarak ver, yoksa undefined.
+      let lastModified: Date | undefined;
+      if (k.decision_date) {
+        const d = new Date(k.decision_date);
+        if (!Number.isNaN(d.getTime())) lastModified = d;
+      }
+      return {
+        url: `${SITE_URL}/karar/${encodeURIComponent(k.id)}`,
+        lastModified,
+        changeFrequency: "yearly" as const,
+        priority: 0.5,
+      };
+    });
   } catch {
     // API erişilemezse boş sitemap — build'i kırma
     return [];
