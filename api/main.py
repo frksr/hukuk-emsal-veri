@@ -86,14 +86,23 @@ async def lifespan(app: FastAPI):
         log.info("Waitlist tablosu hazır")
     except Exception as e:
         log.warning(f"Waitlist tablo oluşturma başarısız: {e}")
-    # Embedding modelini önceden yükle
-    try:
-        from services.rag import _load_model, _load_collection
-        _load_model()
-        _load_collection()
-        log.info("RAG model + Chroma yüklendi")
-    except Exception as e:
-        log.warning(f"RAG warmup başarısız: {e}")
+    # Embedding modelini ARKA PLANDA yükle — startup'ı bloklamadan.
+    # Aksi halde model yüklemesi (sentence-transformers) lifespan'i geciktirir,
+    # uvicorn soketi bağlayamaz ve Cloud Run startup probe (port 8080) timeout'a
+    # düşer. Bu şekilde uygulama hemen dinlemeye başlar; model ilk aramaya kadar
+    # arka planda hazırlanır.
+    import asyncio as _asyncio_rag
+
+    async def _rag_warmup():
+        try:
+            from services.rag import _load_model, _load_collection
+            await _asyncio_rag.to_thread(_load_model)
+            await _asyncio_rag.to_thread(_load_collection)
+            log.info("RAG model + Chroma yüklendi")
+        except Exception as e:
+            log.warning(f"RAG warmup başarısız: {e}")
+
+    _asyncio_rag.create_task(_rag_warmup())
     # Hatırlatıcı dispatch — hafif arka plan döngüsü (60 sn'de bir bekleyenleri gönderir).
     import asyncio as _asyncio
 
