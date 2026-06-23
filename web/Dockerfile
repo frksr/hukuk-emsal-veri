@@ -32,5 +32,9 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080 HOSTNAME=0.0.0.0
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# bcrypt native (.node) binary'si Next standalone tracing'ine tam girmiyor →
+# tum modulu (prebuilds dahil) build asamasindan kopyala, yoksa "No native build
+# was found for ... bcrypt" hatasiyla auth cagrilari 500 doner.
+COPY --from=build /app/node_modules/bcrypt ./node_modules/bcrypt
 EXPOSE 8080
 CMD ["node", "server.js"]
