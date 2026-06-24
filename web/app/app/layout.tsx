@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  console.log("[DBG-APPLAYOUT] /app layout running, hasSession:", !!session?.user);
   if (!session?.user) {
     redirect("/giris?callbackUrl=/app");
   }

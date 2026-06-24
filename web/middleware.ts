@@ -8,6 +8,7 @@ import type { NextRequest } from "next/server";
  *  - Bot ratelimiting'e hazır (gerçek limitleme upstream API'de)
  */
 export function middleware(request: NextRequest) {
+  console.log("[DBG-MW]", request.method, request.nextUrl.pathname, "->next()");
   const response = NextResponse.next();
 
   // Güvenlik başlıkları (next.config headers ile çakışmaması için fark olanlar)
