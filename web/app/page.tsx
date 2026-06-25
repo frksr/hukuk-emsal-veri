@@ -421,6 +421,16 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ORTA CTA */}
+        <section aria-label="Hemen başla" className="mx-auto w-full max-w-4xl px-4 pb-6 pt-2 text-center">
+          <Button asChild size="lg" className="text-base">
+            <Link href="/emsal-arama" aria-label="Emsal karar aramayı başlat">
+              Hemen Ücretsiz Dene
+              <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
+            </Link>
+          </Button>
+        </section>
+
         {/* VERİ KAYNAKLARI */}
         <section
           aria-labelledby="sources-heading"
@@ -519,12 +529,11 @@ export default function HomePage() {
               Kredi kartı gerekmez.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button
-                asChild
-                size="lg"
-                className="bg-white text-slate-900 hover:bg-slate-100"
-              >
-                <Link href="/kayit">Ücretsiz hesap oluştur</Link>
+              <Button asChild size="lg" className="text-base">
+                <Link href="/emsal-arama" aria-label="Emsal karar aramayı başlat">
+                  Hemen Ücretsiz Dene
+                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
+                </Link>
               </Button>
               <Button
                 asChild

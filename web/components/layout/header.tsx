@@ -61,6 +61,15 @@ export function Header() {
           ))}
           {/* Tema değiştirme */}
           <ThemeToggle className="ml-1" />
+          {/* Ana CTA — hero butonuyla ayni renk (bg-primary) */}
+          {menuGoster && (
+            <Link
+              href="/emsal-arama"
+              className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
+            >
+              Hemen Ücretsiz Dene
+            </Link>
+          )}
           {/* Oturum durumu — SSR'dan bilindiği için doğrudan render (titreme yok).
               Pazarlama sayfalarında kimlik gösterilmez; sadece "Panele Git" (best
               practice). Hesap menüsü /app içindedir. */}
@@ -131,6 +140,15 @@ export function Header() {
               {item.label}
             </Link>
           ))}
+          {menuGoster && (
+            <Link
+              href="/emsal-arama"
+              onClick={() => setOpen(false)}
+              className="mt-1 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-base font-medium text-primary-foreground hover:bg-primary-600"
+            >
+              Hemen Ücretsiz Dene
+            </Link>
+          )}
           <div className="mt-2 border-t border-border pt-2">
             {isLoggedIn ? (
               <>
