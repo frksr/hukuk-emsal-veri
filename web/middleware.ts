@@ -8,8 +8,11 @@ import type { NextRequest } from "next/server";
  *  - Bot ratelimiting'e hazır (gerçek limitleme upstream API'de)
  */
 export function middleware(request: NextRequest) {
-  console.log("[DBG-MW]", request.method, request.nextUrl.pathname, "->next()");
-  const response = NextResponse.next();
+  // Gercek istek yolunu server component'lere (layout) aktar — boylece auth-gate
+  // SADECE gercekten /app yolundaysa calisir, /giris gibi yollarda degil.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   // Güvenlik başlıkları (next.config headers ile çakışmaması için fark olanlar)
   response.headers.set("X-Robots-Tag", "index, follow");

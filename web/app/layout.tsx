@@ -156,7 +156,6 @@ export default async function RootLayout({
   // Giriş durumunu SUNUCUDA çöz → ilk render'da doğru header/oturum durumu
   // (client fetch'i beklemeden). "çıkış-yapmış → giriş-yapmış" titremesini önler.
   const session = await auth();
-  console.log("[DBG-ROOT] root layout running, hasSession:", !!session?.user);
   const initialUser = session?.user
     ? {
         name: session.user.name ?? null,

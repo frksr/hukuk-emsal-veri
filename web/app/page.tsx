@@ -248,7 +248,6 @@ const faqs = [
 ];
 
 export default function HomePage() {
-  console.log("[DBG-HOME] homepage rendering");
   return (
     <>
       <JsonLd data={websiteJsonLd} />
