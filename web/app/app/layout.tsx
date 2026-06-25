@@ -9,11 +9,20 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  // Bu layout bazen /app disindaki rotalar/404'ler icin de calisabiliyor (Next
-  // routing). Loop'u onlemek icin auth-gate'i SADECE gercek /app yolunda uygula.
   const pathname = headers().get("x-pathname") || "";
-  if (pathname.startsWith("/app") && !session?.user) {
+  const isAppRoute = pathname.startsWith("/app");
+
+  // Gercek /app yolunda + oturum yoksa girise yonlendir.
+  if (isAppRoute && !session?.user) {
     redirect("/giris?callbackUrl=" + encodeURIComponent(pathname));
+  }
+
+  // Bu layout bazen /app disindaki rotalar (/, /giris ...) icin de calisiyor
+  // (Next routing ozelligi). O durumda app chrome'unu (sidebar) render ETME ve
+  // session.user'a DOKUNMA — sadece icerigi gecir. Aksi halde null session ->
+  // server-side exception olur.
+  if (!isAppRoute || !session?.user) {
+    return <>{children}</>;
   }
 
   return (
