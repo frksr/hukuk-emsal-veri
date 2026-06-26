@@ -33,7 +33,7 @@ from typing import List
 log = logging.getLogger("services.embeddings")
 
 PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "google").lower()
-API_MODEL = os.environ.get("EMBEDDING_API_MODEL", "text-embedding-004")
+API_MODEL = os.environ.get("EMBEDDING_API_MODEL", "gemini-embedding-001")
 LOCAL_MODEL = os.environ.get("EMBEDDING_LOCAL_MODEL", "intfloat/multilingual-e5-base")
 EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "768"))
 
@@ -102,48 +102,84 @@ def _norm(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Google provider (varsayılan) — container'da torch/model YOK
+# Google provider (varsayılan) — REST (httpx) ile; deprecated google.generativeai
+# kütüphanesine bağlı DEĞİL. Model + outputDimensionality tam kontrol; 429 retry.
 # ---------------------------------------------------------------------------
-_google_ready = False
+_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+_MAX_RETRIES = int(os.environ.get("EMBED_MAX_RETRIES", "6"))
 
 
-def _ensure_google():
-    global _google_ready
-    if _google_ready:
-        return
-    import google.generativeai as genai  # noqa
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
+def _model_path() -> str:
+    return API_MODEL if API_MODEL.startswith("models/") else f"models/{API_MODEL}"
+
+
+def _api_key() -> str:
+    key = (os.environ.get("GOOGLE_API_KEY") or "").strip()
+    if not key:
         raise RuntimeError("GOOGLE_API_KEY yok — embedding üretilemiyor.")
-    genai.configure(api_key=api_key)
-    _google_ready = True
+    return key
+
+
+def _l2_normalize(vec: List[float]) -> List[float]:
+    import math
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm == 0:
+        return vec
+    return [x / norm for x in vec]
+
+
+def _post_with_retry(url: str, payload: dict):
+    """429/5xx için üstel backoff'lu POST."""
+    import time as _t
+    import httpx
+    last_exc = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            r = httpx.post(url, json=payload, timeout=60.0)
+            if r.status_code in (429, 500, 503):
+                wait = min(2 ** attempt, 30)
+                log.warning("Embedding API %s — %ss bekleniyor (deneme %d/%d)",
+                            r.status_code, wait, attempt + 1, _MAX_RETRIES)
+                _t.sleep(wait)
+                continue
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as e:  # ağ hatası vb.
+            last_exc = e
+            wait = min(2 ** attempt, 30)
+            log.warning("Embedding API ağ hatası (%s) — %ss (deneme %d/%d)",
+                        e, wait, attempt + 1, _MAX_RETRIES)
+            _t.sleep(wait)
+    raise RuntimeError(f"Embedding API {_MAX_RETRIES} denemede başarısız: {last_exc}")
 
 
 def _google_embed(texts: List[str], task_type: str) -> List[List[float]]:
-    """task_type: 'retrieval_query' | 'retrieval_document'."""
-    import google.generativeai as genai
-    _ensure_google()
-    model_id = API_MODEL if API_MODEL.startswith("models/") else f"models/{API_MODEL}"
-    kwargs = {"model": model_id, "task_type": task_type}
-    # 768 dışı bir dim isteniyorsa ve model destekliyorsa kısalt (Matryoshka).
-    if EMBEDDING_DIM and EMBEDDING_DIM != 768:
-        kwargs["output_dimensionality"] = EMBEDDING_DIM
+    """task_type: 'retrieval_query' | 'retrieval_document'. REST batchEmbedContents."""
+    if not texts:
+        return []
+    key = _api_key()
+    model = _model_path()
+    tt = task_type.upper()  # RETRIEVAL_QUERY / RETRIEVAL_DOCUMENT
 
-    # google-generativeai batch destekler (content=list). Hata olursa tek tek dene.
-    try:
-        resp = genai.embed_content(content=texts, **kwargs)
-        emb = resp["embedding"]
-        # Tek string verilirse düz liste döner; list verince list-of-list.
-        if texts and isinstance(emb, list) and emb and isinstance(emb[0], (int, float)):
-            return [emb]
-        return emb
-    except Exception as e:
-        log.warning("Batch embed başarısız (%s) — tek tek deneniyor.", e)
-        out = []
-        for t in texts:
-            r = genai.embed_content(content=t, **kwargs)
-            out.append(r["embedding"])
-        return out
+    def _one_request(t: str) -> dict:
+        req = {
+            "model": model,
+            "content": {"parts": [{"text": t}]},
+            "taskType": tt,
+        }
+        if EMBEDDING_DIM:
+            req["outputDimensionality"] = EMBEDDING_DIM
+        return req
+
+    url = f"{_API_BASE}/{model}:batchEmbedContents?key={key}"
+    payload = {"requests": [_one_request(t) for t in texts]}
+    data = _post_with_retry(url, payload)
+    embs = data.get("embeddings", [])
+    out = [e.get("values", []) for e in embs]
+    # MRL ile kısaltılmış (768) embedding'lerde normalize önerilir → cosine tutarlı.
+    return [_l2_normalize(v) for v in out]
 
 
 # ---------------------------------------------------------------------------
