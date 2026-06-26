@@ -79,6 +79,17 @@ def main():
             cur.execute("TRUNCATE TABLE rag_chunks")
         conn.commit()
         print("[EMBED] rag_chunks TRUNCATE edildi", file=sys.stderr)
+    else:
+        # RESUME: zaten gömülü chunk'ları atla (timeout sonrası kaldığı yerden devam).
+        with conn.cursor() as cur:
+            cur.execute("SELECT chunk_id FROM rag_chunks")
+            existing = {r[0] for r in cur.fetchall()}
+        if existing:
+            before = len(df)
+            df = df[~df["chunk_id"].astype(str).isin(existing)].reset_index(drop=True)
+            total = len(df)
+            print(f"[EMBED] {len(existing)} chunk zaten var, atlanıyor. "
+                  f"Kalan: {total}/{before}", file=sys.stderr)
 
     upsert_sql = """
         INSERT INTO rag_chunks
