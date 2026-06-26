@@ -19,7 +19,7 @@ pytest-cache-files-*/
 web/
 app/
 scrapers/
-pipelines/
+# pipelines/ IMAGE'A DAHIL — embed (re-index) job'u python -m pipelines.embed ile çağırır
 # scripts/ IMAGE'A DAHIL — seed_volume, init_db, create_admin container içinde gerekli
 scripts/__pycache__/
 tests/
