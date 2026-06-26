@@ -7,6 +7,53 @@
 
 ---
 
+## 0.A Uygulama durumu — 2026-06-26 (Faz 0 + Faz 1 başlangıcı)
+
+Aşağıdaki maddeler bu tarihte koda işlendi. Marka adı, en yüksek hacimli baş
+terim referans alınarak **"Hukukçu Yapay Zekası"** (domain uyumlu entity) +
+title/etiketlerde **"Emsal Karar Arama"** anahtar kelimesi olarak tekleştirildi.
+
+| Bulgu | Durum | Uygulanan değişiklik |
+|---|---|---|
+| B2 Domain çatalı | ✅ | `next.config.js` + `next.config.mjs` default'ları ve `serverActions.allowedOrigins` → `hukukcuyapayzekasi.com` |
+| B1 Sitemap keşfi | ✅ | Yeni `app/sitemap_index.xml/route.ts` (sitemap index); `robots.ts` artık `/sitemap_index.xml`'i bildiriyor (statik + 10× karar sitemap) |
+| B4 Ana sayfa FAQ | ✅ | `app/page.tsx` 8 soruyu `buildFaqJsonLd` ile FAQPage schema'sı olarak basıyor |
+| B5 Marka/NAP | ✅ | `lib/seo.ts SITE_NAME`, `layout.tsx` (title/OG/Twitter/authors/LegalService), `page.tsx` (WebSite/Organization) hizalandı; var olmayan `sameAs` linkleri kaldırıldı |
+| B8 Title uzunluğu | ✅ | Ana sayfa title ≤60 karaktere indirildi, baş terim title başında |
+| B10 Karar metadata | ✅ | Description konu etiketlerinden kuruluyor, sayfaya özel `og:image`, keywords + Twitter card eklendi |
+| B9 Sitemap lastmod | ✅ | `sitemap.ts` sabit `CONTENT_LAST_UPDATED` tarihine bağlandı |
+| B11 AI crawler | ✅ | `GPTBot`, `OAI-SearchBot`, `CCBot`, `PerplexityBot` public sayfalara açıldı; panel/auth/api disallow |
+| B6 Long-tail (Faz 1) | ✅ kısmi | İlk 3 alt sayfa: `/ihtarname/kira-tahliye`, `/ihtarname/alacak`, `/zamanasimi/cek` (her biri özgün H1 + içerik + FAQPage schema + iç link); sitemap'e eklendi |
+| B3 Karar özet-öncelikli | ✅ | `app/karar/[id]/page.tsx` özgün, server-render "Karar Özeti" ile başlıyor (kaynak/daire/tarih/konu + cümle-sınırlı lede); tam metin katlanır `<details>` içinde; Article JSON-LD açıklaması özetten. **Paywall korundu**: AI analizi Pro upsell, LLM maliyeti eklenmedi |
+| B7 Blog/rehber hub | ✅ | `/blog` index + 2 makale ("emsal karar nedir", "ihtarname nasıl çekilir") Article + FAQPage schema, araç CTA iç linkleri; footer'a "Hukuk Rehberi" linki; sitemap'e eklendi |
+| İlgili kararlar (iç linkleme) | ✅ | `services/rag.py → related_decisions()` (aynı daire, yoksa aynı kaynak; parquet/DuckDB, LLM yok); `GET /api/karar/benzer/{id}` (6 saat cache); karar sayfasında "İlgili Kararlar" bloğu — orphan sayfalar bağlandı |
+| `/api/karar/liste` (sitemap) | ✅ doğrulandı | Endpoint + `list_decisions()` **zaten mevcut ve kayıtlı** (`api/routers/karar.py`, `main.py` satır 225). Sitemap çalışıyor; önceki "eksik" notu hatalıydı |
+
+**B3 / AI özeti hakkında karar:** Karar sayfasının özgün içeriği, **LLM'siz
+server-render "Karar Özeti"** ile sağlandı (duplicate/thin riskini giderir).
+Paid "Yapay Zeka özeti" (`/api/ozet`, `kota("ozet")` — Pro) bilinçli olarak
+public HTML'e KONULMADI: (a) paywall'ı zayıflatır, (b) ~10K sayfa için crawl
+başına/önden LLM maliyeti doğurur. İstenirse ileride **kalıcı önbelleğe alınmış
+kısa AI lede** (Pro tam analizden ayrı) ayrı bir pipeline + backfill ile eklenebilir.
+
+**Kalan (sürekli içerik/ölçek işleri):** B6 genişletme (yeni `/ihtarname/*`,
+`/zamanasimi/*` alt sayfaları), ek blog makaleleri, karar sitemap'ini kademeli
+10K→tam ölçek, B12 (eski strateji belgesini arşivle/güncelle).
+
+> **Not (doğrulama):** Kod düzenlemeleri bu oturumda dosya aracıyla (Read)
+> bütünüyle teyit edildi; ancak sandbox'ın OneDrive mount'u düzenlenen mevcut
+> dosyaları gecikmeli senkronladığından `npm run build` / `py_compile` bu
+> oturumda mount üzerinden çalıştırılamadı. Deploy öncesi kendi ortamında
+> `cd web && npm run type-check && npm run build` ve API için
+> `python -m py_compile services/rag.py api/routers/karar.py` çalıştırın.
+
+**Deploy sonrası (kod dışı) doğrulama:** lokalde `cd web && npm run type-check`
+ve `npm run build`; ardından GSC'ye `/sitemap_index.xml` gönder, Rich Results
+Test ile ana sayfa FAQPage + bir alt sayfa FAQPage + bir karar sayfası Article
+geçerliliğini doğrula.
+
+---
+
 ## 0. Yönetici özeti
 
 Teknik SEO temeli büyük ölçüde sağlam: metadata helper'ı (`lib/seo.ts`), server-render JSON-LD, canonical/OG/Twitter etiketleri, `robots.ts`, statik sitemap, güvenlik header'ları ve PWA asset'leri yerinde. Ancak **stratejinin en büyük getirisi olan 10.000 karar sayfası (programatik long-tail) şu anda Google tarafından keşfedilemiyor** ve **domain konfigürasyonu iki ayrı değere bölünmüş durumda** — bu ikisi P0 (acil) sorun.

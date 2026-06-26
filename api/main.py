@@ -86,19 +86,16 @@ async def lifespan(app: FastAPI):
         log.info("Waitlist tablosu hazır")
     except Exception as e:
         log.warning(f"Waitlist tablo oluşturma başarısız: {e}")
-    # Embedding modelini ARKA PLANDA yükle — startup'ı bloklamadan.
-    # Aksi halde model yüklemesi (sentence-transformers) lifespan'i geciktirir,
-    # uvicorn soketi bağlayamaz ve Cloud Run startup probe (port 8080) timeout'a
-    # düşer. Bu şekilde uygulama hemen dinlemeye başlar; model ilk aramaya kadar
-    # arka planda hazırlanır.
+    # RAG warmup — ARKA PLANDA. Artık container'da embedding modeli YOK
+    # (embedding'ler Google API ile üretilir, vektörler Cloud SQL/pgvector'da).
+    # Burada yalnızca pgvector erişimini ısıtır/kontrol ederiz; startup'ı bloklamaz.
     import asyncio as _asyncio_rag
 
     async def _rag_warmup():
         try:
-            from services.rag import _load_model, _load_collection
-            await _asyncio_rag.to_thread(_load_model)
-            await _asyncio_rag.to_thread(_load_collection)
-            log.info("RAG model + Chroma yüklendi")
+            from services.rag import get_collection_stats
+            stats = await _asyncio_rag.to_thread(get_collection_stats)
+            log.info("RAG (pgvector) hazır: %s", stats)
         except Exception as e:
             log.warning(f"RAG warmup başarısız: {e}")
 

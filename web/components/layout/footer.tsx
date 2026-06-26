@@ -13,6 +13,7 @@ const ARACLAR = [
   { href: "/zamanasimi", label: "Zamanaşımı" },
   { href: "/kvkk", label: "KVKK Uyum" },
   { href: "/trend", label: "Yıllık Trendler" },
+  { href: "/blog", label: "Hukuk Rehberi" },
 ];
 
 const YASAL = [

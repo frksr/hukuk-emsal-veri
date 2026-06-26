@@ -19,13 +19,14 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { buildMetadata } from "@/lib/seo";
+import { buildMetadata, buildFaqJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = buildMetadata({
-  title:
-    "Türk Hukuk Emsal Karar Arama | İcra, Tahsilat, İhtar Yapay Zeka Asistanı",
+  // Baş anahtar kelime ("emsal karar arama") title başında; <=60 karakter
+  // (SERP'te kesilmesin — SEO_ANALIZ B8).
+  title: "Emsal Karar Arama | Yargıtay-Danıştay Yapay Zeka Asistanı",
   description:
     "Yargıtay, Danıştay ve AİHM emsal kararları arasında Yapay Zeka destekli arama. İcra takibi, tahsilat, ihtarname ve faiz hesaplama için Türk hukukuna özel asistan.",
   path: "/",
@@ -49,7 +50,8 @@ const SITE_URL =
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  name: "Türk Hukuk Emsal Asistanı",
+  name: "Hukukçu Yapay Zekası",
+  alternateName: "Emsal Karar Arama",
   url: SITE_URL,
   inLanguage: "tr-TR",
   description:
@@ -67,15 +69,15 @@ const websiteJsonLd = {
 const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "Türk Hukuk Emsal Asistanı",
+  name: "Hukukçu Yapay Zekası",
+  alternateName: "Emsal Karar Arama",
   url: SITE_URL,
   logo: `${SITE_URL}/logo.png`,
   description:
     "İcra ve tahsilat hukuku odaklı Yapay Zeka destekli emsal karar arama platformu.",
-  sameAs: [
-    "https://twitter.com/hukukemsal",
-    "https://www.linkedin.com/company/hukuk-emsal",
-  ],
+  // sameAs yalnızca DOĞRULANMIŞ profillerle doldurulmalı. Var olmayan profillere
+  // işaret etmek zayıf/negatif entity sinyali verir; profiller açılınca eklenir.
+  // (SEO_ANALIZ B5)
 };
 
 type Feature = {
@@ -252,6 +254,12 @@ export default function HomePage() {
     <>
       <JsonLd data={websiteJsonLd} />
       <JsonLd data={organizationJsonLd} />
+      {/* SSS rich result — sayfadaki 8 soruyu FAQPage schema'sına bağla (B4) */}
+      <JsonLd
+        data={buildFaqJsonLd(
+          faqs.map((f) => ({ question: f.q, answer: f.a }))
+        )}
+      />
 
       <main className="flex flex-col">
         {/* HERO */}

@@ -15,7 +15,7 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ["localhost:3000", "hukukemsal.tr"],
+      allowedOrigins: ["localhost:3000", "hukukcuyapayzekasi.com", "www.hukukcuyapayzekasi.com"],
     },
     optimizePackageImports: ["lucide-react", "@tanstack/react-query"],
   },
@@ -25,7 +25,7 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
-    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://hukukemsal.tr",
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com",
   },
 };
 

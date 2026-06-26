@@ -1,49 +1,26 @@
-"""Per-tenant RAG — her tenant kendi Chroma collection'ına sahip.
+"""Per-tenant RAG — pgvector 'tenant_rag_chunks' tablosu.
 
 Tenant izolasyonu:
-- Collection name: tenant_{tenant_id}
-- Document → chunk → embed → her chunk'a doc_id metadata
-- Arama: her zaman tenant'ın kendi collection'ında
+- Her satırda tenant_id (UUID) tutulur.
+- Her sorgu/silme işlemi explicit `WHERE tenant_id = $1` ile filtrelenir
+  (kod tenant_id'yi her zaman geçirir). Ek savunma için RLS opsiyonu:
+  bkz. infra/db/19_pgvector.sql.
+- Embedding: public RAG ile AYNI model (services.embeddings) — sorgu hem public
+  emsallerde hem kendi dosyalarında aynı uzayda çalışır.
 
-Public RAG (10K emsal karar) ile aynı embedding modeli kullanılır — sorgu
-hem public emsallerde hem kendi dosyalarında çalıştırılabilir.
+Public fonksiyon imzaları ESKİSİYLE AYNI; uyap router'ı değişmez.
 """
 from __future__ import annotations
-import functools
+import json
 import logging
-import os
-from pathlib import Path
+import uuid
 
 log = logging.getLogger("services.tenant_rag")
 
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
-TENANT_CHROMA_DIR = Path(os.environ.get("TENANT_CHROMA_DIR", "data/tenant_chroma"))
-TENANT_CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
-
-@functools.lru_cache(maxsize=1)
-def _model():
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(EMBEDDING_MODEL, device="cpu")
-
-
-@functools.lru_cache(maxsize=64)
-def _client():
-    import chromadb
-    return chromadb.PersistentClient(path=str(TENANT_CHROMA_DIR))
-
-
-def _collection_name(tenant_id: str) -> str:
-    # Chroma collection name: 3-63 char, ascii
-    safe = tenant_id.replace("-", "")[:60]
-    return f"t_{safe}"
-
-
-def get_or_create_collection(tenant_id: str):
-    return _client().get_or_create_collection(
-        name=_collection_name(tenant_id),
-        metadata={"tenant_id": tenant_id, "hnsw:space": "cosine"},
-    )
+def _tid(tenant_id: str) -> str:
+    """tenant_id'yi UUID string'e doğrula/normalize et."""
+    return str(uuid.UUID(str(tenant_id)))
 
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 150) -> list[str]:
@@ -58,8 +35,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 150) -> list[st
         )
         return splitter.split_text(text)
     except ImportError:
-        # Fallback
-        return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
+        return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size - overlap)]
 
 
 def index_document(
@@ -68,7 +44,7 @@ def index_document(
     text: str,
     metadata: dict | None = None,
 ) -> int:
-    """Dokümanı chunk'la, embed et, tenant collection'a yaz. Chunk sayısı döner."""
+    """Dokümanı chunk'la, embed et, tenant_rag_chunks'a yaz. Chunk sayısı döner."""
     if not text or len(text) < 50:
         return 0
 
@@ -76,20 +52,43 @@ def index_document(
     if not chunks:
         return 0
 
-    model = _model()
-    embeddings = model.encode(
-        [f"passage: {c}" for c in chunks],
-        normalize_embeddings=True, show_progress_bar=False,
-    ).tolist()
+    from services import embeddings
+    from services import pg
 
-    col = get_or_create_collection(tenant_id)
-    base_meta = metadata or {}
+    tid = _tid(tenant_id)
+    vectors = embeddings.embed_passages(chunks)
+
+    base_meta = dict(metadata or {})
     base_meta["document_id"] = document_id
 
-    ids = [f"{document_id}_c{i:04d}" for i in range(len(chunks))]
-    metas = [{**base_meta, "chunk_index": i} for i in range(len(chunks))]
+    rows = []
+    for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
+        meta = {**base_meta, "chunk_index": i}
+        rows.append({
+            "chunk_id": f"{document_id}_c{i:04d}",
+            "tenant_id": tid,
+            "document_id": document_id,
+            "chunk_index": i,
+            "document": chunk,
+            "meta": json.dumps(meta),
+            "embedding": vec,
+        })
 
-    col.upsert(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metas)
+    upsert_sql = """
+        INSERT INTO tenant_rag_chunks
+            (chunk_id, tenant_id, document_id, chunk_index, document, meta, embedding)
+        VALUES
+            (%(chunk_id)s, %(tenant_id)s, %(document_id)s, %(chunk_index)s,
+             %(document)s, %(meta)s, %(embedding)s)
+        ON CONFLICT (chunk_id) DO UPDATE SET
+            document    = EXCLUDED.document,
+            chunk_index = EXCLUDED.chunk_index,
+            meta        = EXCLUDED.meta,
+            embedding   = EXCLUDED.embedding
+    """
+    with pg.connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(upsert_sql, rows)
     return len(chunks)
 
 
@@ -99,53 +98,97 @@ def search_tenant(
     k: int = 5,
     document_ids: list[str] | None = None,
 ) -> list[dict]:
-    """Tenant'ın dosyalarında arama."""
-    model = _model()
-    q_emb = model.encode([f"query: {query}"], normalize_embeddings=True).tolist()
+    """Tenant'ın dosyalarında arama (yalnızca kendi tenant_id'si)."""
+    from services import embeddings
+    from services import pg
 
-    col = get_or_create_collection(tenant_id)
-    where: dict | None = None
-    if document_ids:
-        where = {"document_id": {"$in": document_ids}}
+    tid = _tid(tenant_id)
+    try:
+        q_emb = embeddings.embed_query(query)
+    except Exception as e:
+        log.warning("Embedding üretilemedi: %s", e)
+        return []
 
-    results = col.query(
-        query_embeddings=q_emb, n_results=k,
-        where=where,
-    )
-    docs = results.get("documents", [[]])[0]
-    metas = results.get("metadatas", [[]])[0]
-    dists = results.get("distances", [[]])[0]
-    ids = results.get("ids", [[]])[0]
+    sql = """
+        SELECT chunk_id, document_id, chunk_index, document, meta,
+               1 - (embedding <=> %(q)s) AS similarity
+        FROM tenant_rag_chunks
+        WHERE tenant_id = %(tid)s
+          AND (%(docs)s::text[] IS NULL OR document_id = ANY(%(docs)s))
+        ORDER BY embedding <=> %(q)s
+        LIMIT %(k)s
+    """
+    params = {
+        "q": q_emb,
+        "tid": tid,
+        "docs": list(document_ids) if document_ids else None,
+        "k": int(k),
+    }
 
-    return [
-        {
-            "chunk_id": cid,
-            "text": doc,
+    try:
+        with pg.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+    except Exception as e:
+        log.warning("tenant pgvector araması başarısız: %s", e)
+        return []
+
+    out = []
+    for row in rows:
+        rec = dict(zip(cols, row))
+        meta = rec["meta"] or {}
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except Exception:
+                meta = {}
+        out.append({
+            "chunk_id": rec["chunk_id"],
+            "text": rec["document"],
+            "similarity": float(rec["similarity"]) if rec["similarity"] is not None else 0.0,
             "meta": meta,
-            "similarity": 1 - dist,
-        }
-        for cid, doc, meta, dist in zip(ids, docs, metas, dists)
-    ]
+        })
+    return out
 
 
 def delete_document(tenant_id: str, document_id: str):
-    """Dokümanın tüm chunk'larını collection'dan sil."""
-    col = get_or_create_collection(tenant_id)
-    col.delete(where={"document_id": document_id})
+    """Dokümanın tüm chunk'larını sil (tenant kapsamında)."""
+    from services import pg
+    tid = _tid(tenant_id)
+    with pg.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM tenant_rag_chunks WHERE tenant_id = %s AND document_id = %s",
+                (tid, document_id),
+            )
 
 
 def delete_tenant_collection(tenant_id: str):
-    """Tüm tenant collection'ını sil (KVKK)."""
+    """Tüm tenant verisini sil (KVKK)."""
+    from services import pg
+    tid = _tid(tenant_id)
     try:
-        _client().delete_collection(name=_collection_name(tenant_id))
+        with pg.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM tenant_rag_chunks WHERE tenant_id = %s", (tid,))
     except Exception as e:
-        log.warning(f"Collection silme hatası: {e}")
+        log.warning(f"Tenant veri silme hatası: {e}")
 
 
 def get_tenant_stats(tenant_id: str) -> dict:
     """Tenant'ın vector store istatistiği."""
+    from services import pg
     try:
-        col = get_or_create_collection(tenant_id)
-        return {"chunk_count": col.count(), "available": True}
+        tid = _tid(tenant_id)
+        with pg.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM tenant_rag_chunks WHERE tenant_id = %s",
+                    (tid,))
+                count = cur.fetchone()[0]
+        return {"chunk_count": int(count), "available": True}
     except Exception:
         return {"chunk_count": 0, "available": False}

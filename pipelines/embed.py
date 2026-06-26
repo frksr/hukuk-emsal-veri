@@ -1,17 +1,22 @@
-"""Chunk'lara embedding üret ve Chroma'ya yaz.
+"""Chunk'lara embedding üret ve Postgres (pgvector) 'rag_chunks' tablosuna yaz.
 
 Input:  data/final/chunks.parquet
-Output: data/chroma_db/  (Chroma persist directory)
+Output: Cloud SQL / Postgres  ->  rag_chunks  (vector(768))
 
-Model:  intfloat/multilingual-e5-base (varsayılan)
-- 768-dim
-- Türkçe + İngilizce
-- HUDOC İngilizce kararlar için de uygun
+Embedding sağlayıcısı services.embeddings üzerinden seçilir:
+    EMBEDDING_PROVIDER=google  (vars.)  ->  text-embedding-004 (768-dim)
+    EMBEDDING_PROVIDER=local            ->  intfloat/multilingual-e5-base
 
-Daha küçük/hızlı isteyenler için: intfloat/multilingual-e5-small (384-dim)
+Kullanım:
+    python -m pipelines.embed --input data/final/chunks.parquet
+    python -m pipelines.embed --recreate            # tabloyu boşalt, sıfırdan
+    python -m pipelines.embed --max-chunks 100      # test
+
+Önkoşul: infra/db/19_pgvector.sql çalıştırılmış olmalı; RAG_DATABASE_URL/DATABASE_URL set.
 """
 from __future__ import annotations
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -19,114 +24,121 @@ import duckdb
 from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+
+def _tags_to_str(tags) -> str:
+    if tags is None:
+        return ""
+    if hasattr(tags, "tolist"):
+        tags = tags.tolist()
+    if isinstance(tags, (list, tuple)):
+        return ",".join(str(t) for t in tags)
+    return str(tags)
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--input", default="data/final/chunks.parquet")
-    p.add_argument("--chroma-dir", default="data/chroma_db")
-    p.add_argument("--collection", default="hukuk_kararlari")
-    p.add_argument("--model", default="intfloat/multilingual-e5-base",
-                   help="HF model id veya local path")
-    p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--device", default="cpu",
-                   help="cpu | cuda | mps")
+    p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--max-chunks", type=int, default=None,
-                   help="Sadece N chunk için (test için)")
+                   help="Sadece N chunk için (test)")
     p.add_argument("--recreate", action="store_true",
-                   help="Mevcut collection'ı sil, sıfırdan oluştur")
+                   help="rag_chunks tablosunu TRUNCATE et, sıfırdan yaz")
+    p.add_argument("--dsn", default=None,
+                   help="Override DSN (yoksa RAG_DATABASE_URL/DATABASE_URL)")
     args = p.parse_args()
 
-    input_path = ROOT / args.input
-    chroma_dir = ROOT / args.chroma_dir
-    chroma_dir.mkdir(parents=True, exist_ok=True)
+    from services import embeddings
+    import psycopg
+    from pgvector.psycopg import register_vector
 
-    print(f"[EMBED] model yükleniyor: {args.model}", file=sys.stderr)
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer(args.model, device=args.device)
-    dim = model.get_sentence_embedding_dimension()
-    print(f"[EMBED] model yüklendi (dim={dim})", file=sys.stderr)
+    dsn = args.dsn or os.environ.get("RAG_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    if not dsn:
+        print("[EMBED] RAG_DATABASE_URL / DATABASE_URL yok", file=sys.stderr)
+        sys.exit(1)
+
+    input_path = ROOT / args.input
+    print(f"[EMBED] provider={embeddings.PROVIDER} model="
+          f"{embeddings.API_MODEL if embeddings.PROVIDER=='google' else embeddings.LOCAL_MODEL} "
+          f"dim={embeddings.EMBEDDING_DIM}", file=sys.stderr)
 
     print(f"[EMBED] chunk'lar yükleniyor: {input_path}", file=sys.stderr)
     sql = f"SELECT * FROM '{input_path}'"
     if args.max_chunks:
         sql += f" LIMIT {args.max_chunks}"
     df = duckdb.sql(sql).df()
-    print(f"[EMBED] {len(df)} chunk yüklendi", file=sys.stderr)
+    total = len(df)
+    print(f"[EMBED] {total} chunk yüklendi", file=sys.stderr)
 
-    import chromadb
-    client = chromadb.PersistentClient(path=str(chroma_dir))
+    conn = psycopg.connect(dsn, autocommit=False)
+    register_vector(conn)
 
     if args.recreate:
-        try:
-            client.delete_collection(name=args.collection)
-            print(f"[EMBED] eski '{args.collection}' silindi", file=sys.stderr)
-        except Exception:
-            pass
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE rag_chunks")
+        conn.commit()
+        print("[EMBED] rag_chunks TRUNCATE edildi", file=sys.stderr)
 
-    col = client.get_or_create_collection(
-        name=args.collection,
-        metadata={"hnsw:space": "cosine"},
-    )
+    upsert_sql = """
+        INSERT INTO rag_chunks
+            (chunk_id, decision_id, chunk_index, document, source, court_chamber,
+             case_no, decision_no, decision_date, topic_tags, source_url, embedding)
+        VALUES
+            (%(chunk_id)s, %(decision_id)s, %(chunk_index)s, %(document)s, %(source)s,
+             %(court_chamber)s, %(case_no)s, %(decision_no)s, %(decision_date)s,
+             %(topic_tags)s, %(source_url)s, %(embedding)s)
+        ON CONFLICT (chunk_id) DO UPDATE SET
+            document      = EXCLUDED.document,
+            decision_id   = EXCLUDED.decision_id,
+            chunk_index   = EXCLUDED.chunk_index,
+            source        = EXCLUDED.source,
+            court_chamber = EXCLUDED.court_chamber,
+            case_no       = EXCLUDED.case_no,
+            decision_no   = EXCLUDED.decision_no,
+            decision_date = EXCLUDED.decision_date,
+            topic_tags    = EXCLUDED.topic_tags,
+            source_url    = EXCLUDED.source_url,
+            embedding     = EXCLUDED.embedding
+    """
 
-    # E5 model prefix gereksinimi:
-    # - Sorgu: "query: ..."
-    # - Doküman: "passage: ..."
-    use_e5_prefix = "e5" in args.model.lower()
-
-    batch_size = args.batch_size
-    total = len(df)
-
-    # Mevcut chunk_id'leri kontrol et — idempotent yazma
-    try:
-        existing_count = col.count()
-        print(f"[EMBED] mevcut collection: {existing_count} kayıt",
-              file=sys.stderr)
-    except Exception:
-        existing_count = 0
-
-    pbar = tqdm(range(0, total, batch_size), desc="embed")
-    for start in pbar:
-        end = min(start + batch_size, total)
+    bs = args.batch_size
+    written = 0
+    for start in tqdm(range(0, total, bs), desc="embed"):
+        end = min(start + bs, total)
         batch = df.iloc[start:end]
 
         texts = batch["chunk_text"].tolist()
-        if use_e5_prefix:
-            texts = [f"passage: {t}" for t in texts]
+        vectors = embeddings.embed_passages(texts)
 
-        embeddings = model.encode(
-            texts, batch_size=batch_size,
-            convert_to_numpy=True, normalize_embeddings=True,
-            show_progress_bar=False,
-        )
+        rows = []
+        for (_, r), vec in zip(batch.iterrows(), vectors):
+            rows.append({
+                "chunk_id": str(r["chunk_id"]),
+                "decision_id": str(r.get("decision_id") or ""),
+                "chunk_index": int(r.get("chunk_index", 0) or 0),
+                "document": str(r["chunk_text"]),
+                "source": str(r.get("source") or ""),
+                "court_chamber": str(r.get("court_chamber") or ""),
+                "case_no": str(r.get("case_no") or ""),
+                "decision_no": str(r.get("decision_no") or ""),
+                "decision_date": str(r.get("decision_date") or ""),
+                "topic_tags": _tags_to_str(r.get("topic_tags")),
+                "source_url": str(r.get("source_url") or ""),
+                "embedding": vec,
+            })
 
-        # Chroma'da metadata None kabul etmiyor; convert
-        def _meta(row):
-            tags = row.get("topic_tags")
-            if hasattr(tags, "tolist"):
-                tags = tags.tolist()
-            return {
-                "decision_id": row.get("decision_id") or "",
-                "chunk_index": int(row.get("chunk_index", 0)),
-                "source": row.get("source") or "",
-                "court_chamber": row.get("court_chamber") or "",
-                "case_no": row.get("case_no") or "",
-                "decision_no": row.get("decision_no") or "",
-                "decision_date": row.get("decision_date") or "",
-                "topic_tags": ",".join(tags) if tags else "",
-                "source_url": row.get("source_url") or "",
-            }
+        with conn.cursor() as cur:
+            cur.executemany(upsert_sql, rows)
+        conn.commit()
+        written += len(rows)
 
-        col.upsert(
-            ids=batch["chunk_id"].tolist(),
-            embeddings=embeddings.tolist(),
-            documents=batch["chunk_text"].tolist(),
-            metadatas=[_meta(r) for _, r in batch.iterrows()],
-        )
-
-    final_count = col.count()
-    print(f"[EMBED] tamamlandı. Toplam {final_count} chunk Chroma'da",
-          file=sys.stderr)
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM rag_chunks")
+        final_count = cur.fetchone()[0]
+    conn.close()
+    print(f"[EMBED] tamamlandı. Bu çalışmada {written} chunk yazıldı. "
+          f"Toplam rag_chunks={final_count}", file=sys.stderr)
 
 
 if __name__ == "__main__":

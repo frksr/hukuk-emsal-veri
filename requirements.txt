@@ -8,9 +8,12 @@ python-dateutil>=2.9
 tqdm>=4.66
 orjson>=3.10
 
-# RAG pipeline
-sentence-transformers>=3.0
-chromadb>=0.5
+# RAG pipeline — vektör deposu Cloud SQL/pgvector, embedding Google API ile.
+# sentence-transformers/chromadb container'dan ÇIKARILDI (bellek + soğuk başlangıç).
+# Lokal embedding (Faz 2 kaçış kapısı) gerekirse: pip install sentence-transformers
+pgvector>=0.3
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
 streamlit>=1.36
 langchain-text-splitters>=0.2
 pandas>=2.0

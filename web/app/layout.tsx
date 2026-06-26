@@ -22,8 +22,8 @@ const SITE_URL =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Türk Hukuk Asistanı | Emsal Karar Arama",
-    template: "%s | Türk Hukuk Asistanı",
+    default: "Emsal Karar Arama | Hukukçu Yapay Zekası",
+    template: "%s | Hukukçu Yapay Zekası",
   },
   description:
     "İcra, tahsilat, ihtar konularında Yargıtay, Danıştay ve AİHM emsal kararları. Yapay Zeka destekli dilekçe, ihtarname, faiz hesaplama.",
@@ -39,17 +39,17 @@ export const metadata: Metadata = {
     "zamanaşımı",
     "kvkk uyum",
   ],
-  authors: [{ name: "Hukuk Emsal" }],
-  creator: "Hukuk Emsal",
-  publisher: "Hukuk Emsal",
-  applicationName: "Türk Hukuk Asistanı",
+  authors: [{ name: "Hukukçu Yapay Zekası" }],
+  creator: "Hukukçu Yapay Zekası",
+  publisher: "Hukukçu Yapay Zekası",
+  applicationName: "Hukukçu Yapay Zekası",
   category: "law",
   openGraph: {
     type: "website",
     locale: "tr_TR",
     url: SITE_URL,
-    siteName: "Hukuk Emsal",
-    title: "Türk Hukuk Asistanı | Emsal Karar Arama",
+    siteName: "Hukukçu Yapay Zekası",
+    title: "Emsal Karar Arama | Hukukçu Yapay Zekası",
     description:
       "Yargıtay, Danıştay ve AİHM emsal kararları + Yapay Zeka destekli hukuki araçlar.",
     images: [
@@ -57,13 +57,13 @@ export const metadata: Metadata = {
         url: "/og-default.png",
         width: 1200,
         height: 630,
-        alt: "Türk Hukuk Asistanı",
+        alt: "Hukukçu Yapay Zekası — Emsal Karar Arama",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Türk Hukuk Asistanı | Emsal Karar Arama",
+    title: "Emsal Karar Arama | Hukukçu Yapay Zekası",
     description:
       "Yargıtay, Danıştay ve AİHM emsal kararları + Yapay Zeka destekli hukuki araçlar.",
     images: ["/og-default.png"],
@@ -118,8 +118,8 @@ export const viewport: Viewport = {
 const legalServiceJsonLd = {
   "@context": "https://schema.org",
   "@type": "LegalService",
-  name: "Hukuk Emsal",
-  alternateName: "Türk Hukuk Asistanı",
+  name: "Hukukçu Yapay Zekası",
+  alternateName: "Emsal Karar Arama",
   url: SITE_URL,
   logo: `${SITE_URL}/logo.png`,
   image: `${SITE_URL}/og-default.png`,

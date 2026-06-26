@@ -26,16 +26,15 @@ COPY common/ ./common/
 COPY queries/ ./queries/
 COPY scripts/ ./scripts/
 
-# Vektör deposu (ChromaDB) + kararlar parquet'i image'a gömülür.
-# Cloud Build bu klasörü GCS'ten doldurur; lokal build için de aynı yola koyabilirsin.
-COPY seed_data/chroma_db/ ./data/chroma_db/
+# Vektörler artık Cloud SQL/pgvector'da — ChromaDB image'a GÖMÜLMEZ.
+# Yalnızca tam karar metni + listeleme için kullanılan parquet gömülür
+# (DuckDB ile streaming okunur, düşük bellek).
 COPY seed_data/all_decisions.parquet ./data/final/all_decisions.parquet
 
 # UYAP belgeleri için yazılabilir dizin (prod'da GCS volume mount edilir).
 RUN mkdir -p data/tenant_storage
 
-ENV CHROMA_DIR=/app/data/chroma_db \
-    DECISIONS_PARQUET=/app/data/final/all_decisions.parquet \
+ENV DECISIONS_PARQUET=/app/data/final/all_decisions.parquet \
     TENANT_STORAGE_ROOT=/app/data/tenant_storage
 
 # Cloud Run $PORT enjekte eder (varsayılan 8080). Shell formu ile genişlet.

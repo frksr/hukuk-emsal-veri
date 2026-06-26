@@ -1,34 +1,48 @@
-"""Ortak RAG arama servisi — Chroma + multilingual-e5-base.
+"""Ortak RAG arama servisi — pgvector (Cloud SQL) + API embedding.
 
 Tüm özelliklerin (dilekçe, atıf önerici, karşı argüman) kullandığı temel.
+
+Mimari (bkz. PGVECTOR_GOC_PLANI.md):
+- Embedding: services.embeddings (Google API / lokal e5; sorgu cache'li)
+- Vektör deposu: Postgres 'rag_chunks' tablosu, cosine HNSW indeksli
+- Tam karar metni + listeleme: hâlâ parquet üzerinden (DuckDB, düşük bellek)
+
+Public fonksiyon imzaları ESKİSİYLE AYNI (search/get_collection_stats/...);
+router ve servis caller'ları değişmez.
 """
 from __future__ import annotations
-import functools
+import logging
 import os
 from pathlib import Path
 
+log = logging.getLogger("services.rag")
+
 ROOT = Path(__file__).resolve().parent.parent
-# Vektör DB ve parquet konumları env ile override edilebilir → cloud'da kalıcı
-# volume'a (ör. /data/chroma_db) yönlendirilir. Git'te tutulmaz (bkz. .gitignore).
-CHROMA_DIR = Path(os.environ.get("CHROMA_DIR", str(ROOT / "data" / "chroma_db")))
 DECISIONS_PARQUET = Path(os.environ.get(
     "DECISIONS_PARQUET", str(ROOT / "data" / "final" / "all_decisions.parquet")))
-COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "hukuk_kararlari")
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL",
-                                  "intfloat/multilingual-e5-base")
+
+# Chroma where-dict'inden çıkarılabilen filtre alanları (yalnızca bunlar kullanılıyor).
+_FILTER_COLS = {"source", "court_chamber"}
 
 
-@functools.lru_cache(maxsize=1)
-def _load_model():
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(EMBEDDING_MODEL, device="cpu")
+def _extract_filters(where: dict | None) -> dict:
+    """Eski Chroma where formatını {kolon: değer} sözlüğüne indirger.
 
-
-@functools.lru_cache(maxsize=1)
-def _load_collection():
-    import chromadb
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    return client.get_collection(name=COLLECTION_NAME)
+    Desteklenen biçimler:
+      {"source": "yargitay"}
+      {"$and": [{"source": "yargitay"}, {"court_chamber": "12. HD"}]}
+    """
+    out: dict = {}
+    if not where:
+        return out
+    if "$and" in where:
+        for sub in where["$and"]:
+            out.update(_extract_filters(sub))
+        return out
+    for key, val in where.items():
+        if key in _FILTER_COLS and not isinstance(val, dict):
+            out[key] = val
+    return out
 
 
 def search(query: str, k: int = 5, where: dict | None = None) -> list[dict]:
@@ -37,46 +51,73 @@ def search(query: str, k: int = 5, where: dict | None = None) -> list[dict]:
     Returns:
       [{'text': str, 'meta': dict, 'similarity': float, 'chunk_id': str}, ...]
     """
-    model = _load_model()
+    from services import embeddings
+    from services import pg
+
     try:
-        col = _load_collection()
+        q_emb = embeddings.embed_query(query)
     except Exception as e:
-        # Volume henüz seed edilmemiş olabilir → 500 yerine boş sonuç + uyarı.
-        import logging
-        logging.getLogger("services.rag").warning(
-            "Chroma collection '%s' yüklenemedi (CHROMA_DIR=%s): %s — seed gerekli?",
-            COLLECTION_NAME, CHROMA_DIR, e)
+        log.warning("Embedding üretilemedi: %s", e)
         return []
 
-    q_emb = model.encode([f"query: {query}"],
-                         normalize_embeddings=True).tolist()
+    filters = _extract_filters(where)
+    sql = """
+        SELECT chunk_id, decision_id, chunk_index, document, source, court_chamber,
+               case_no, decision_no, decision_date, topic_tags, source_url,
+               1 - (embedding <=> %(q)s) AS similarity
+        FROM rag_chunks
+        WHERE (%(source)s::text IS NULL OR source = %(source)s)
+          AND (%(court)s::text IS NULL OR court_chamber = %(court)s)
+        ORDER BY embedding <=> %(q)s
+        LIMIT %(k)s
+    """
+    params = {
+        "q": q_emb,
+        "source": filters.get("source"),
+        "court": filters.get("court_chamber"),
+        "k": int(k),
+    }
 
-    results = col.query(
-        query_embeddings=q_emb,
-        n_results=k,
-        where=where if where else None,
-    )
+    try:
+        with pg.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+    except Exception as e:
+        log.warning("pgvector araması başarısız: %s — şema/seed gerekli?", e)
+        return []
 
-    docs = results.get("documents", [[]])[0]
-    metas = results.get("metadatas", [[]])[0]
-    dists = results.get("distances", [[]])[0]
-    ids = results.get("ids", [[]])[0]
-
-    return [
-        {
-            "chunk_id": cid,
-            "text": doc,
-            "meta": meta,
-            "similarity": 1 - dist,
-        }
-        for cid, doc, meta, dist in zip(ids, docs, metas, dists)
-    ]
+    out = []
+    for row in rows:
+        rec = dict(zip(cols, row))
+        out.append({
+            "chunk_id": rec["chunk_id"],
+            "text": rec["document"],
+            "similarity": float(rec["similarity"]) if rec["similarity"] is not None else 0.0,
+            "meta": {
+                "decision_id": rec["decision_id"],
+                "chunk_index": rec["chunk_index"],
+                "source": rec["source"],
+                "court_chamber": rec["court_chamber"],
+                "case_no": rec["case_no"],
+                "decision_no": rec["decision_no"],
+                "decision_date": rec["decision_date"],
+                "topic_tags": rec["topic_tags"],
+                "source_url": rec["source_url"],
+            },
+        })
+    return out
 
 
 def get_collection_stats() -> dict:
+    from services import pg
     try:
-        col = _load_collection()
-        return {"chunk_count": col.count(), "available": True}
+        with pg.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM rag_chunks")
+                count = cur.fetchone()[0]
+        return {"chunk_count": int(count), "available": True}
     except Exception as e:
         return {"chunk_count": 0, "available": False, "error": str(e)}
 
@@ -131,6 +172,69 @@ def list_decisions(limit: int = 100, offset: int = 0,
         cur = con.execute(sql, params)
         cols = [d[0] for d in cur.description]
         rows = cur.fetchall()
+        con.close()
+        return [dict(zip(cols, r)) for r in rows]
+    except Exception:
+        return []
+
+
+def related_decisions(decision_id: str, limit: int = 6) -> list[dict]:
+    """Verilen karara 'ilgili' kararları döndür (aynı daire, sonra aynı kaynak).
+
+    İç linkleme/topical authority için (SEO_ANALIZ B3): karar detay sayfaları
+    izole kalmasın. Maliyetsiz — parquet/DuckDB metadata filtresi, LLM yok.
+    Yalnızca anonymization_check'i geçen kararlar; kendisi hariç tutulur.
+    """
+    import duckdb
+    if not DECISIONS_PARQUET.exists():
+        return []
+    try:
+        con = duckdb.connect()
+        src = str(DECISIONS_PARQUET)
+        # Önce mevcut kararın daire/kaynağını al.
+        ref = con.execute(
+            "SELECT source, court_chamber FROM read_parquet(?) WHERE id = ? LIMIT 1",
+            [src, decision_id],
+        ).fetchall()
+        if not ref:
+            con.close()
+            return []
+        source, court_chamber = ref[0][0], ref[0][1]
+
+        anon_ok = (
+            "COALESCE(CAST(anonymization_check AS VARCHAR), '') "
+            "NOT IN ('failed', 'false', '0')"
+        )
+        base_cols = (
+            "id, source, court_chamber, case_no, decision_no, "
+            "decision_date, topic_tags"
+        )
+
+        rows: list = []
+        cols: list = []
+        # 1) Aynı daire (en alakalı).
+        if court_chamber:
+            cur = con.execute(
+                f"SELECT {base_cols} FROM read_parquet(?) "
+                f"WHERE court_chamber = ? AND id <> ? AND {anon_ok} "
+                f"ORDER BY decision_date DESC NULLS LAST LIMIT ?",
+                [src, court_chamber, decision_id, int(limit)],
+            )
+            cols = [d[0] for d in cur.description]
+            rows = cur.fetchall()
+        # 2) Yetersizse aynı kaynaktan tamamla.
+        if len(rows) < limit and source:
+            haric = [decision_id] + [r[0] for r in rows]
+            ph = ", ".join("?" for _ in haric)
+            cur = con.execute(
+                f"SELECT {base_cols} FROM read_parquet(?) "
+                f"WHERE source = ? AND id NOT IN ({ph}) AND {anon_ok} "
+                f"ORDER BY decision_date DESC NULLS LAST LIMIT ?",
+                [src, source, *haric, int(limit - len(rows))],
+            )
+            if not cols:
+                cols = [d[0] for d in cur.description]
+            rows += cur.fetchall()
         con.close()
         return [dict(zip(cols, r)) for r in rows]
     except Exception:

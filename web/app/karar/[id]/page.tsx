@@ -6,7 +6,11 @@ import { FileText, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { JsonLd } from "@/components/seo/json-ld";
-import { buildArticleJsonLd, buildBreadcrumbJsonLd } from "@/lib/seo";
+import {
+  buildArticleJsonLd,
+  buildBreadcrumbJsonLd,
+  generateOgImageUrl,
+} from "@/lib/seo";
 import { AiOzetButton } from "./ai-ozet-button";
 
 const API_BASE =
@@ -54,12 +58,45 @@ async function getKarar(id: string): Promise<Karar | null> {
   }
 }
 
+async function getBenzerKararlar(id: string): Promise<Karar[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/karar/benzer/${encodeURIComponent(id)}?limit=6`,
+      { next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json?.data as Karar[]) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 function kararBaslik(k: Karar): string {
   const kaynak = KAYNAK_ETIKET[k.source ?? ""] ?? k.source ?? "";
   const daire = k.court_chamber ? ` ${k.court_chamber}` : "";
   const esas = k.case_no ? ` ${k.case_no} E.` : "";
   const karar = k.decision_no ? ` ${k.decision_no} K.` : "";
   return `${kaynak}${daire}${esas}${karar}`.trim() || k.id;
+}
+
+// topic_tags string ("a, b") veya string[] olabilir — normalize et.
+function topicEtiketler(k: Karar): string[] {
+  const raw = k.topic_tags;
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(/[,;|]/);
+  return arr.map((t) => t.trim()).filter(Boolean);
+}
+
+// Ham metinden cümle sınırında özet lede çıkarır (LLM'siz, özgün çerçeveleme
+// için). Tam metni birebir basmak duplicate/thin içerik riski taşıdığından
+// (SEO_ANALIZ B3) sayfa bu özetle başlar; tam metin katlanır bölümde kalır.
+function ozetCikar(metin: string, maxLen = 360): string {
+  const temiz = (metin ?? "").replace(/\s+/g, " ").trim();
+  if (temiz.length <= maxLen) return temiz;
+  const kesit = temiz.slice(0, maxLen);
+  const sonNokta = kesit.lastIndexOf(". ");
+  return (sonNokta > 120 ? kesit.slice(0, sonNokta + 1) : kesit).trim() + " …";
 }
 
 function tarihFormat(t?: string): string {
@@ -81,16 +118,44 @@ export async function generateMetadata({
   const karar = await getKarar(decodeURIComponent(params.id));
   if (!karar) return { robots: { index: false } };
   const baslik = kararBaslik(karar);
-  const ozet = (karar.cleaned_text ?? "").slice(0, 155).replace(/\s+/g, " ");
+  const etiketler = topicEtiketler(karar);
+
+  // Description: ham usul metni (genelde düşük CTR mahkeme başlığı) yerine
+  // konu etiketleri + bağlam. Yoksa kısaltılmış metne düş (SEO_ANALIZ B10).
+  const konuKismi = etiketler.length
+    ? `Konular: ${etiketler.slice(0, 4).join(", ")}. `
+    : "";
+  const hamOzet = (karar.cleaned_text ?? "").replace(/\s+/g, " ").trim();
+  const description = (
+    `${baslik}. ${konuKismi}Anonimleştirilmiş emsal karar özeti, ilgili içtihatlar ve dilekçe oluşturma.` +
+    (hamOzet ? ` ${hamOzet}` : "")
+  )
+    .slice(0, 160)
+    .trim();
+
+  const ogImage = generateOgImageUrl(baslik, etiketler.slice(0, 3).join(" · "));
+
   return {
     title: `${baslik} — Emsal Karar`.slice(0, 65),
-    description:
-      ozet || "Anonimleştirilmiş emsal karar metni ve ilgili içtihatlar.",
+    description,
+    keywords: [
+      "emsal karar",
+      baslik,
+      ...etiketler.slice(0, 6),
+    ].filter(Boolean),
     alternates: { canonical: `/karar/${encodeURIComponent(karar.id)}` },
     openGraph: {
       title: baslik,
+      description,
       type: "article",
       url: `${SITE_URL}/karar/${encodeURIComponent(karar.id)}`,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: baslik }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: baslik,
+      description,
+      images: [ogImage],
     },
   };
 }
@@ -112,6 +177,10 @@ export default async function KararPage({
   const metin = karar.cleaned_text ?? "";
   const tarih = tarihFormat(karar.decision_date);
   const path = `/karar/${encodeURIComponent(karar.id)}`;
+  const etiketler = topicEtiketler(karar);
+  const lede = ozetCikar(metin);
+  const kaynakAdi = KAYNAK_ETIKET[karar.source ?? ""] ?? karar.source ?? "";
+  const benzer = await getBenzerKararlar(karar.id);
 
   const jsonLd = [
     buildBreadcrumbJsonLd([
@@ -121,7 +190,7 @@ export default async function KararPage({
     ]),
     buildArticleJsonLd({
       title: baslik,
-      description: metin.slice(0, 160),
+      description: lede.slice(0, 160) || baslik,
       path,
       datePublished: karar.decision_date ?? new Date().toISOString(),
     }),
@@ -156,6 +225,28 @@ export default async function KararPage({
           )}
         </div>
 
+        {/* Özgün, server-render özet — sayfanın indekslenen ana içeriği (B3).
+            Tam metin aşağıda katlanır bölümde; AI analizi Pro upsell olarak ayrı. */}
+        <section aria-labelledby="karar-ozet" className="mb-8">
+          <h2 id="karar-ozet" className="text-lg font-semibold mb-2">
+            Karar Özeti
+          </h2>
+          <p className="text-foreground/90 leading-relaxed">
+            {kaynakAdi ? `${kaynakAdi} tarafından` : "Bu emsal kararda"}
+            {tarih ? ` ${tarih} tarihinde` : ""} verilen{" "}
+            <strong>{baslik}</strong> sayılı emsal karar
+            {etiketler.length
+              ? `, ${etiketler.slice(0, 4).join(", ")} konularını ilgilendirmektedir.`
+              : " incelenmektedir."}{" "}
+            {lede}
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Kararın tam metni aşağıda yer almaktadır. Yapay Zeka destekli ayrıntılı
+            analiz ve gerekçeli özet için “Yapay Zeka özetini çıkar” aracını
+            kullanabilirsiniz.
+          </p>
+        </section>
+
         <div className="flex flex-wrap gap-2 mb-8">
           <Button asChild size="sm">
             <Link href={`/dilekce?durum=${encodeURIComponent(metin.slice(0, 300))}`}>
@@ -172,11 +263,47 @@ export default async function KararPage({
 
         <Card>
           <CardContent className="p-6">
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap leading-relaxed text-foreground/90">
-              {metin}
-            </div>
+            <details>
+              <summary className="cursor-pointer font-medium text-foreground mb-2 select-none">
+                Kararın tam metnini göster
+              </summary>
+              <div className="prose prose-sm max-w-none whitespace-pre-wrap leading-relaxed text-foreground/90 mt-4">
+                {metin}
+              </div>
+            </details>
           </CardContent>
         </Card>
+
+        {benzer.length > 0 && (
+          <section aria-labelledby="ilgili-kararlar" className="mt-10">
+            <h2 id="ilgili-kararlar" className="text-lg font-semibold mb-3">
+              İlgili Kararlar
+            </h2>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {benzer.map((b) => {
+                const bBaslik = kararBaslik(b);
+                const bTarih = tarihFormat(b.decision_date);
+                return (
+                  <li key={b.id}>
+                    <Link
+                      href={`/karar/${encodeURIComponent(b.id)}`}
+                      className="block rounded-lg border p-3 hover:border-primary/40 transition-colors"
+                    >
+                      <span className="block text-sm font-medium text-foreground">
+                        {bBaslik}
+                      </span>
+                      {bTarih && (
+                        <span className="block text-xs text-muted-foreground mt-0.5">
+                          {bTarih}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {karar.source_url && (
           <p className="mt-4 text-xs text-muted-foreground">

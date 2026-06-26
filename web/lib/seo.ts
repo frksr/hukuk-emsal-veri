@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com";
-const SITE_NAME = "Hukuk Emsal";
+// Tek marka/entity adı (single source of truth) — domain ile uyumlu.
+// Tüm OG/Twitter/JSON-LD sinyalleri buradan beslenir (SEO_ANALIZ B5).
+const SITE_NAME = "Hukukçu Yapay Zekası";
 
 export interface BuildMetadataInput {
   title: string;
