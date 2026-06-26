@@ -25,6 +25,8 @@ COPY llm/ ./llm/
 COPY common/ ./common/
 COPY queries/ ./queries/
 COPY scripts/ ./scripts/
+# pipelines/ — embed (re-index) job'u python -m pipelines.embed ile bunu çağırır.
+COPY pipelines/ ./pipelines/
 
 # Vektörler artık Cloud SQL/pgvector'da — ChromaDB image'a GÖMÜLMEZ.
 # Yalnızca tam karar metni + listeleme için kullanılan parquet gömülür
