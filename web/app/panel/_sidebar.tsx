@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered } from "lucide-react";
+import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered, Newspaper } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/app/admin/sistem", label: "Sistem", icon: Activity },
   { href: "/app/admin/kullanicilar", label: "Kullanıcılar", icon: Users },
   { href: "/app/admin/paketler", label: "Paketler & Limitler", icon: SlidersHorizontal },
+  { href: "/app/admin/icerik", label: "İçerik / Blog", icon: Newspaper },
   { href: "/app/admin/feedback", label: "Geri Bildirim", icon: MessageSquare },
   { href: "/app/admin/audit", label: "Audit Log", icon: FileWarning },
   { href: "/app/admin/beta", label: "Beta Davet", icon: Gift },

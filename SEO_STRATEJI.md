@@ -1,5 +1,10 @@
 # Hukuk Emsal — SEO Stratejisi ve Yol Haritası
 
+> ⚠️ **ARŞİV / GÜNCELLİĞİNİ YİTİRDİ (2026-06-26).** Bu belge eski `hukukemsal.tr`
+> domainini referans alır. Güncel ve tek geçerli kaynak: **`SEO_ANALIZ_VE_PLAN.md`**
+> (üretim domaini `hukukcuyapayzekasi.com`, uygulanan/uygulanacak tüm maddeler orada).
+> Bu dosya yalnızca tarihsel bağlam için tutulmaktadır.
+
 **Tarih:** 2026-06-09
 **Kapsam:** hukukemsal.tr (Next.js frontend)
 **Durum:** Teknik temel düzeltildi (bkz. Bölüm 1) · İçerik stratejisi uygulanmayı bekliyor

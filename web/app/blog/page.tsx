@@ -4,6 +4,38 @@ import { buildMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
 import { MAKALELER } from "./makaleler";
 
+const API_BASE =
+  process.env.API_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
+
+export const revalidate = 300;
+
+type Kart = { slug: string; baslik: string; ozet: string };
+
+async function getYayinlananlar(): Promise<Kart[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/icerik/liste`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const data = (json?.data as Array<{
+      slug: string;
+      title: string;
+      excerpt?: string;
+      meta_description?: string;
+    }>) ?? [];
+    return data.map((m) => ({
+      slug: m.slug,
+      baslik: m.title,
+      ozet: m.excerpt || m.meta_description || "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export const metadata: Metadata = buildMetadata({
   title: "Hukuk Rehberi ve Blog | Emsal Karar, İhtarname, İcra",
   description:
@@ -18,7 +50,16 @@ export const metadata: Metadata = buildMetadata({
   ],
 });
 
-export default function BlogIndexPage() {
+export default async function BlogIndexPage() {
+  // Statik küratörlü makaleler + admin panelden yayınlananları birleştir.
+  // Aynı slug varsa statik (küratörlü) öncelikli.
+  const yayinlananlar = await getYayinlananlar();
+  const staticSlugs = new Set(MAKALELER.map((m) => m.slug));
+  const kartlar: Kart[] = [
+    ...MAKALELER.map((m) => ({ slug: m.slug, baslik: m.baslik, ozet: m.ozet })),
+    ...yayinlananlar.filter((m) => !staticSlugs.has(m.slug)),
+  ];
+
   return (
     <>
       <JsonLd
@@ -42,7 +83,7 @@ export default function BlogIndexPage() {
         </p>
 
         <div className="space-y-6">
-          {MAKALELER.map((m) => (
+          {kartlar.map((m) => (
             <article
               key={m.slug}
               className="rounded-lg border p-5 hover:border-primary/40 transition-colors"

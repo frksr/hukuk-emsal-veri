@@ -36,9 +36,31 @@ public HTML'e KONULMADI: (a) paywall'ı zayıflatır, (b) ~10K sayfa için crawl
 başına/önden LLM maliyeti doğurur. İstenirse ileride **kalıcı önbelleğe alınmış
 kısa AI lede** (Pro tam analizden ayrı) ayrı bir pipeline + backfill ile eklenebilir.
 
-**Kalan (sürekli içerik/ölçek işleri):** B6 genişletme (yeni `/ihtarname/*`,
-`/zamanasimi/*` alt sayfaları), ek blog makaleleri, karar sitemap'ini kademeli
-10K→tam ölçek, B12 (eski strateji belgesini arşivle/güncelle).
+**B6 genişletme:** `/zamanasimi/kira` alt sayfası eklendi (kira alacağı zamanaşımı,
+TBK 147; FAQPage + iç link). Toplam long-tail alt sayfa: `/ihtarname/kira-tahliye`,
+`/ihtarname/alacak`, `/zamanasimi/cek`, `/zamanasimi/kira`.
+
+**B12:** `SEO_STRATEJI.md` "ARŞİV" notuyla işaretlendi; tek geçerli kaynak bu belge.
+
+### 0.B İçerik Yönetim Sistemi (Blog CMS) + otomatik SEO — 2026-06-26
+
+Admin panelden makale ekleme/düzenleme/yayınlama ve **otomatik SEO** akışı kuruldu:
+
+| Katman | Dosya | İşlev |
+|---|---|---|
+| DB | `infra/db/20_blog_articles.sql` | `blog_articles` tablosu (slug, başlık, gövde, meta_*, keywords[], faq jsonb, status, seo_score, seo_notes, published_at) — GLOBAL, RLS yok |
+| Otomatik SEO | `services/seo_uret.py` | `makale_seo_uret()`: LLM ile meta_title/description/keywords/slug/FAQ üretir; **LLM yoksa heuristik fallback**. `seo_skor_hesapla()`: 0-100 skor + iyileştirme notları. `slugify()` Türkçe-duyarlı |
+| Backend | `api/routers/icerik.py` | Public: `/liste`, `/makale/{slug}` (yalnız yayınlananlar). Admin: CRUD + `/seo` (otomatik üret) + `/yayinla` + `/taslak`. `main.py`'ye kayıtlı (`/api/icerik`) |
+| Admin UI | `web/app/panel/admin/icerik/` | Liste (durum + SEO skoru), editör (başlık/gövde/meta/SSS), **“SEO Üret”** ve **“Yayınla”** butonları; sidebar'a “İçerik / Blog” linki |
+| Public | `web/app/blog/[slug]/page.tsx` | Yayınlanan makaleyi DB'den çeker; hafif Markdown render + Article & FAQPage JSON-LD + `generateMetadata`. Blog index ve `sitemap.ts` yayınlananları otomatik dahil eder (API erişilemezse statik içeriğe **graceful fallback**) |
+
+**Akış:** Admin “Yeni Makale” → başlık+gövde girer → **“SEO Üret”** (meta/keywords/FAQ
++ skor otomatik dolar) → **“Yayınla”** → makale anında `/blog/<slug>` adresinde,
+blog index'inde ve sitemap'te görünür. Küratörlü statik makaleler korunur (aynı slug'da
+statik öncelikli).
+
+**Kalan (sürekli/ölçek):** karar sitemap'ini kademeli 10K→tam ölçek; ek blog
+makaleleri (artık panelden); istenirse karar sayfaları için kalıcı önbellekli kısa AI lede.
 
 > **Not (doğrulama):** Kod düzenlemeleri bu oturumda dosya aracıyla (Read)
 > bütünüyle teyit edildi; ancak sandbox'ın OneDrive mount'u düzenlenen mevcut
