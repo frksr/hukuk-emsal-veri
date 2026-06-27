@@ -181,6 +181,7 @@ export function AbonelikPanel() {
     if (!planKey) return;
     const eks = new Set<string>();
     if (fatura.tc.trim().length !== 11) eks.add("tc");
+    if (!fatura.telefon.trim()) eks.add("telefon");
     if (!fatura.adres.trim()) eks.add("adres");
     if (!fatura.sehir.trim()) eks.add("sehir");
     if (eks.size > 0) {
@@ -354,13 +355,13 @@ export function AbonelikPanel() {
                     <>
                       <div>
                         <label className="text-xs font-medium text-muted-foreground">
-                          Cep telefonu <span className="text-muted-foreground/60">(opsiyonel)</span>
+                          Cep telefonu <span className="text-destructive">*</span>
                         </label>
                         <input
                           inputMode="tel" value={fatura.telefon}
                           onChange={(e) => alanGuncelle("telefon", e.target.value)}
                           placeholder="05XXXXXXXXX"
-                          className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className={`mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${eksik.has("telefon") ? "border-destructive ring-1 ring-destructive" : ""}`}
                         />
                       </div>
                       <div>

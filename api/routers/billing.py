@@ -164,13 +164,14 @@ async def checkout(
     if not plan:
         raise HTTPException(400, "Geçersiz plan.")
 
-    # TR faturalama: iyzico canlı modda TC/adres/şehir ZORUNLU. Telefon ise iyzico'da
-    # OPSİYONEL olduğundan zorunlu tutulmaz (verilirse format kontrolü uygulanır).
+    # TR faturalama: iyzico TC/telefon/adres/şehir ZORUNLU.
     # Dev/mock modda (iyzico yapılandırılmamış) doğrulama esnetilir.
     phone = _normalize_phone(payload.phone)
     if iyzico_is_configured():
         if not _valid_tckn(payload.identity_no):
             raise HTTPException(400, "Geçerli bir TC Kimlik No (11 hane) gerekli.")
+        if not phone:
+            raise HTTPException(400, "Geçerli bir cep telefonu numarası gerekli (05XXXXXXXXX).")
         if not (payload.address and payload.address.strip()):
             raise HTTPException(400, "Fatura adresi gerekli.")
         if not (payload.city and payload.city.strip()):
@@ -189,8 +190,8 @@ async def checkout(
                 "name": first,
                 "surname": last,
                 "email": user.email,
-                "phone": phone or "+905000000000",  # dev/mock fallback
-                "identity_no": payload.identity_no or "11111111111",
+                "phone": phone or "+905000000000",  # dev/mock modu (iyzico kapalı) için
+                "identity_no": payload.identity_no or "11111111111",  # dev/mock modu için
                 "city": (payload.city or "İstanbul").strip(),
                 "address": (payload.address or "—").strip(),
                 "zip": payload.zip_code or "34000",
@@ -591,12 +592,12 @@ async def addon_checkout(
     if not pack:
         raise HTTPException(400, "Geçersiz paket.")
 
-    # Telefon iyzico'da OPSİYONEL — zorunlu tutmuyoruz. Verilirse format kontrolü
-    # uygulanır; verilmezse gönderilmez (TC ve adres iyzico gereği zorunlu kalır).
     phone = _normalize_phone(payload.phone)
     if iyzico_is_configured():
         if not _valid_tckn(payload.identity_no):
             raise HTTPException(400, "Geçerli bir TC Kimlik No (11 hane) gerekli.")
+        if not phone:
+            raise HTTPException(400, "Geçerli bir cep telefonu numarası gerekli (05XXXXXXXXX).")
         if not (payload.address and payload.address.strip()):
             raise HTTPException(400, "Fatura adresi gerekli.")
 
@@ -622,8 +623,8 @@ async def addon_checkout(
             order_id=order_id,
             user={
                 "name": first, "surname": last, "email": user.email,
-                "phone": phone or "+905000000000",
-                "identity_no": payload.identity_no or "11111111111",
+                "phone": phone or "+905000000000",  # dev/mock modu için
+                "identity_no": payload.identity_no or "11111111111",  # dev/mock modu için
                 "city": (payload.city or "İstanbul").strip(),
                 "address": (payload.address or "—").strip(),
                 "zip": payload.zip_code or "34000",
