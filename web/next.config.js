@@ -27,6 +27,13 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://hukukcuyapayzekasi.com",
   },
+  async rewrites() {
+    // Dış URL /app/* ; iç route klasörü app/panel/*. Auth-gate /app yolunu bekler.
+    return [
+      { source: "/app", destination: "/panel" },
+      { source: "/app/:path*", destination: "/panel/:path*" },
+    ];
+  },
 };
 
 module.exports = nextConfig;
