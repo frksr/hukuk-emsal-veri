@@ -64,11 +64,11 @@ def search(query: str, k: int = 5, where: dict | None = None) -> list[dict]:
     sql = """
         SELECT chunk_id, decision_id, chunk_index, document, source, court_chamber,
                case_no, decision_no, decision_date, topic_tags, source_url,
-               1 - (embedding <=> %(q)s) AS similarity
+               1 - (embedding <=> %(q)s::vector) AS similarity
         FROM rag_chunks
         WHERE (%(source)s::text IS NULL OR source = %(source)s)
           AND (%(court)s::text IS NULL OR court_chamber = %(court)s)
-        ORDER BY embedding <=> %(q)s
+        ORDER BY embedding <=> %(q)s::vector
         LIMIT %(k)s
     """
     params = {
