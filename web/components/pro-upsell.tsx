@@ -25,7 +25,7 @@ export function ProUpsell({
 }) {
   const router = useRouter();
   const ekPaketHref = modul
-    ? `/app/ayarlar/ek-paketler?modul=${encodeURIComponent(modul)}`
+    ? `/panel/ayarlar/ek-paketler?modul=${encodeURIComponent(modul)}`
     : "/panel/ayarlar/ek-paketler";
   return (
     <Card className="max-w-2xl mx-auto border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">

@@ -144,7 +144,7 @@ def kota(event_type: str, min_tier: str | None = None):
                 "min_tier": min_tier,
                 "can_buy": oturum_var,
                 "packs": await krediler.modul_paketleri_async(event_type),
-                "upgrade_url": "/app/ayarlar/abonelik" if oturum_var else "/kayit",
+                "upgrade_url": "/panel/ayarlar/abonelik" if oturum_var else "/kayit",
                 "message": mesaj,
                 "reset_at": (donem_bit.isoformat() if limit is not None else None),
             },

@@ -66,7 +66,7 @@ TEMPLATES = {
             "<p>Aylık ₺799. İstediğiniz an iptal edebilirsiniz; iptalde hizmet dönem "
             "sonuna kadar açık kalır. Para iadesi yapılmaz.</p>"
         ),
-        "cta": ("/app/ayarlar/abonelik", "Pro + UYAP'ı İncele"),
+        "cta": ("/panel/ayarlar/abonelik", "Pro + UYAP'ı İncele"),
     },
     "welcome_day_7": {
         "subject": "📊 Bir haftadır bizimle — geri bildiriminizi alalım?",

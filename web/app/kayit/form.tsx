@@ -39,7 +39,7 @@ export function KayitForm() {
       await signIn("credentials", { email, password, redirect: false });
       const next =
         secilenPlan && PAID_PLANS.has(secilenPlan)
-          ? `/app/ayarlar/abonelik?plan=${secilenPlan}`
+          ? `/panel/ayarlar/abonelik?plan=${secilenPlan}`
           : "/panel";
       router.push(`/giris/dogrulama?next=${encodeURIComponent(next)}`);
       router.refresh();

@@ -24,7 +24,13 @@ async function tokenAl(req: NextRequest): Promise<string | null> {
 }
 
 function yonlendir(req: NextRequest, token: string | null) {
-  const dest = new URL("/app/ayarlar/abonelik", req.nextUrl.origin);
+  // req.nextUrl.origin Cloud Run'da internal adres (0.0.0.0:8080) olabiliyor;
+  // NEXTAUTH_URL / NEXT_PUBLIC_SITE_URL env var'ını tercih et.
+  const origin =
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    req.nextUrl.origin;
+  const dest = new URL("/panel/ayarlar/abonelik", origin);
   dest.searchParams.set("callback", "1");
   if (token) dest.searchParams.set("token", token);
   return NextResponse.redirect(dest, 303);

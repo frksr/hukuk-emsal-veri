@@ -170,7 +170,7 @@ async def create_subscription_checkout(
         return {
             "status": "success",
             "token": f"mock-{tenant_id}-{plan_tier}",
-            "paymentPageUrl": f"{SITE_URL}/app/ayarlar/abonelik?mock=1&plan={plan_tier}",
+            "paymentPageUrl": f"{SITE_URL}/panel/ayarlar/abonelik?mock=1&plan={plan_tier}",
             "checkoutFormContent": "",
             "dev_mode": True,
         }
@@ -267,7 +267,7 @@ async def create_addon_checkout(
         return {
             "status": "success",
             "token": f"mock-addon-{order_id}",
-            "paymentPageUrl": f"{SITE_URL}/app/ayarlar/ek-paketler?mock=1&order={order_id}",
+            "paymentPageUrl": f"{SITE_URL}/panel/ayarlar/ek-paketler?mock=1&order={order_id}",
             "checkoutFormContent": "",
             "dev_mode": True,
         }

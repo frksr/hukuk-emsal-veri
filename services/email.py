@@ -238,7 +238,7 @@ async def send_payment_failed_email(
         html=_wrap(
             "Ödeme alınamadı",
             body,
-            (f"{SITE_URL}/app/ayarlar/abonelik", "Ödemeyi Güncelle"),
+            (f"{SITE_URL}/panel/ayarlar/abonelik", "Ödemeyi Güncelle"),
         ),
     )
 

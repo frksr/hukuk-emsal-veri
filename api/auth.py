@@ -161,7 +161,7 @@ def require_plan(min_tier: str):
         if current < required:
             raise HTTPException(
                 402,
-                f"Bu özellik için {min_tier} planı gerekli. Yükseltme: /app/ayarlar/abonelik",
+                f"Bu özellik için {min_tier} planı gerekli. Yükseltme: /panel/ayarlar/abonelik",
             )
         return user
 
@@ -175,6 +175,6 @@ def require_uyap(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         raise HTTPException(
             402,
             "UYAP entegrasyonu sadece UYAP eklentili pakette mevcut. "
-            "Yükseltme: /app/ayarlar/abonelik",
+            "Yükseltme: /panel/ayarlar/abonelik",
         )
     return user
