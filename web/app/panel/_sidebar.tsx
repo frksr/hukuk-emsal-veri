@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered, Newspaper } from "lucide-react";
+import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered, Newspaper, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,8 +52,10 @@ const ADMIN_NAV: NavItem[] = [
 // Sınırsız ücretsiz araçlar — panelden hızlı erişim.
 // (Emsal arama free planda aylık limitli olduğu için buraya konmaz; üst menüden erişilir.)
 const ARACLAR = [
-  { href: "/faiz-hesaplayici", label: "Faiz & Tahsilat", icon: Calculator },
-  { href: "/zamanasimi", label: "Zamanaşımı", icon: Clock },
+  { href: "/panel/emsal-arama", label: "Emsal Arama", icon: Search },
+  { href: "/panel/dilekce", label: "Dilekçe Üret", icon: FileText },
+  { href: "/panel/faiz", label: "Faiz & Tahsilat", icon: Calculator },
+  { href: "/panel/zamanasimi", label: "Zamanaşımı", icon: Clock },
 ];
 
 export function AppSidebar({ userName }: { userName: string }) {

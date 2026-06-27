@@ -20,11 +20,11 @@ type Hizmet = {
 };
 
 const HIZMETLER: Hizmet[] = [
-  { icon: Search, title: "Emsal Karar Ara", desc: "10K+ Yargıtay, Danıştay kararı", href: "/emsal-arama" },
-  { icon: Calculator, title: "Faiz & Tahsilat", desc: "Yasal/ticari faiz + İİK harç hesabı", href: "/faiz-hesaplayici", rozet: "ucretsiz" },
-  { icon: Clock, title: "Zamanaşımı", desc: "Süre, bitiş ve durum hesaplama", href: "/zamanasimi", rozet: "ucretsiz" },
-  { icon: ShieldCheck, title: "KVKK Uyum", desc: "Sektörel uyum checklist'i", href: "/kvkk", rozet: "ucretsiz" },
-  { icon: FileText, title: "Dilekçe Üret", desc: "Emsallere atıflı Yapay Zeka taslak", href: "/dilekce" },
+  { icon: Search, title: "Emsal Karar Ara", desc: "10K+ Yargıtay, Danıştay kararı", href: "/panel/emsal-arama" },
+  { icon: Calculator, title: "Faiz & Tahsilat", desc: "Yasal/ticari faiz + İİK harç hesabı", href: "/panel/faiz", rozet: "ucretsiz" },
+  { icon: Clock, title: "Zamanaşımı", desc: "Süre, bitiş ve durum hesaplama", href: "/panel/zamanasimi", rozet: "ucretsiz" },
+  { icon: ShieldCheck, title: "KVKK Uyum", desc: "Sektörel uyum checklist'i", href: "/panel/kvkk", rozet: "ucretsiz" },
+  { icon: FileText, title: "Dilekçe Üret", desc: "Emsallere atıflı Yapay Zeka taslak", href: "/panel/dilekce" },
   { icon: Sparkles, title: "UYAP Dosyalarımda Yapay Zeka", desc: "Kendi davalarınla çalış", href: "/panel/ayarlar/abonelik", pro: true, cta: "Pro'ya Geç" },
 ];
 
