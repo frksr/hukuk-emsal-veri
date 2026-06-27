@@ -103,7 +103,7 @@ steps:
       - "--port=8080"
       - "--memory=2Gi"               # pgvector sorgu + DuckDB parquet icin yeterli
       - "--cpu=2"
-      - "--min-instances=1"          # cold start yok: her zaman sicak (baslica ERR_CONNECTION_RESET nedeni)
+      - "--min-instances=0"          # sifira olcek: bostayken maliyet ~0
       - "--max-instances=4"
       - "--allow-unauthenticated"
       - "--add-cloudsql-instances=$PROJECT_ID:${_REGION}:${_SQL_INSTANCE_ID}"

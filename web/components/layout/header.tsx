@@ -65,7 +65,7 @@ export function Header() {
           {menuGoster && (
             <Link
               href="/emsal-arama"
-              className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
+              className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600 whitespace-nowrap"
             >
               Hemen Ücretsiz Dene
             </Link>
@@ -77,7 +77,7 @@ export function Header() {
             menuGoster ? (
               <Link
                 href={panelHref}
-                className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
+                className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600 whitespace-nowrap"
               >
                 Panele Git
               </Link>
