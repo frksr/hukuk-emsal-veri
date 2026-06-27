@@ -99,29 +99,37 @@ async def public_liste() -> APIResponse:
     cached = _liste_cache.get("pub")
     if cached is not None:
         return APIResponse(ok=True, data=cached)
-    async with db_session() as conn:
-        rows = await conn.fetch(
-            """SELECT slug, title, excerpt, meta_description, keywords,
-                      author, published_at
-               FROM blog_articles
-               WHERE status = 'published'
-               ORDER BY published_at DESC NULLS LAST"""
-        )
-    data = [_row(r) for r in rows]
-    _liste_cache.set("pub", data)
-    return APIResponse(ok=True, data=data)
+    try:
+        async with db_session() as conn:
+            rows = await conn.fetch(
+                """SELECT slug, title, excerpt, meta_description, keywords,
+                          author, published_at
+                   FROM blog_articles
+                   WHERE status = 'published'
+                   ORDER BY published_at DESC NULLS LAST"""
+            )
+        data = [_row(r) for r in rows]
+        _liste_cache.set("pub", data)
+        return APIResponse(ok=True, data=data)
+    except Exception:
+        log.exception("icerik/liste: DB hatası (tablo henüz oluşturulmamış olabilir)")
+        return APIResponse(ok=True, data=[])
 
 
 @router.get("/makale/{slug}", response_model=APIResponse, summary="Yayınlanan makale")
 async def public_makale(slug: str = Path(..., min_length=1, max_length=120)) -> APIResponse:
-    async with db_session() as conn:
-        rec = await conn.fetchrow(
-            """SELECT slug, title, excerpt, body, meta_title, meta_description,
-                      keywords, faq, author, cover_image, published_at, updated_at
-               FROM blog_articles
-               WHERE slug = $1 AND status = 'published'""",
-            slug,
-        )
+    try:
+        async with db_session() as conn:
+            rec = await conn.fetchrow(
+                """SELECT slug, title, excerpt, body, meta_title, meta_description,
+                          keywords, faq, author, cover_image, published_at, updated_at
+                   FROM blog_articles
+                   WHERE slug = $1 AND status = 'published'""",
+                slug,
+            )
+    except Exception:
+        log.exception("icerik/makale: DB hatası")
+        raise HTTPException(503, "İçerik servisi şu an kullanılamıyor.")
     if not rec:
         raise HTTPException(404, "Makale bulunamadı veya yayında değil.")
     return APIResponse(ok=True, data=_row(rec))
