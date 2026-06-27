@@ -444,14 +444,14 @@ export function AbonelikPanel() {
             role="dialog"
             aria-modal="true"
           >
-            <div className="my-8 w-full max-w-md rounded-2xl border bg-white p-4 shadow-2xl">
+            <div className="my-8 w-full max-w-md rounded-2xl border bg-card p-4 shadow-2xl">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-700">Güvenli Ödeme</span>
+                <span className="text-sm font-semibold text-card-foreground">Güvenli Ödeme</span>
                 <button
                   type="button"
                   onClick={() => setIyzicoForm(null)}
                   aria-label="Kapat"
-                  className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
+                  className="rounded-md px-2 py-1 text-muted-foreground hover:bg-secondary"
                 >
                   ✕
                 </button>

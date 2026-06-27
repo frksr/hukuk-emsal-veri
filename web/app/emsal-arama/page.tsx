@@ -68,25 +68,25 @@ export default function EmsalAramaPage() {
 
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:py-14">
         {/* Breadcrumb */}
-        <nav aria-label="Sayfa konumu" className="mb-6 text-sm text-slate-500">
+        <nav aria-label="Sayfa konumu" className="mb-6 text-sm text-muted-foreground">
           <ol className="flex flex-wrap items-center gap-2">
             <li>
-              <Link href="/" className="hover:text-slate-900 hover:underline">
+              <Link href="/" className="hover:text-foreground hover:underline">
                 Ana Sayfa
               </Link>
             </li>
             <li aria-hidden>/</li>
-            <li aria-current="page" className="font-medium text-slate-900">
+            <li aria-current="page" className="font-medium text-foreground">
               Emsal Arama
             </li>
           </ol>
         </nav>
 
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Emsal Karar Arama
           </h1>
-          <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
+          <p className="mt-3 max-w-3xl text-base leading-relaxed text-muted-foreground">
             Yargıtay, Danıştay ve AİHM (HUDOC) veritabanlarından 10.000&apos;den
             fazla emsal karar arasında doğal dilde arama yapın. İcra takibi,
             tahsilat hukuku, ihtarname örnekleri ve menfi tespit gibi
