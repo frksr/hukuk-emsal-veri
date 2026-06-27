@@ -108,7 +108,11 @@ export function usePlan(): PlanState {
     let alive = true;
     (async () => {
       try {
-        const r = await fetch("/api/proxy/me", { cache: "no-store" });
+        // /me ve /me/krediler paralel çek — sıralı iki round-trip yerine tek tur.
+        const [r, kr] = await Promise.all([
+          fetch("/api/proxy/me", { cache: "no-store" }),
+          fetch("/api/proxy/me/krediler", { cache: "no-store" }),
+        ]);
         if (!r.ok) {
           cachedPlan = { ...BOS };
           if (alive) setState(cachedPlan);
@@ -120,10 +124,9 @@ export function usePlan(): PlanState {
         const isAdmin = (data?.user?.role ?? null) === "admin";
         const plan: string | null = isAdmin ? "enterprise" : (data?.tenant?.plan ?? null);
 
-        // Kredi bakiyelerini de çek (giriş yapılmışsa); hata olursa boş geç.
+        // Kredi bakiyelerini parse et; hata olursa boş geç.
         let krediler: Record<string, number> = {};
         try {
-          const kr = await fetch("/api/proxy/me/krediler", { cache: "no-store" });
           if (kr.ok) {
             const kb = await kr.json();
             const liste = (kb?.data ?? kb)?.bakiyeler ?? [];

@@ -20,14 +20,19 @@ const API_URL = (
 ).replace("//localhost", "//127.0.0.1");
 const SECRET = process.env.NEXTAUTH_SECRET || "";
 
+// JWT'yi kullanıcı başına cache'le (5 dk) — her istekte crypto işlemi yapmayı önler.
+const _tokenCache = new Map<string, { token: string; exp: number }>();
+
 async function buildToken(session: Session | null) {
   if (!session?.user) return null;
   const user = session.user as { id?: string; email?: string; name?: string; role?: string };
   if (!user.id) return null;
-  // Backend HS256 İMZALI düz JWT bekliyor (jwt.decode algorithms=["HS256"]).
-  // NextAuth encode() JWE (şifreli) üretir → uyumsuz. Bu yüzden jose ile HS256 imzala.
+
+  const cached = _tokenCache.get(user.id);
+  if (cached && cached.exp > Date.now()) return cached.token;
+
   const key = new TextEncoder().encode(SECRET);
-  return await new SignJWT({
+  const token = await new SignJWT({
     sub: user.id,
     email: user.email,
     name: user.name,
@@ -37,6 +42,10 @@ async function buildToken(session: Session | null) {
     .setIssuedAt()
     .setExpirationTime("30d")
     .sign(key);
+
+  // 5 dakika cache — backend token 30 gün geçerli, cache erken temizlenir.
+  _tokenCache.set(user.id, { token, exp: Date.now() + 5 * 60 * 1000 });
+  return token;
 }
 
 async function handle(req: Request, params: { path: string[] }) {
