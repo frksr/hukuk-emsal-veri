@@ -107,7 +107,7 @@ export function SorguPanel() {
           <Lock className="h-12 w-12 text-accent mx-auto mb-3" />
           <h2 className="text-xl font-semibold mb-2">UYAP Eklentisi Gerekli</h2>
           <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">{planError}</p>
-          <Button asChild><Link href="/app/ayarlar/abonelik">Planı Yükselt</Link></Button>
+          <Button asChild><Link href="/panel/ayarlar/abonelik">Planı Yükselt</Link></Button>
         </CardContent>
       </Card>
     );
@@ -268,7 +268,7 @@ export function SorguPanel() {
             ))}
             {docs.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-4">
-                Henüz dosya yok. <Link href="/app/dosyalar" className="text-primary hover:underline">Yükleyin</Link>
+                Henüz dosya yok. <Link href="/panel/dosyalar" className="text-primary hover:underline">Yükleyin</Link>
               </p>
             )}
           </CardContent>

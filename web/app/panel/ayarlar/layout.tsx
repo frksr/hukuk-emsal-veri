@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 const TABS = [
-  { href: "/app/ayarlar", label: "Profil" },
-  { href: "/app/ayarlar/guvenlik", label: "Güvenlik" },
-  { href: "/app/ayarlar/kvkk", label: "KVKK & Veriler" },
+  { href: "/panel/ayarlar", label: "Profil" },
+  { href: "/panel/ayarlar/guvenlik", label: "Güvenlik" },
+  { href: "/panel/ayarlar/kvkk", label: "KVKK & Veriler" },
 ];
 
 export default function AyarlarLayout({ children }: { children: React.ReactNode }) {

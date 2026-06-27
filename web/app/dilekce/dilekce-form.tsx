@@ -61,7 +61,7 @@ export function DilekceForm() {
     if (!durum.trim()) return;
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (mode === "ai" && !dilekceErisim) {
-      router.push("/app/ayarlar/ek-paketler?modul=dilekce");
+      router.push("/panel/ayarlar/ek-paketler?modul=dilekce");
       return;
     }
     setLoading(true);

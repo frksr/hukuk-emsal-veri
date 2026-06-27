@@ -145,7 +145,7 @@ function EkPaketlerIcerik() {
           }
           await yukle();
           // Token'ı URL'den temizle → sayfa yenilenince popup tekrar açılmaz.
-          router.replace("/app/ayarlar/ek-paketler");
+          router.replace("/panel/ayarlar/ek-paketler");
         }
         return;
       } else {

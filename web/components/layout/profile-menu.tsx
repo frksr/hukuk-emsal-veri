@@ -51,10 +51,10 @@ export function ProfileMenu({ name, email }: { name?: string | null; email?: str
             {email && <div className="text-xs text-muted-foreground truncate">{email}</div>}
           </div>
           <div className="py-1">
-            <Link href="/app" onClick={() => setOpen(false)} className={ogeClass}>
+            <Link href="/panel" onClick={() => setOpen(false)} className={ogeClass}>
               <LayoutDashboard className="h-4 w-4 text-muted-foreground" /> Panelim
             </Link>
-            <Link href="/app/ayarlar" onClick={() => setOpen(false)} className={ogeClass}>
+            <Link href="/panel/ayarlar" onClick={() => setOpen(false)} className={ogeClass}>
               <Settings className="h-4 w-4 text-muted-foreground" /> Ayarlar
             </Link>
           </div>

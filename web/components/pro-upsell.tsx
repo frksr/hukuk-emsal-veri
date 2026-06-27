@@ -26,7 +26,7 @@ export function ProUpsell({
   const router = useRouter();
   const ekPaketHref = modul
     ? `/app/ayarlar/ek-paketler?modul=${encodeURIComponent(modul)}`
-    : "/app/ayarlar/ek-paketler";
+    : "/panel/ayarlar/ek-paketler";
   return (
     <Card className="max-w-2xl mx-auto border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
       <CardHeader>
@@ -50,7 +50,7 @@ export function ProUpsell({
           ))}
         </ul>
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={() => router.push(isLoggedIn ? "/app/ayarlar/abonelik" : "/kayit")}>
+          <Button onClick={() => router.push(isLoggedIn ? "/panel/ayarlar/abonelik" : "/kayit")}>
             <Sparkles className="h-4 w-4 mr-1.5" />
             {isLoggedIn ? "Planı Yükselt" : "Ücretsiz kayıt ol"}
           </Button>

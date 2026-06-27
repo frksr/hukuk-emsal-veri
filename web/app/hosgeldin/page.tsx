@@ -40,10 +40,10 @@ export default function HosgeldinPage() {
 
       <div className="text-center space-y-3">
         <Button asChild size="lg">
-          <Link href="/app">Dashboard&apos;a Git <ArrowRight className="ml-2 h-4 w-4" /></Link>
+          <Link href="/panel">Dashboard&apos;a Git <ArrowRight className="ml-2 h-4 w-4" /></Link>
         </Button>
         <div>
-          <Link href="/app/ayarlar/abonelik" className="text-sm text-muted-foreground hover:text-foreground">
+          <Link href="/panel/ayarlar/abonelik" className="text-sm text-muted-foreground hover:text-foreground">
             Pro paketi ile daha fazlasını al →
           </Link>
         </div>

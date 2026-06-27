@@ -45,7 +45,7 @@ export function IhtarnameForm() {
     e.preventDefault();
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (!erisim) {
-      router.push("/app/ayarlar/ek-paketler?modul=ihtarname");
+      router.push("/panel/ayarlar/ek-paketler?modul=ihtarname");
       return;
     }
     setLoading(true);

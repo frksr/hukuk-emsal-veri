@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   const userId = (session?.user as { id?: string })?.id;
-  if (!userId) redirect("/giris?callbackUrl=/app/admin");
+  if (!userId) redirect("/giris?callbackUrl=/panel/admin");
 
   // Rolü JWT yerine DB'den doğrula (kaynak-doğruluk). Böylece hesap admin
   // yapıldığında, eski oturum token'ı 'user' taşısa bile admin paneli açılır.
@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   } catch {
     /* DB erişilemezse JWT rolüne düş */
   }
-  if (role !== "admin") redirect("/app?error=unauthorized");
+  if (role !== "admin") redirect("/panel?error=unauthorized");
 
   // Sekmeler artık sol menüde (AppSidebar). Burada yalnızca başlık + içerik.
   return (

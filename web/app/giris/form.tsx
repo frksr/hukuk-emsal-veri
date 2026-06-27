@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export function GirisForm() {
   const router = useRouter();
   const sp = useSearchParams();
-  const callbackUrl = sp.get("callbackUrl") || "/app";
+  const callbackUrl = sp.get("callbackUrl") || "/panel";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,12 +34,12 @@ export function GirisForm() {
     // Varsayılan hedefte (belirli bir callbackUrl yoksa) admin'i doğrudan
     // admin paneline yönlendir; diğer kullanıcıları panele.
     let hedef = callbackUrl;
-    if (callbackUrl === "/app") {
+    if (callbackUrl === "/panel") {
       try {
         const r = await fetch("/api/proxy/me", { cache: "no-store" });
         if (r.ok) {
           const j = await r.json();
-          if (j?.data?.user?.role === "admin") hedef = "/app/admin";
+          if (j?.data?.user?.role === "admin") hedef = "/panel/admin";
         }
       } catch { /* yok say → panele */ }
     }

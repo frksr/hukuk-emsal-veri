@@ -96,7 +96,7 @@ export function DocPanel({ docId }: { docId: string }) {
           <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-3" />
           <p className="text-destructive">{error || "Doküman bulunamadı"}</p>
           <Button asChild variant="outline" className="mt-4">
-            <Link href="/app/dosyalar"><ArrowLeft className="h-4 w-4 mr-2" /> Dosyalara Dön</Link>
+            <Link href="/panel/dosyalar"><ArrowLeft className="h-4 w-4 mr-2" /> Dosyalara Dön</Link>
           </Button>
         </CardContent>
       </Card>
@@ -107,7 +107,7 @@ export function DocPanel({ docId }: { docId: string }) {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <Link href="/app/dosyalar" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
+        <Link href="/panel/dosyalar" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
           <ArrowLeft className="h-3 w-3" /> Dosyalara dön
         </Link>
         <div className="flex items-start gap-3">

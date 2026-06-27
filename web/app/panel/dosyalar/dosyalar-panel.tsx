@@ -123,7 +123,7 @@ export function DosyalarPanel() {
             {planError}
           </p>
           <Button asChild>
-            <Link href="/app/ayarlar/abonelik">Planı Yükselt</Link>
+            <Link href="/panel/ayarlar/abonelik">Planı Yükselt</Link>
           </Button>
         </CardContent>
       </Card>

@@ -43,7 +43,7 @@ export function NotHatirlatma({ q }: { q: string }) {
         <span className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-200">
           <StickyNote className="h-4 w-4" /> Bu konuyla ilgili notların
         </span>
-        <Link href="/app/notlar" className="text-xs text-amber-700 dark:text-amber-300 underline shrink-0">
+        <Link href="/panel/notlar" className="text-xs text-amber-700 dark:text-amber-300 underline shrink-0">
           Notlarım
         </Link>
       </div>

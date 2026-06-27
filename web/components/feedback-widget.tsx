@@ -25,7 +25,7 @@ export function FeedbackWidget() {
   const [sent, setSent] = useState(false);
 
   // /app/admin altında widget'i gösterme (admin zaten panelde görüyor)
-  if (path?.startsWith("/app/admin")) return null;
+  if (path?.startsWith("/panel/admin")) return null;
 
   async function send(e: React.FormEvent) {
     e.preventDefault();

@@ -20,33 +20,33 @@ const PLAN_AD: Record<string, string> = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/app", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/app/notlar", label: "Notlarım", icon: StickyNote },
-  { href: "/app/hatirlaticilar", label: "Hatırlatıcılar", icon: Bell, badge: "Pro" },
-  { href: "/app/dosyalar", label: "Dosyalarım", icon: FolderClosed, badge: "Pro" },
-  { href: "/app/sorgu", label: "Yapay Zeka Sorgu", icon: Sparkles, badge: "Pro" },
-  { href: "/app/raporlar", label: "Raporlar", icon: FileText },
-  { href: "/app/gecmis", label: "Geçmiş", icon: FileSearch },
-  { href: "/app/ayarlar/ek-paketler", label: "Ek Paketler", icon: Package },
-  { href: "/app/ayarlar/abonelik", label: "Abonelik", icon: CreditCard },
-  { href: "/app/ayarlar", label: "Ayarlar", icon: Settings },
-  { href: "/app/oneri", label: "Bize Yazın", icon: MessageSquarePlus },
+  { href: "/panel", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/panel/notlar", label: "Notlarım", icon: StickyNote },
+  { href: "/panel/hatirlaticilar", label: "Hatırlatıcılar", icon: Bell, badge: "Pro" },
+  { href: "/panel/dosyalar", label: "Dosyalarım", icon: FolderClosed, badge: "Pro" },
+  { href: "/panel/sorgu", label: "Yapay Zeka Sorgu", icon: Sparkles, badge: "Pro" },
+  { href: "/panel/raporlar", label: "Raporlar", icon: FileText },
+  { href: "/panel/gecmis", label: "Geçmiş", icon: FileSearch },
+  { href: "/panel/ayarlar/ek-paketler", label: "Ek Paketler", icon: Package },
+  { href: "/panel/ayarlar/abonelik", label: "Abonelik", icon: CreditCard },
+  { href: "/panel/ayarlar", label: "Ayarlar", icon: Settings },
+  { href: "/panel/oneri", label: "Bize Yazın", icon: MessageSquarePlus },
 ];
 
 // Admin menüsü — admin kullanıcıda kullanıcı sekmeleri yerine bunlar görünür.
 // (İzleme/takip konumlu: sistem, müşteri, paket, kredi.)
 const ADMIN_NAV: NavItem[] = [
-  { href: "/app/admin", label: "Genel Bakış", icon: LayoutDashboard },
-  { href: "/app/admin/analitik", label: "Analitik", icon: BarChart3 },
-  { href: "/app/admin/sistem", label: "Sistem", icon: Activity },
-  { href: "/app/admin/kullanicilar", label: "Kullanıcılar", icon: Users },
-  { href: "/app/admin/paketler", label: "Paketler & Limitler", icon: SlidersHorizontal },
-  { href: "/app/admin/icerik", label: "İçerik / Blog", icon: Newspaper },
-  { href: "/app/admin/feedback", label: "Geri Bildirim", icon: MessageSquare },
-  { href: "/app/admin/audit", label: "Audit Log", icon: FileWarning },
-  { href: "/app/admin/beta", label: "Beta Davet", icon: Gift },
-  { href: "/app/admin/bekleme-listesi", label: "Bekleme Listesi", icon: ListOrdered },
-  { href: "/app/ayarlar", label: "Ayarlar", icon: Settings },
+  { href: "/panel/admin", label: "Genel Bakış", icon: LayoutDashboard },
+  { href: "/panel/admin/analitik", label: "Analitik", icon: BarChart3 },
+  { href: "/panel/admin/sistem", label: "Sistem", icon: Activity },
+  { href: "/panel/admin/kullanicilar", label: "Kullanıcılar", icon: Users },
+  { href: "/panel/admin/paketler", label: "Paketler & Limitler", icon: SlidersHorizontal },
+  { href: "/panel/admin/icerik", label: "İçerik / Blog", icon: Newspaper },
+  { href: "/panel/admin/feedback", label: "Geri Bildirim", icon: MessageSquare },
+  { href: "/panel/admin/audit", label: "Audit Log", icon: FileWarning },
+  { href: "/panel/admin/beta", label: "Beta Davet", icon: Gift },
+  { href: "/panel/admin/bekleme-listesi", label: "Bekleme Listesi", icon: ListOrdered },
+  { href: "/panel/ayarlar", label: "Ayarlar", icon: Settings },
 ];
 
 // Sınırsız ücretsiz araçlar — panelden hızlı erişim.

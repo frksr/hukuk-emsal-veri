@@ -163,7 +163,7 @@ export function AbonelikPanel() {
       setBasari(sonuc.message || "Aboneliğiniz aktif! Tüm Pro özellikler açıldı.");
       await loadCurrent();
       refreshPlan(); // sidebar/header plan rozetini anında tazele
-      router.replace("/app/ayarlar/abonelik");
+      router.replace("/panel/ayarlar/abonelik");
     } else {
       setError(sonuc.message || "Ödeme onaylanamadı.");
     }
@@ -290,7 +290,7 @@ export function AbonelikPanel() {
         baslik="Aboneliğiniz aktif 🎉"
         aciklama={basari ?? undefined}
         onKapat={() => setBasari(null)}
-        ctaHref="/app"
+        ctaHref="/panel"
         ctaLabel="Panele git"
       />
 

@@ -27,11 +27,11 @@ export function Header() {
   const isLoggedIn = !!user;
   const name = user?.name ?? null;
   const email = user?.email ?? null;
-  const panelHref = user?.role === "admin" ? "/app/admin" : "/app";
+  const panelHref = user?.role === "admin" ? "/panel/admin" : "/panel";
   const pathname = usePathname();
-  // Menüyü yalnızca /app (hesap) alanında gizle — orada sol sidebar var.
+  // Menüyü yalnızca /panel (hesap) alanında gizle — orada sol sidebar var.
   // Ana sayfa ve diğer genel sayfalarda menü her zaman görünür.
-  const menuGoster = !(pathname?.startsWith("/app") ?? false);
+  const menuGoster = !(pathname?.startsWith("/panel") ?? false);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -49,7 +49,7 @@ export function Header() {
           aria-label="Ana navigasyon"
           className="hidden items-center gap-1 md:flex"
         >
-          {/* Menü genel sayfalarda görünür; /app alanında sidebar var, gizli */}
+          {/* Menü genel sayfalarda görünür; /panel alanında sidebar var, gizli */}
           {menuGoster && NAV.map((item) => (
             <Link
               key={item.href}
@@ -72,7 +72,7 @@ export function Header() {
           )}
           {/* Oturum durumu — SSR'dan bilindiği için doğrudan render (titreme yok).
               Pazarlama sayfalarında kimlik gösterilmez; sadece "Panele Git" (best
-              practice). Hesap menüsü /app içindedir. */}
+              practice). Hesap menüsü /panel içindedir. */}
           {isLoggedIn ? (
             menuGoster ? (
               <Link
@@ -160,7 +160,7 @@ export function Header() {
                   <LayoutDashboard className="h-4 w-4" /> Panelim
                 </Link>
                 <Link
-                  href="/app/ayarlar"
+                  href="/panel/ayarlar"
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-foreground/90 hover:bg-secondary"
                 >

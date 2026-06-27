@@ -67,7 +67,7 @@ export function DashboardStats() {
           {
             icon: Coins, label: krediLabel, value: krediToplam,
             renk: "text-amber-600 dark:text-amber-400",
-            href: "/app/ayarlar/ek-paketler", title: krediTitle,
+            href: "/panel/ayarlar/ek-paketler", title: krediTitle,
           },
         ]);
       } catch {

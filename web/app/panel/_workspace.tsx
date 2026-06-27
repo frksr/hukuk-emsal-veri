@@ -68,13 +68,13 @@ export function WorkspacePanel() {
       <Card className="hover-lift">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base flex items-center gap-2"><History className="h-4 w-4 text-primary" /> Son Üretimlerim</CardTitle>
-          <Link href="/app/gecmis" className="text-xs text-primary hover:underline flex items-center gap-0.5">Tümü <ArrowRight className="h-3 w-3" /></Link>
+          <Link href="/panel/gecmis" className="text-xs text-primary hover:underline flex items-center gap-0.5">Tümü <ArrowRight className="h-3 w-3" /></Link>
         </CardHeader>
         <CardContent className="space-y-2">
           {uretimler.length === 0 ? (
             <p className="text-sm text-muted-foreground">Henüz üretim yok. <Link href="/dilekce" className="text-primary underline">Dilekçe üret</Link></p>
           ) : uretimler.map((u) => (
-            <Link key={u.id} href="/app/gecmis" className="block rounded-md border p-2 hover:bg-secondary text-sm">
+            <Link key={u.id} href="/panel/gecmis" className="block rounded-md border p-2 hover:bg-secondary text-sm">
               <div className="font-medium truncate">{u.baslik || TOOL_LABEL[u.tool] || u.tool}</div>
               <div className="text-xs text-muted-foreground">{TOOL_LABEL[u.tool] || u.tool} · {tarih(u.created_at)}</div>
             </Link>
@@ -86,13 +86,13 @@ export function WorkspacePanel() {
       <Card className="hover-lift">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base flex items-center gap-2"><StickyNote className="h-4 w-4 text-primary" /> Notlarım</CardTitle>
-          <Link href="/app/notlar" className="text-xs text-primary hover:underline flex items-center gap-0.5">Tümü <ArrowRight className="h-3 w-3" /></Link>
+          <Link href="/panel/notlar" className="text-xs text-primary hover:underline flex items-center gap-0.5">Tümü <ArrowRight className="h-3 w-3" /></Link>
         </CardHeader>
         <CardContent className="space-y-2">
           {notlar.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Henüz not yok. <Link href="/app/notlar" className="text-primary underline">Not ekle</Link></p>
+            <p className="text-sm text-muted-foreground">Henüz not yok. <Link href="/panel/notlar" className="text-primary underline">Not ekle</Link></p>
           ) : notlar.map((n) => (
-            <Link key={n.id} href="/app/notlar" className="block rounded-md border p-2 hover:bg-secondary text-sm">
+            <Link key={n.id} href="/panel/notlar" className="block rounded-md border p-2 hover:bg-secondary text-sm">
               <div className="font-medium truncate">{n.baslik || "Not"}</div>
               <div className="text-xs text-muted-foreground truncate">{n.icerik}</div>
             </Link>

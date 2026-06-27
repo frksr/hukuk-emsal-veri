@@ -25,7 +25,7 @@ const HIZMETLER: Hizmet[] = [
   { icon: Clock, title: "Zamanaşımı", desc: "Süre, bitiş ve durum hesaplama", href: "/zamanasimi", rozet: "ucretsiz" },
   { icon: ShieldCheck, title: "KVKK Uyum", desc: "Sektörel uyum checklist'i", href: "/kvkk", rozet: "ucretsiz" },
   { icon: FileText, title: "Dilekçe Üret", desc: "Emsallere atıflı Yapay Zeka taslak", href: "/dilekce" },
-  { icon: Sparkles, title: "UYAP Dosyalarımda Yapay Zeka", desc: "Kendi davalarınla çalış", href: "/app/ayarlar/abonelik", pro: true, cta: "Pro'ya Geç" },
+  { icon: Sparkles, title: "UYAP Dosyalarımda Yapay Zeka", desc: "Kendi davalarınla çalış", href: "/panel/ayarlar/abonelik", pro: true, cta: "Pro'ya Geç" },
 ];
 
 export default async function AppDashboard() {
@@ -76,7 +76,7 @@ export default async function AppDashboard() {
               <CardContent>
                 <Button asChild variant={h.pro ? "default" : "outline"} size="sm">
                   {/* Admin → Pro araç doğrudan açılır (yükseltme yok) */}
-                  <Link href={h.pro && isAdmin ? "/app/sorgu" : h.href}>
+                  <Link href={h.pro && isAdmin ? "/panel/sorgu" : h.href}>
                     {h.pro && isAdmin ? "Aç" : (h.cta ?? "Aç")}{" "}
                     <ArrowRight className="h-3 w-3 ml-1 transition-transform duration-300 group-hover:translate-x-1" />
                   </Link>
@@ -106,7 +106,7 @@ export default async function AppDashboard() {
               Türkiye&apos;de, şifrelenmiş ve sadece size özel.
             </p>
             <Button asChild>
-              <Link href="/app/ayarlar/abonelik">Pro Paketi İncele</Link>
+              <Link href="/panel/ayarlar/abonelik">Pro Paketi İncele</Link>
             </Button>
           </CardContent>
         </Card>

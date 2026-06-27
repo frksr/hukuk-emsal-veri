@@ -10,7 +10,6 @@ const DISALLOW = [
   "/panel/",
   "/_next/",
   "/static/",
-  "/app/",
   "/giris",
   "/kayit",
   "/sifre-sifirla",

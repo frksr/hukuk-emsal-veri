@@ -37,7 +37,7 @@ export function KarsiArgumentForm() {
     if (!tezi.trim()) return;
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (!erisim) {
-      router.push("/app/ayarlar/ek-paketler?modul=karsi_argument");
+      router.push("/panel/ayarlar/ek-paketler?modul=karsi_argument");
       return;
     }
     setLoading(true); setError(null);

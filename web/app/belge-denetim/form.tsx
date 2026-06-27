@@ -36,7 +36,7 @@ export function DenetimForm() {
   function gate(): boolean {
     // true → işleme devam edilebilir; false → yönlendirildi
     if (!isLoggedIn) { router.push("/kayit"); return false; }
-    if (!erisim) { router.push("/app/ayarlar/ek-paketler?modul=denetim"); return false; }
+    if (!erisim) { router.push("/panel/ayarlar/ek-paketler?modul=denetim"); return false; }
     return true;
   }
 

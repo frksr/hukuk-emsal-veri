@@ -10,14 +10,15 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   const pathname = headers().get("x-pathname") || "";
-  const isAppRoute = pathname.startsWith("/app");
+  // /panel/* hem doğrudan hem de /app/* rewrite'ı üzerinden gelebilir.
+  const isAppRoute = pathname.startsWith("/panel") || pathname.startsWith("/app");
 
-  // Gercek /app yolunda + oturum yoksa girise yonlendir.
+  // Gercek panel yolunda + oturum yoksa girise yonlendir.
   if (isAppRoute && !session?.user) {
     redirect("/giris?callbackUrl=" + encodeURIComponent(pathname));
   }
 
-  // Bu layout bazen /app disindaki rotalar (/, /giris ...) icin de calisiyor
+  // Bu layout bazen panel disindaki rotalar (/, /giris ...) icin de calisiyor
   // (Next routing ozelligi). O durumda app chrome'unu (sidebar) render ETME ve
   // session.user'a DOKUNMA — sadece icerigi gecir. Aksi halde null session ->
   // server-side exception olur.

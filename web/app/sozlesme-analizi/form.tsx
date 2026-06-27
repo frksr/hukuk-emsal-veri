@@ -45,7 +45,7 @@ export function SozlesmeForm() {
     if (!file) return;
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (!erisim) {
-      router.push("/app/ayarlar/ek-paketler?modul=sozlesme");
+      router.push("/panel/ayarlar/ek-paketler?modul=sozlesme");
       return;
     }
     // Boyut sınırı
@@ -86,7 +86,7 @@ export function SozlesmeForm() {
     if (!metin.trim()) return;
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (!erisim) {
-      router.push("/app/ayarlar/ek-paketler?modul=sozlesme");
+      router.push("/panel/ayarlar/ek-paketler?modul=sozlesme");
       return;
     }
     // Uzunluk sınırı

@@ -67,7 +67,7 @@ export function OzetForm() {
     e.preventDefault();
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (!erisim) {
-      router.push("/app/ayarlar/ek-paketler?modul=ozet");
+      router.push("/panel/ayarlar/ek-paketler?modul=ozet");
       return;
     }
     if (metin.trim().length < 100) return;

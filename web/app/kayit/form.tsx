@@ -40,7 +40,7 @@ export function KayitForm() {
       const next =
         secilenPlan && PAID_PLANS.has(secilenPlan)
           ? `/app/ayarlar/abonelik?plan=${secilenPlan}`
-          : "/app";
+          : "/panel";
       router.push(`/giris/dogrulama?next=${encodeURIComponent(next)}`);
       router.refresh();
     } catch (err) {
