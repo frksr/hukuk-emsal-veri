@@ -101,15 +101,15 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--port=8080"
-      - "--memory=1Gi"               # modelsiz container (embedding API + pgvector)
-      - "--cpu=1"
-      - "--min-instances=0"          # sifira olcek: bostayken maliyet ~0
+      - "--memory=2Gi"               # pgvector sorgu + DuckDB parquet icin yeterli
+      - "--cpu=2"
+      - "--min-instances=1"          # cold start yok: her zaman sicak (baslica ERR_CONNECTION_RESET nedeni)
       - "--max-instances=4"
       - "--allow-unauthenticated"
       - "--add-cloudsql-instances=$PROJECT_ID:${_REGION}:${_SQL_INSTANCE_ID}"
       - "--add-volume=name=ts,type=cloud-storage,bucket=${_TS_BUCKET}"
       - "--add-volume-mount=volume=ts,mount-path=/app/data/tenant_storage"
-      - "--update-env-vars=APP_ENV=production,ALLOWED_ORIGINS=${_SITE_URL},NEXT_PUBLIC_SITE_URL=${_SITE_URL},TENANT_STORAGE_ROOT=/app/data/tenant_storage,IYZICO_BASE_URL=https://api.iyzipay.com,WEB_CONCURRENCY=1,EMBEDDING_PROVIDER=google,EMBEDDING_API_MODEL=gemini-embedding-001,EMBEDDING_DIM=768"
+      - "--update-env-vars=APP_ENV=production,ALLOWED_ORIGINS=${_SITE_URL},NEXT_PUBLIC_SITE_URL=${_SITE_URL},TENANT_STORAGE_ROOT=/app/data/tenant_storage,IYZICO_BASE_URL=https://api.iyzipay.com,WEB_CONCURRENCY=2,EMBEDDING_PROVIDER=google,EMBEDDING_API_MODEL=gemini-embedding-001,EMBEDDING_DIM=768"
       - "--update-secrets=DATABASE_URL=DATABASE_URL:latest,SERVICE_DATABASE_URL=SERVICE_DATABASE_URL:latest,ADMIN_DATABASE_URL=ADMIN_DATABASE_URL:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,MASTER_ENCRYPTION_KEY=MASTER_ENCRYPTION_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,IYZICO_API_KEY=IYZICO_API_KEY:latest,IYZICO_SECRET_KEY=IYZICO_SECRET_KEY:latest,IYZICO_WEBHOOK_SECRET=IYZICO_WEBHOOK_SECRET:latest,IYZICO_PLAN_PRO_SOLO=IYZICO_PLAN_PRO_SOLO:latest,IYZICO_PLAN_PRO_UYAP=IYZICO_PLAN_PRO_UYAP:latest,IYZICO_PLAN_TEAM=IYZICO_PLAN_TEAM:latest,IYZICO_PLAN_TEAM_UYAP=IYZICO_PLAN_TEAM_UYAP:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASS=SMTP_PASS:latest,SMTP_FROM=SMTP_FROM:latest,ADMIN_EMAIL=ADMIN_EMAIL:latest"
     waitFor: ["push-api"]
 
@@ -125,7 +125,7 @@ steps:
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--port=8080"
-      - "--memory=512Mi"
+      - "--memory=1Gi"
       - "--cpu=1"
       - "--min-instances=1"
       - "--max-instances=4"
