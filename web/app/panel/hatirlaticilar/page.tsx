@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Bell, Plus, Trash2, Pencil, X, Clock, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,11 +74,17 @@ export default function HatirlaticilarPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const { confirm, dialog } = useConfirm();
-  // Yapay Zeka ile oluşturma (tek çağrı: çıkarım + eksik alan soruları)
+  // Yapay Zeka ile oluşturma
   const [aiMetin, setAiMetin] = useState("");
   const [aiYukleniyor, setAiYukleniyor] = useState(false);
   const [aiSorular, setAiSorular] = useState<{ alan: string; soru: string }[]>([]);
-  const [aiBilgi, setAiBilgi] = useState<string | null>(null);
+  const [aiSonuc, setAiSonuc] = useState(false);
+  // Adım adım eksik alan sorusu
+  const [aiAdim, setAiAdim] = useState(0);
+  const [aiAdimCevap, setAiAdimCevap] = useState("");
+  // Cache: aynı metin için tekrar AI'a gitme
+  type AiCache = { baslik: string | null; remind_at: string | null; not_metni: string | null; eksik: { alan: string; soru: string }[] };
+  const aiCacheRef = useRef<Map<string, AiCache>>(new Map());
 
   async function yukle() {
     setLoading(true);
@@ -123,40 +129,61 @@ export default function HatirlaticilarPage() {
     setEditId(null);
     setAiMetin("");
     setAiSorular([]);
-    setAiBilgi(null);
+    setAiSonuc(false);
+    setAiAdim(0);
+    setAiAdimCevap("");
   }
 
-  // Tek Yapay Zeka çağrısı: serbest metinden başlık/zaman/not çıkar + eksikler için
-  // doğal sorular al. Sonrası (soru-cevap doldurma, oluşturma) ek çağrı OLMADAN.
+  function _aiUygula(d: AiCache) {
+    setForm((f) => ({
+      ...f,
+      baslik: d.baslik || f.baslik,
+      remind_at: d.remind_at || f.remind_at,
+      not_metni: d.not_metni || f.not_metni,
+    }));
+    setAiSorular(d.eksik ?? []);
+    setAiAdim(0);
+    setAiAdimCevap("");
+    setAiSonuc(true);
+  }
+
   async function aiHazirla() {
-    if (aiMetin.trim().length < 3) return;
+    const metin = aiMetin.trim();
+    if (metin.length < 3) return;
+
+    // Sonuç zaten gösteriliyorsa (kullanıcı tekrar bastı) — yineleme yok
+    if (aiSonuc) return;
+
+    // Cache'de varsa göndermeden uygula (kısa gecikmeyle "işleniyor" hissi ver)
+    const cached = aiCacheRef.current.get(metin);
+    if (cached) {
+      setAiYukleniyor(true);
+      await new Promise((r) => setTimeout(r, 400));
+      _aiUygula(cached);
+      setAiYukleniyor(false);
+      return;
+    }
+
     setAiYukleniyor(true);
     setError(null);
-    setAiBilgi(null);
     try {
       const simdi = toLocalInput(new Date().toISOString());
       const r = await fetch("/api/proxy/hatirlatici/ai-tasla", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metin: aiMetin, simdi }),
+        body: JSON.stringify({ metin, simdi }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.message || "Yapay Zeka şu an yanıt veremedi.");
       const d = j?.data ?? j;
-      setForm((f) => ({
-        ...f,
-        baslik: d.baslik || f.baslik,
-        remind_at: d.remind_at || f.remind_at,
-        not_metni: d.not_metni || f.not_metni,
-      }));
-      const sorular = (d.eksik ?? []) as { alan: string; soru: string }[];
-      setAiSorular(sorular);
-      setAiBilgi(
-        sorular.length
-          ? "Birkaç bilgi eksik — aşağıda sizden rica ediyorum, sonra hatırlatıcıyı oluşturuyorum."
-          : "Taslağınız hazır. Aşağıdan kontrol edip oluşturabilirsiniz.",
-      );
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const sonuc: AiCache = {
+        baslik: d.baslik || null,
+        remind_at: d.remind_at || null,
+        not_metni: d.not_metni || metin,
+        eksik: (d.eksik ?? []) as { alan: string; soru: string }[],
+      };
+      aiCacheRef.current.set(metin, sonuc);
+      _aiUygula(sonuc);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Hata");
     } finally {
@@ -164,7 +191,53 @@ export default function HatirlaticilarPage() {
     }
   }
 
-  const soru = (alan: string) => aiSorular.find((s) => s.alan === alan)?.soru;
+  // Adım adım eksik alan cevabını uygula ve bir sonraki adıma geç
+  function aiAdimIlerle() {
+    const soruAlan = aiSorular[aiAdim]?.alan;
+    if (!soruAlan || !aiAdimCevap.trim()) return;
+    if (soruAlan === "baslik") {
+      setForm((f) => ({ ...f, baslik: aiAdimCevap.trim() }));
+    } else if (soruAlan === "remind_at") {
+      setForm((f) => ({ ...f, remind_at: aiAdimCevap.trim() }));
+    }
+    setAiAdimCevap("");
+    setAiAdim((i) => i + 1);
+  }
+
+  async function aiOlustur() {
+    const remindISO = toISO(form.remind_at);
+    if (!form.baslik.trim() || !remindISO) {
+      setError("Lütfen başlık ve tarih/saat alanlarını doldurun.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/proxy/hatirlatici/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baslik: form.baslik,
+          not_metni: form.not_metni || null,
+          kaynak_tip: "serbest",
+          kaynak_id: null,
+          kaynak_ozet: null,
+          remind_at: remindISO,
+          channel: "email",
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => null);
+        throw new Error(j?.message || "Oluşturulamadı. Tarih gelecekte olmalı.");
+      }
+      reset();
+      await yukle();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hata");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Kaynak seçimi: "tip:id" formatında değer; kaynak_tip/id/ozet doldurur.
   function kaynakSec(value: string) {
@@ -313,26 +386,123 @@ export default function HatirlaticilarPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Hatırlatıcınızı kendi cümlelerinizle yazın; gerisini hallederiz. Örn:
-              &ldquo;Yarın 15.00&apos;te Ahmet&apos;in icra dosyası itiraz süresinin son gününü hatırlat.&rdquo;
-            </p>
-            <Textarea
-              rows={3}
-              placeholder="Hatırlatıcıyı serbestçe yazın…"
-              value={aiMetin}
-              onChange={(e) => setAiMetin(e.target.value)}
-            />
-            <div className="flex justify-end">
-              <Button type="button" onClick={aiHazirla} disabled={aiYukleniyor || aiMetin.trim().length < 3}>
-                {aiYukleniyor ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                Yapay Zeka ile hazırla
-              </Button>
-            </div>
-            {aiBilgi && (
-              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm flex items-start gap-2">
-                <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <span>{aiBilgi}</span>
+            {!aiSonuc ? (
+              /* — GİRİŞ EKRANI — */
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Hatırlatıcınızı kendi cümlelerinizle yazın; gerisini hallederiz. Örn:
+                  &ldquo;Yarın 15.00&apos;te Ahmet&apos;in icra dosyası itiraz süresinin son gününü hatırlat.&rdquo;
+                </p>
+                <Textarea
+                  rows={3}
+                  placeholder="Hatırlatıcıyı serbestçe yazın…"
+                  value={aiMetin}
+                  onChange={(e) => setAiMetin(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) aiHazirla(); }}
+                />
+                <div className="flex justify-end">
+                  <Button type="button" onClick={aiHazirla} disabled={aiYukleniyor || aiMetin.trim().length < 3}>
+                    {aiYukleniyor ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                    Yapay Zeka ile hazırla
+                  </Button>
+                </div>
+              </>
+            ) : aiAdim < aiSorular.length ? (
+              /* — EKSİK ALAN SORUSU (adım adım) — */
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground italic">&ldquo;{aiMetin}&rdquo;</p>
+                {/* İlerleme */}
+                {aiSorular.length > 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    Soru {aiAdim + 1} / {aiSorular.length}
+                  </p>
+                )}
+                <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                  <p className="text-sm flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <span>{aiSorular[aiAdim].soru}</span>
+                  </p>
+                </div>
+                {aiSorular[aiAdim].alan === "remind_at" ? (
+                  <Input
+                    type="datetime-local"
+                    value={aiAdimCevap}
+                    onChange={(e) => setAiAdimCevap(e.target.value)}
+                    autoFocus
+                  />
+                ) : (
+                  <Input
+                    placeholder="Yanıtınızı yazın…"
+                    value={aiAdimCevap}
+                    onChange={(e) => setAiAdimCevap(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") aiAdimIlerle(); }}
+                    autoFocus
+                  />
+                )}
+                <div className="flex gap-2 justify-between">
+                  <Button type="button" variant="ghost" size="sm" onClick={reset}>
+                    <X className="h-4 w-4 mr-1" /> Vazgeç
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={aiAdimIlerle}
+                    disabled={!aiAdimCevap.trim()}
+                  >
+                    {aiAdim < aiSorular.length - 1 ? "Devam →" : "Tamam →"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* — ONAY / ÖZET EKRANI — */
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground italic">&ldquo;{aiMetin}&rdquo;</p>
+                {/* Başlık — düzenlenebilir */}
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Başlık</label>
+                  <Input
+                    value={form.baslik}
+                    onChange={(e) => setForm((f) => ({ ...f, baslik: e.target.value }))}
+                    placeholder="Hatırlatıcı başlığı…"
+                  />
+                </div>
+                {/* Tarih & Saat — düzenlenebilir */}
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Tarih & Saat</label>
+                  <Input
+                    type="datetime-local"
+                    value={form.remind_at}
+                    onChange={(e) => setForm((f) => ({ ...f, remind_at: e.target.value }))}
+                  />
+                </div>
+                {/* Not */}
+                {form.not_metni && (
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Not</label>
+                    <Textarea
+                      rows={2}
+                      value={form.not_metni}
+                      onChange={(e) => setForm((f) => ({ ...f, not_metni: e.target.value }))}
+                    />
+                  </div>
+                )}
+                <div className="flex gap-2 justify-between pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setAiSonuc(false); setAiAdim(0); setAiSorular([]); }}
+                  >
+                    <X className="h-4 w-4 mr-1" /> Yeniden yaz
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={aiOlustur}
+                    disabled={saving || !form.baslik.trim() || !form.remind_at}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                    Hatırlatıcıyı Oluştur
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
