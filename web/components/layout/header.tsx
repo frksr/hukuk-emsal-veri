@@ -65,9 +65,9 @@ export function Header() {
           {menuGoster && (
             <Link
               href="/emsal-arama"
-              className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600 whitespace-nowrap"
+              className="ml-2 inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-600 whitespace-nowrap"
             >
-              Hemen Ücretsiz Dene
+              Ücretsiz Dene
             </Link>
           )}
           {/* Oturum durumu — SSR'dan bilindiği için doğrudan render (titreme yok).
@@ -96,9 +96,9 @@ export function Header() {
               </Link>
               <Link
                 href="/kayit"
-                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600"
+                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-600 whitespace-nowrap"
               >
-                Kayıt ol
+                Kayıt Ol
               </Link>
             </div>
           )}
@@ -144,9 +144,9 @@ export function Header() {
             <Link
               href="/emsal-arama"
               onClick={() => setOpen(false)}
-              className="mt-1 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-base font-medium text-primary-foreground hover:bg-primary-600"
+              className="mt-1 inline-flex h-11 items-center justify-center rounded-md bg-primary px-6 text-base font-semibold text-primary-foreground hover:bg-primary-600"
             >
-              Hemen Ücretsiz Dene
+              Ücretsiz Dene
             </Link>
           )}
           <div className="mt-2 border-t border-border pt-2">
@@ -186,9 +186,9 @@ export function Header() {
                 <Link
                   href="/kayit"
                   onClick={() => setOpen(false)}
-                  className="flex-1 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-600"
+                  className="flex-1 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-600 whitespace-nowrap"
                 >
-                  Kayıt ol
+                  Kayıt Ol
                 </Link>
               </div>
             )}

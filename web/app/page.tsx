@@ -284,10 +284,10 @@ export default function HomePage() {
               içinde tamamlayın.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="text-base">
+              <Button asChild size="lg" className="text-lg px-8 py-6 font-semibold">
                 <Link href="/emsal-arama" aria-label="Emsal karar aramayı başlat">
-                  Hemen Ücretsiz Dene
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
+                  Ücretsiz Dene
+                  <ArrowRight className="ml-2 h-5 w-5" aria-hidden />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="text-base">
@@ -431,10 +431,10 @@ export default function HomePage() {
 
         {/* ORTA CTA */}
         <section aria-label="Hemen başla" className="mx-auto w-full max-w-4xl px-4 pb-6 pt-2 text-center">
-          <Button asChild size="lg" className="text-base">
+          <Button asChild size="lg" className="text-lg px-8 py-6 font-semibold">
             <Link href="/emsal-arama" aria-label="Emsal karar aramayı başlat">
-              Hemen Ücretsiz Dene
-              <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
+              Ücretsiz Dene
+              <ArrowRight className="ml-2 h-5 w-5" aria-hidden />
             </Link>
           </Button>
         </section>
@@ -537,10 +537,10 @@ export default function HomePage() {
               Kredi kartı gerekmez.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="text-base">
+              <Button asChild size="lg" className="text-lg px-8 py-6 font-semibold">
                 <Link href="/emsal-arama" aria-label="Emsal karar aramayı başlat">
-                  Hemen Ücretsiz Dene
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
+                  Ücretsiz Dene
+                  <ArrowRight className="ml-2 h-5 w-5" aria-hidden />
                 </Link>
               </Button>
               <Button
