@@ -64,6 +64,7 @@ export function AbonelikPanel() {
   const [secilenPlan, setSecilenPlan] = useState<string | null>(null);
   const [fatura, setFatura] = useState({ tc: "", telefon: "", adres: "", sehir: "", posta: "" });
   const [kayitliAdresVar, setKayitliAdresVar] = useState(false);
+  const [kayitliTelefonVar, setKayitliTelefonVar] = useState(false);
   const [farkliGir, setFarkliGir] = useState(false);
   const [adresKaydet, setAdresKaydet] = useState(false);
   const [modalHata, setModalHata] = useState<string | null>(null);
@@ -89,6 +90,7 @@ export function AbonelikPanel() {
             posta: f.posta || b.posta || "",
           }));
           if (b.adres && b.sehir) setKayitliAdresVar(true);
+          if (b.telefon) setKayitliTelefonVar(true);
         }
       })
       .catch(() => {});
@@ -208,20 +210,25 @@ export function AbonelikPanel() {
         setModalHata(j?.message || j?.detail || "Checkout başlatılamadı.");
         return;
       }
-      // "Adresimi kaydet" işaretliyse (ve kayıtlı değilse) profile yaz (TC saklanmaz).
-      if (adresKaydet && !kayitliAdresVar) {
+      // Telefonu her zaman kaydet (bir kez girilince bir daha sorma).
+      // Adres de kaydet checkbox'ı işaretliyse veya zaten kayıtlı değilse adresi de yaz.
+      const telefonuKaydet = fatura.telefon.trim() && !kayitliTelefonVar;
+      const adresiKaydet = adresKaydet && !kayitliAdresVar;
+      if (telefonuKaydet || adresiKaydet) {
         try {
+          const billing: Record<string, string> = { telefon: fatura.telefon.trim() };
+          if (adresiKaydet) {
+            billing.adres = fatura.adres.trim();
+            billing.sehir = fatura.sehir.trim();
+            billing.posta = fatura.posta.trim();
+          }
           await fetch("/api/proxy/me", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              billing: {
-                adres: fatura.adres.trim(), sehir: fatura.sehir.trim(),
-                posta: fatura.posta.trim(), telefon: fatura.telefon.trim(),
-              },
-            }),
+            body: JSON.stringify({ billing }),
           });
-          setKayitliAdresVar(true);
+          if (adresiKaydet) setKayitliAdresVar(true);
+          if (telefonuKaydet) setKayitliTelefonVar(true);
         } catch { /* kayıt başarısızsa engelleme */ }
       }
       const d = j?.data ?? j;
@@ -337,6 +344,19 @@ export function AbonelikPanel() {
                     />
                   </div>
 
+                  {/* Telefon — her zaman göster, bir kez girilince kaydedilir */}
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Cep telefonu <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      inputMode="tel" value={fatura.telefon}
+                      onChange={(e) => alanGuncelle("telefon", e.target.value)}
+                      placeholder="05XXXXXXXXX"
+                      className={`mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${eksik.has("telefon") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                    />
+                  </div>
+
                   {kayitliAdresVar && !farkliGir ? (
                     <div className="rounded-md border bg-secondary/40 p-3 text-sm">
                       <div className="flex items-center justify-between gap-2">
@@ -353,17 +373,6 @@ export function AbonelikPanel() {
                     </div>
                   ) : (
                     <>
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Cep telefonu <span className="text-destructive">*</span>
-                        </label>
-                        <input
-                          inputMode="tel" value={fatura.telefon}
-                          onChange={(e) => alanGuncelle("telefon", e.target.value)}
-                          placeholder="05XXXXXXXXX"
-                          className={`mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${eksik.has("telefon") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        />
-                      </div>
                       <div>
                         <label className="text-xs font-medium text-muted-foreground">
                           Fatura adresi <span className="text-destructive">*</span>
