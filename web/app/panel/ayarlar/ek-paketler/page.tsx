@@ -298,7 +298,17 @@ function EkPaketlerIcerik() {
           </div>
         </CardHeader>
         <CardContent className="relative">
-          {bakiyeler.length === 0 ? (
+          {loading ? (
+            /* Yüklenirken skeleton — boş durum gösterme */
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="rounded-xl border border-[#D4AF37]/30 bg-card/60 p-3 animate-pulse">
+                  <div className="h-7 w-12 rounded bg-muted" />
+                  <div className="mt-2 h-3 w-16 rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          ) : bakiyeler.length === 0 ? (
             <div className="flex items-center gap-3 rounded-lg border border-dashed border-[#D4AF37]/45 bg-background/40 p-4">
               <Coins className="h-8 w-8 text-[#D4AF37]/80 shrink-0" />
               <div className="text-sm">
@@ -324,13 +334,37 @@ function EkPaketlerIcerik() {
         </CardContent>
       </Card>
 
-      {loading && (
-        <div className="p-10 text-center text-muted-foreground">
-          <Loader2 className="h-7 w-7 animate-spin mx-auto" />
-        </div>
-      )}
-
-      {!loading && (
+      {loading ? (
+        <>
+          <section className="space-y-3">
+            <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-lg border bg-card p-5 animate-pulse space-y-3">
+                  <div className="h-4 w-20 rounded bg-muted" />
+                  <div className="h-5 w-32 rounded bg-muted" />
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-8 w-16 rounded bg-muted" />
+                  <div className="h-9 w-full rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="space-y-3">
+            <div className="h-4 w-36 rounded bg-muted animate-pulse" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="rounded-lg border bg-card p-5 animate-pulse space-y-3">
+                  <div className="h-5 w-40 rounded bg-muted" />
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-8 w-16 rounded bg-muted" />
+                  <div className="h-9 w-full rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : (
         <>
           <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Modül paketleri</h2>
