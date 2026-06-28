@@ -41,20 +41,20 @@ export function Header() {
           className="flex items-center gap-2 font-heading text-lg font-bold text-primary-700 dark:text-primary-300 hover:text-primary-600 dark:hover:text-primary-200"
           aria-label="Hukuk Emsal anasayfa"
         >
-          <Scale className="h-6 w-6 text-accent-500" aria-hidden="true" />
-          <span>Hukuk Emsal</span>
+          <Scale className="h-6 w-6 text-accent-500 shrink-0" aria-hidden="true" />
+          <span className="whitespace-nowrap">Hukuk Emsal</span>
         </Link>
 
         <nav
           aria-label="Ana navigasyon"
-          className="hidden items-center gap-1 md:flex"
+          className="hidden items-center gap-0.5 md:flex flex-nowrap"
         >
           {/* Menü genel sayfalarda görünür; /panel alanında sidebar var, gizli */}
           {menuGoster && NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition hover:bg-secondary hover:text-foreground"
+              className="rounded-md px-2.5 py-2 text-xs font-medium text-foreground/80 transition hover:bg-secondary hover:text-foreground whitespace-nowrap"
             >
               {item.label}
             </Link>
