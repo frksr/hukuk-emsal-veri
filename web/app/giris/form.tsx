@@ -66,7 +66,7 @@ export function GirisForm() {
           <div>
             <div className="flex justify-between mb-1.5">
               <label className="text-sm font-medium">Şifre</label>
-              <a href="/sifre-sifirla" className="text-xs text-muted-foreground hover:text-foreground">
+              <a href="/sifre-sifirla" tabIndex={-1} className="text-xs text-muted-foreground hover:text-foreground">
                 Şifremi unuttum
               </a>
             </div>
