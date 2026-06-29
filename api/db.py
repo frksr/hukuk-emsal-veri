@@ -28,8 +28,8 @@ async def init_pool() -> asyncpg.Pool:
             raise RuntimeError("DATABASE_URL environment variable yok")
         _pool = await asyncpg.create_pool(
             dsn=dsn,
-            min_size=2,
-            max_size=20,
+            min_size=1,
+            max_size=5,
             command_timeout=30,
             server_settings={"application_name": "hukuk-emsal-api"},
         )
@@ -45,7 +45,7 @@ async def init_service_pool() -> asyncpg.Pool:
         _service_pool = await asyncpg.create_pool(
             dsn=dsn,
             min_size=1,
-            max_size=10,
+            max_size=3,
             command_timeout=30,
             server_settings={"application_name": "hukuk-emsal-api-service"},
         )

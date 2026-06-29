@@ -17,8 +17,9 @@ export function getPool(): Pool {
     if (!DATABASE_URL) throw new Error("DATABASE_URL is required");
     _pool = new Pool({
       connectionString: DATABASE_URL,
-      max: 10,
-      idleTimeoutMillis: 30_000,
+      max: 3,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 5_000,
     });
   }
   return _pool;

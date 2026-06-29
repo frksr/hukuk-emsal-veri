@@ -44,7 +44,7 @@ def get_pool():
                 _pool = ConnectionPool(
                     conninfo=_dsn(),
                     min_size=int(os.environ.get("RAG_PG_MIN_SIZE", "1")),
-                    max_size=int(os.environ.get("RAG_PG_MAX_SIZE", "5")),
+                    max_size=int(os.environ.get("RAG_PG_MAX_SIZE", "2")),
                     kwargs={"autocommit": True},
                     configure=_configure,
                     open=True,
