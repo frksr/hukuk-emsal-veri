@@ -281,6 +281,69 @@ async def _log_event(
         )
 
 
+async def atomik_kota_kullan(
+    event_type: str,
+    user_id: Optional[str],
+    tenant_id: Optional[str],
+    ip: str,
+    user_agent: str,
+    limit: Optional[int],
+    cutoff: datetime,
+    log_et: bool = True,
+) -> bool:
+    """Kota sayımı + usage_event kaydını TEK transaction'da, advisory lock
+    altında yapar → eşzamanlı isteklerle limit AŞILAMAZ (TOCTOU kapatıldı).
+
+    - limit None → sınırsız; yalnızca (log_et ise) log yazılır, True döner.
+    - limit doldu → hiçbir şey yazılmaz, False döner (çağıran 402/429 üretir
+      veya kredi yoluna düşer).
+    - log_et=False → sayım/kilit yapılır ama event yazılmaz (AI modüllerinde
+      event'i router'ın kaydet_uretim'i yazar; kilit yine de eşzamanlı
+      kontrolleri sıralar).
+    """
+    import json as _json
+
+    kilit_anahtari = f"kota:{user_id or ip}:{event_type}"
+
+    meta = _ai_provider_meta(event_type)
+
+    async with service_session() as conn:
+        async with conn.transaction():
+            # Aynı kullanıcı+araç için kontroller sıralansın (transaction sonunda
+            # otomatik bırakılır).
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtext($1))", kilit_anahtari
+            )
+
+            if limit is not None:
+                if user_id:
+                    current = await conn.fetchval(
+                        """SELECT COUNT(*) FROM usage_events
+                           WHERE user_id = $1 AND event_type = $2 AND created_at > $3""",
+                        user_id, event_type, cutoff,
+                    )
+                else:
+                    current = await conn.fetchval(
+                        """SELECT COUNT(*) FROM usage_events
+                           WHERE ip_address = $1 AND user_id IS NULL
+                             AND event_type = $2 AND created_at > $3""",
+                        ip, event_type, cutoff,
+                    )
+                if int(current or 0) >= limit:
+                    return False
+
+            if log_et:
+                await conn.execute(
+                    """INSERT INTO usage_events
+                       (user_id, tenant_id, event_type, ip_address, user_agent, metadata)
+                       VALUES ($1, $2, $3, $4, $5, $6::jsonb)""",
+                    user_id, tenant_id, event_type, ip,
+                    user_agent[:500] if user_agent else None,
+                    _json.dumps(meta, ensure_ascii=False),
+                )
+    return True
+
+
 def rate_limit_for(event_type: str):
     """Decorator factory. Kullanım:
 
@@ -307,27 +370,29 @@ def rate_limit_for(event_type: str):
         ua = request.headers.get("user-agent", "")
 
         # Pro+ sınırsız
+        limit: Optional[int] = None
+        bas, bitis, _ = await kullanici_donem_penceresi(user_id, tenant_id)
         if tier not in UNLIMITED_TIERS:
             limit_map = DAILY_LIMITS.get(tier, DAILY_LIMITS["anonim"])
             limit = limit_map.get(event_type, 10)
-            bas, bitis, _ = await kullanici_donem_penceresi(user_id, tenant_id)
-            current = await _current_count(event_type, user_id, ip, bas)
-            if current >= limit:
-                raise HTTPException(
-                    429,
-                    {
-                        "error": "rate_limit_exceeded",
-                        "message": (
-                            f"Dönemlik {event_type} limitiniz ({limit}) doldu. "
-                            "Üst pakete geçin, ek paket alın veya yenileme tarihinde tekrar deneyin."
-                        ),
-                        "limit": limit,
-                        "tier": tier,
-                        "reset_at": bitis.isoformat(),
-                    },
-                )
 
-        # Log et
-        await _log_event(event_type, user_id, tenant_id, ip, ua)
+        # Sayım + log atomik (eşzamanlı isteklerle limit aşılamaz).
+        izin = await atomik_kota_kullan(
+            event_type, user_id, tenant_id, ip, ua, limit, bas, log_et=True
+        )
+        if not izin:
+            raise HTTPException(
+                429,
+                {
+                    "error": "rate_limit_exceeded",
+                    "message": (
+                        f"Dönemlik {event_type} limitiniz ({limit}) doldu. "
+                        "Üst pakete geçin, ek paket alın veya yenileme tarihinde tekrar deneyin."
+                    ),
+                    "limit": limit,
+                    "tier": tier,
+                    "reset_at": bitis.isoformat(),
+                },
+            )
 
     return check

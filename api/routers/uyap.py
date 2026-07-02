@@ -120,8 +120,9 @@ async def upload_document(
             metadata.get("decision_date"),
         )
 
-    # Vector store'a ekle (PII redact ETMİYORUZ — bu kullanıcının kendi verisi,
-    # local Chroma'da kalıyor, LLM'e gönderirken redact ederiz)
+    # Vector store'a ekle. Orijinal metin yalnızca RLS'li DB'de kalır;
+    # embedding, tenant_rag.index_document içinde ANONİMLEŞTİRİLEREK üretilir
+    # (dış embedding API'sine PII gitmez — bkz. services/pii_redaction.redact_for_embedding).
     try:
         chunk_count = index_document(
             user.tenant_id, document_id, text,
@@ -334,7 +335,10 @@ async def ai_sorgu(
     """
     from services.tenant_rag import search_tenant
     from services.rag import search as public_search
-    from services.pii_redaction import redact, unredact, audit_pii, ner_available, name_layer
+    from services.pii_redaction import (
+        redact, unredact_safe, audit_pii, ner_available, name_layer,
+        redact_for_embedding,
+    )
     from llm.provider import generate, is_available
     import os
     import time
@@ -353,11 +357,13 @@ async def ai_sorgu(
         document_ids=payload.document_ids,
     )
 
-    # 2) Public emsal (opsiyonel)
+    # 2) Public emsal (opsiyonel) — sorgu, dış embedding API'sine anonim gider.
     emsal_results = []
     if payload.include_emsal:
         try:
-            emsal_results = await run_blocking(public_search, payload.query, k=3)
+            emsal_results = await run_blocking(
+                public_search, redact_for_embedding(payload.query), k=3
+            )
         except Exception:
             pass
 
@@ -435,8 +441,9 @@ async def ai_sorgu(
                 system=sys_prompt, user=user_prompt,
                 max_tokens=1500, temperature=0.3,
             )
-            # 5) PII placeholder'ları geri koy
-            answer = unredact(raw_answer, redaction_map)
+            # 5) PII placeholder'ları geri koy (dayanıklı: bozulan placeholder
+            #    toleranslı eşlenir, çözülemeyen asla kullanıcıya sızmaz)
+            answer = unredact_safe(raw_answer, redaction_map)
             llm_provider_used = "anthropic_or_gemini"
             tokens_used = len(user_prompt) // 4 + len(raw_answer) // 4  # yaklaşık
         except Exception as e:

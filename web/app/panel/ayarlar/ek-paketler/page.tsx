@@ -1,6 +1,8 @@
 "use client";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { SATIS_ACIK } from "@/lib/satis-modu";
 import { Loader2, Package, Check, Sparkles, Coins, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -556,10 +558,18 @@ function PaketKart({
         <div className="text-2xl font-bold">
           {p.amount_try.toLocaleString("tr-TR")} <span className="text-sm font-normal text-muted-foreground">₺</span>
         </div>
-        <Button className="w-full" onClick={onBuy} disabled={yukleniyor}>
-          {yukleniyor ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4 mr-1.5" />}
-          {yukleniyor ? "İşleniyor…" : "Satın al"}
-        </Button>
+        {!SATIS_ACIK ? (
+          /* LANSMAN MODU — satış kapalı, bekleme listesine yönlendir.
+             Satış açılınca (SATIS_ACIK=true) alttaki normal buton geri gelir. */
+          <Button asChild className="w-full">
+            <Link href="/bekleme-listesi">Bekleme Listesine Katıl</Link>
+          </Button>
+        ) : (
+          <Button className="w-full" onClick={onBuy} disabled={yukleniyor}>
+            {yukleniyor ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4 mr-1.5" />}
+            {yukleniyor ? "İşleniyor…" : "Satın al"}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

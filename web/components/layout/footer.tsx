@@ -21,6 +21,8 @@ const YASAL = [
   { href: "/yasal-uyari", label: "Yasal Uyarı" },
   { href: "/gizlilik", label: "Gizlilik Politikası" },
   { href: "/kullanim-sartlari", label: "Kullanım Koşulları" },
+  { href: "/mesafeli-satis", label: "Mesafeli Satış Sözleşmesi" },
+  { href: "/iade-politikasi", label: "Cayma ve İade Politikası" },
 ];
 
 export function Footer() {

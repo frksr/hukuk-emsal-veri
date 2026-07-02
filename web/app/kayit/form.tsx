@@ -14,6 +14,7 @@ export function KayitForm() {
   const router = useRouter();
   const sp = useSearchParams();
   const secilenPlan = sp.get("plan");
+  const davetKodu = sp.get("davet"); // bekleme listesi davet linki (?davet=<kod>)
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +30,7 @@ export function KayitForm() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, kvkk, marketing }),
+        body: JSON.stringify({ name, email, password, kvkk, marketing, davet: davetKodu || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Kayıt başarısız");
@@ -51,6 +52,11 @@ export function KayitForm() {
   return (
     <Card>
       <CardContent className="p-6">
+        {davetKodu && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+            🎉 Davetlisiniz! Bekleme listesinden erken erişim davetinizle kayıt oluyorsunuz.
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-sm font-medium mb-1.5 block">Ad Soyad</label>

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Bell, Plus, Trash2, Pencil, X, Clock, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
+import { Loader2, Bell, Plus, Trash2, Pencil, X, Clock, CheckCircle2, AlertCircle, Sparkles, CalendarPlus, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -191,6 +191,11 @@ export default function HatirlaticilarPage() {
     }
   }
 
+  // AI'nın sorduğu, henüz cevaplanmamış eksik alan sorusunu döndürür (formda ipucu olarak gösterilir)
+  function soru(alan: string): string | undefined {
+    return aiSorular.slice(aiAdim).find((s) => s.alan === alan)?.soru;
+  }
+
   // Adım adım eksik alan cevabını uygula ve bir sonraki adıma geç
   function aiAdimIlerle() {
     const soruAlan = aiSorular[aiAdim]?.alan;
@@ -368,13 +373,26 @@ export default function HatirlaticilarPage() {
   return (
     <div className="space-y-6">
       {dialog}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Bell className="h-6 w-6 text-primary" /> Hatırlatıcılar
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Dava, dosya, notlarınız veya herhangi bir veriyle ilgili hatırlatıcı kurun. Zamanı gelince e-posta ile haber veririz.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Bell className="h-6 w-6 text-primary" /> Hatırlatıcılar
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Dava, dosya, notlarınız veya herhangi bir veriyle ilgili hatırlatıcı kurun. Zamanı gelince e-posta ile haber veririz.
+          </p>
+        </div>
+        {(liste?.length ?? 0) > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => window.open("/api/proxy/hatirlatici/export/ics", "_blank")}
+            title="Bekleyen tüm hatırlatıcıları Google/Outlook/Apple Takvim'e ekleyin"
+          >
+            <Download className="h-4 w-4 mr-1.5" /> Takvime aktar (.ics)
+          </Button>
+        )}
       </div>
 
       {/* Yapay Zeka ile hızlı oluşturma (yalnızca yeni kayıtta) */}
@@ -691,6 +709,15 @@ function HatirlaticiKart({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {h.status === "pending" && (
+              <button
+                onClick={() => window.open(`/api/proxy/hatirlatici/${h.id}/ics`, "_blank")}
+                title="Takvime ekle (.ics)"
+                className="text-muted-foreground hover:text-primary"
+              >
+                <CalendarPlus className="h-4 w-4" />
+              </button>
+            )}
             <button onClick={() => onDuzenle(h)} title="Düzenle" className="text-muted-foreground hover:text-foreground">
               <Pencil className="h-4 w-4" />
             </button>

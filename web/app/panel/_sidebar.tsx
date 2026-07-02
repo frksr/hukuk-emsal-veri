@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered, Newspaper, Search } from "lucide-react";
+import { LayoutDashboard, FolderClosed, Sparkles, FileText, Settings, LogOut, FileSearch, StickyNote, Calculator, Clock, Package, Bell, CreditCard, MessageSquarePlus, ShieldCheck, BarChart3, Activity, Users, SlidersHorizontal, MessageSquare, FileWarning, Gift, ListOrdered, Newspaper, Search, BookCopy, BellRing } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ const NAV: NavItem[] = [
   { href: "/panel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/panel/notlar", label: "Notlarım", icon: StickyNote },
   { href: "/panel/hatirlaticilar", label: "Hatırlatıcılar", icon: Bell, badge: "Pro" },
+  { href: "/panel/sablonlar", label: "Şablonlar", icon: BookCopy },
+  { href: "/panel/alarmlar", label: "Emsal Alarmları", icon: BellRing, badge: "Pro" },
   { href: "/panel/dosyalar", label: "Dosyalarım", icon: FolderClosed, badge: "Pro" },
   { href: "/panel/sorgu", label: "Yapay Zeka Sorgu", icon: Sparkles, badge: "Pro" },
   { href: "/panel/raporlar", label: "Raporlar", icon: FileText },

@@ -1,0 +1,56 @@
+# CI — her PR ve main push'unda: Python testleri + lint, TypeScript tip kontrolü + build.
+# Kırmızıysa merge ETMEYİN. PII sızıntı testi (tests/test_pii_leak_e2e.py) burada koşar;
+# kırmızı olması KVKK taahhüdünün ihlali demektir.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (pytest + ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Bağımlılıklar
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt || pip install -r requirements.txt
+          pip install pytest ruff httpx psycopg
+      - name: Ruff (lint)
+        run: ruff check api services llm scripts --ignore E501 || true  # önce görünürlük; sıkılaştırma sonra
+      - name: Pytest (DB gerektirmeyen testler)
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest tests/test_pii_leak_e2e.py tests/test_normalize.py tests/test_anonymize.py \
+                 tests/test_pii_redaction.py tests/test_encryption.py \
+                 tests/test_faiz_hesaplayici.py tests/test_zamanasimi.py \
+                 -q --ignore=tests/test_db_integration.py
+
+  frontend:
+    name: Frontend (tsc + next build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Bağımlılıklar
+        run: npm ci
+      - name: TypeScript tip kontrolü
+        run: npx tsc --noEmit
+      - name: Next.js build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build

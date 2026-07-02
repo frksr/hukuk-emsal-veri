@@ -31,7 +31,8 @@ async def me(user: CurrentUser = Depends(get_current_user)):
     async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
         row = await conn.fetchrow(
             """SELECT email_verified, kvkk_accepted_at, marketing_consent,
-                      history_enabled, billing, created_at, last_login_at
+                      history_enabled, billing, created_at, last_login_at,
+                      onboarding_done
                FROM users WHERE id = $1""",
             user.user_id,
         )
@@ -48,6 +49,7 @@ async def me(user: CurrentUser = Depends(get_current_user)):
             "email_verified": bool(row and row["email_verified"]),
             "marketing_consent": bool(row and row["marketing_consent"]),
             "history_enabled": bool(row["history_enabled"]) if row and row["history_enabled"] is not None else True,
+            "onboarding_done": bool(row and row["onboarding_done"]),
             "billing": _billing,
             "created_at": row["created_at"].isoformat() if row else None,
             "last_login_at": row["last_login_at"].isoformat() if row and row["last_login_at"] else None,
@@ -64,6 +66,8 @@ class UpdateProfileReq(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     marketing_consent: bool | None = None
     history_enabled: bool | None = None
+    # Onboarding turu tamamlandı/geçildi bayrağı (panel ilk giriş turu)
+    onboarding_done: bool | None = None
     # Fatura bilgileri (profil): {unvan, vergi_no, vergi_dairesi, adres, sehir, posta, telefon}
     billing: dict | None = None
 
@@ -85,6 +89,9 @@ async def update_profile(
     if payload.history_enabled is not None:
         updates.append(f"history_enabled = ${len(args) + 1}")
         args.append(payload.history_enabled)
+    if payload.onboarding_done is not None:
+        updates.append(f"onboarding_done = ${len(args) + 1}")
+        args.append(payload.onboarding_done)
     if payload.billing is not None:
         import json as _json
         # Yalnızca beklenen alanları al (güvenlik), stringe çevir.

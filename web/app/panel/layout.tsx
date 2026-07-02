@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { AppSidebar } from "./_sidebar";
 import { DogrulamaBanner } from "@/components/dogrulama-banner";
 import { PageTransition } from "@/components/page-transition";
+import { OnboardingTur } from "@/components/onboarding-tur";
+import { NpsAnket } from "@/components/nps-anket";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
       <main className="col-span-12 md:col-span-9 lg:col-span-10">
         <DogrulamaBanner />
+        <OnboardingTur />
         <PageTransition>{children}</PageTransition>
+        <NpsAnket />
       </main>
     </div>
   );

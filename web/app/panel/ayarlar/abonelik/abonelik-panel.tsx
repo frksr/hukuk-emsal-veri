@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { SATIS_ACIK } from "@/lib/satis-modu";
 import { CheckCircle2, ArrowRight, Loader2, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -125,7 +127,7 @@ export function AbonelikPanel() {
     const el = document.getElementById(`plan-${hedefPlan}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     const odenebilir = ["pro_solo", "pro_solo_uyap", "team", "team_uyap"].includes(hedefPlan);
-    if (odenebilir && hedefPlan !== (current?.plan || "free")) {
+    if (SATIS_ACIK && odenebilir && hedefPlan !== (current?.plan || "free")) {
       setSecilenPlan(hedefPlan);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -598,6 +600,16 @@ export function AbonelikPanel() {
                     </Button>
                   ) : isCurrent ? (
                     <Button disabled className="w-full" variant="outline">Aktif Plan</Button>
+                  ) : !SATIS_ACIK ? (
+                    /* LANSMAN MODU — satış kapalı, bekleme listesine yönlendir.
+                       Satış açılınca (SATIS_ACIK=true) alttaki normal akış geri gelir. */
+                    p.key === "free" ? (
+                      <Button disabled className="w-full" variant="outline">Bu Plana Geç</Button>
+                    ) : (
+                      <Button asChild variant={p.popular ? "default" : "outline"} className="w-full">
+                        <Link href={`/bekleme-listesi?plan=${p.key}`}>Bekleme Listesine Katıl</Link>
+                      </Button>
+                    )
                   ) : (
                     <Button
                       onClick={() => planSec(p.key)}

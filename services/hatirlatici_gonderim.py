@@ -41,9 +41,39 @@ def _govde(r) -> str:
     return "".join(parcalar)
 
 
+# Retry politikası: 1. hata → 5 dk sonra, 2. hata → 30 dk sonra, 3. hata → failed.
+MAX_DENEME = 3
+BACKOFF_DK = (5, 30)
+
+
+async def _basarisiz_isaretle(conn, reminder_id, retry_count: int) -> None:
+    """Deneme sayısını artır; hakkı kaldıysa backoff ile yeniden dene,
+    kalmadıysa kalıcı 'failed' işaretle."""
+    yeni_deneme = retry_count + 1
+    if yeni_deneme >= MAX_DENEME:
+        await conn.execute(
+            "UPDATE reminders SET status='failed', retry_count=$2, "
+            "next_attempt_at=NULL, updated_at=NOW() WHERE id=$1",
+            reminder_id, yeni_deneme,
+        )
+        log.error("Hatırlatıcı %d denemede gönderilemedi, failed: %s",
+                  yeni_deneme, reminder_id)
+    else:
+        bekle_dk = BACKOFF_DK[min(yeni_deneme - 1, len(BACKOFF_DK) - 1)]
+        await conn.execute(
+            "UPDATE reminders SET retry_count=$2, "
+            "next_attempt_at=NOW() + ($3 || ' minutes')::interval, "
+            "updated_at=NOW() WHERE id=$1",
+            reminder_id, yeni_deneme, str(bekle_dk),
+        )
+        log.warning("Hatırlatıcı gönderilemedi (deneme %d/%d), %d dk sonra tekrar: %s",
+                    yeni_deneme, MAX_DENEME, bekle_dk, reminder_id)
+
+
 async def bekleyen_hatirlaticilari_gonder(limit: int = 100) -> int:
     """Vadesi gelmiş (status='pending' AND remind_at <= now()) hatırlatıcıları
-    gönderir. Gönderilen adedi döndürür."""
+    gönderir. Geçici hatalarda üstel backoff ile en fazla MAX_DENEME kez dener.
+    Gönderilen adedi döndürür."""
     from api.db import service_session
 
     now = datetime.now(timezone.utc)
@@ -51,11 +81,12 @@ async def bekleyen_hatirlaticilari_gonder(limit: int = 100) -> int:
     async with service_session() as conn:
         rows = await conn.fetch(
             """SELECT r.id, r.baslik, r.not_metni, r.kaynak_tip, r.kaynak_ozet,
-                      r.channel, u.email, u.name
+                      r.channel, r.retry_count, u.email, u.name
                FROM reminders r
                JOIN users u ON u.id = r.user_id
                WHERE r.status = 'pending'
                  AND r.remind_at <= $1
+                 AND (r.next_attempt_at IS NULL OR r.next_attempt_at <= $1)
                  AND u.is_active = TRUE
                ORDER BY r.remind_at
                LIMIT $2""",
@@ -66,6 +97,7 @@ async def bekleyen_hatirlaticilari_gonder(limit: int = 100) -> int:
             # Şimdilik yalnızca e-posta kanalı destekleniyor.
             if (r["channel"] or "email") != "email":
                 continue
+            retry_count = r["retry_count"] or 0
             try:
                 ok = await send_email(
                     to=r["email"],
@@ -75,25 +107,16 @@ async def bekleyen_hatirlaticilari_gonder(limit: int = 100) -> int:
                 if ok:
                     await conn.execute(
                         "UPDATE reminders SET status='sent', sent_at=NOW(), "
-                        "updated_at=NOW() WHERE id=$1",
+                        "next_attempt_at=NULL, updated_at=NOW() WHERE id=$1",
                         r["id"],
                     )
                     gonderilen += 1
                 else:
-                    await conn.execute(
-                        "UPDATE reminders SET status='failed', updated_at=NOW() "
-                        "WHERE id=$1",
-                        r["id"],
-                    )
-                    log.warning("Hatırlatıcı gönderilemedi (send=false): %s", r["id"])
-            except Exception as e:
+                    await _basarisiz_isaretle(conn, r["id"], retry_count)
+            except Exception:
                 log.exception("Hatırlatıcı gönderim hatası: %s", r["id"])
                 try:
-                    await conn.execute(
-                        "UPDATE reminders SET status='failed', updated_at=NOW() "
-                        "WHERE id=$1",
-                        r["id"],
-                    )
+                    await _basarisiz_isaretle(conn, r["id"], retry_count)
                 except Exception:
                     pass
     return gonderilen

@@ -23,7 +23,7 @@ from fastapi import Depends, HTTPException, Request
 from api.auth import CurrentUser, get_optional_user
 from api.rate_limit import (
     UNLIMITED_TIERS, tool_daily_limit, _current_count, _log_event, _client_ip,
-    kullanici_donem_penceresi, AI_MODULES,
+    kullanici_donem_penceresi, AI_MODULES, atomik_kota_kullan,
 )
 from services import krediler
 from services import app_config
@@ -83,12 +83,19 @@ def kota(event_type: str, min_tier: str | None = None):
         # gününe demirlenmiş AYLIK pencere (takvim ayı değil). reset_at için bitiş.
         donem_bas, donem_bit, _ = await kullanici_donem_penceresi(user_id, tenant_id)
 
+        # usage_event yalnızca metered modüllerde burada yazılır (sayım için).
+        # Yapay Zeka modüllerinde (min_tier) router'ın kaydet_uretim'i loglar.
+        log_burada = min_tier is None
+
         # 1) Plan kapsamı
         plan_ok = False
         limit: int | None = None
         if is_admin:
             # Admin → sınırsız (sözleşme gibi plan-bazlı araçlar dahil).
             plan_ok = True
+            if log_burada:
+                await _log_event(event_type, user_id, tenant_id, ip, ua)
+            return user
         elif min_tier and rank < gereken_rank:
             # (Eski yol) min_tier'in altındaki kullanıcı plan kapsamı dışı.
             plan_ok = False
@@ -98,19 +105,15 @@ def kota(event_type: str, min_tier: str | None = None):
             # varsa onu uygula.
             override = await app_config.get_plan_limits()
             limit = tool_daily_limit(tier, event_type, override)
-            if limit is None:
-                plan_ok = True
-            else:
-                current = await _current_count(event_type, user_id, ip, donem_bas)
-                plan_ok = current < limit
-
-        # usage_event yalnızca metered modüllerde burada yazılır (sayım için).
-        # Yapay Zeka modüllerinde (min_tier) router'ın kaydet_uretim'i loglar.
-        log_burada = min_tier is None
+            # Sayım + log TEK transaction'da (advisory lock) — eşzamanlı
+            # isteklerle limit AŞILAMAZ. log_et=False (AI modülleri) durumunda
+            # da kilit, eşzamanlı kontrolleri sıralar.
+            plan_ok = await atomik_kota_kullan(
+                event_type, user_id, tenant_id, ip, ua,
+                limit, donem_bas, log_et=log_burada,
+            )
 
         if plan_ok:
-            if log_burada:
-                await _log_event(event_type, user_id, tenant_id, ip, ua)
             return user
 
         # 2) Kredi (ek paket) — yalnızca giriş yapmış kullanıcı

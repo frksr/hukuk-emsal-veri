@@ -59,6 +59,8 @@ const STATIC_ROUTES: Array<{
   { path: "/yasal-uyari", changeFrequency: "yearly", priority: 0.3 },
   { path: "/gizlilik", changeFrequency: "yearly", priority: 0.3 },
   { path: "/kullanim-sartlari", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/mesafeli-satis", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/iade-politikasi", changeFrequency: "yearly", priority: 0.3 },
 ];
 
 // Statik içerik son güncellenme tarihi (SABİT). `new Date()` her build'de

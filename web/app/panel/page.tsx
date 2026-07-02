@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { WorkspacePanel } from "./_workspace";
 import { Greeting } from "./_greeting";
 import { DashboardStats } from "./_stats";
+import { KullanimPanosu } from "@/components/kullanim-panosu";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,8 @@ export default async function AppDashboard() {
       <Greeting name={name} />
 
       <DashboardStats />
+
+      <KullanimPanosu />
 
       {/* Hizmetler */}
       <div>

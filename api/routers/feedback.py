@@ -155,3 +155,63 @@ async def my_feedback(user: CurrentUser = Depends(get_current_user)):
         for r in rows
     ]
     return APIResponse(ok=True, data={"feedback": items})
+
+
+# =============================================================================
+# NPS mini anketi — "tavsiye etme olasılığı" (0-10), kullanıcı başına bir kez.
+# Tablo: nps_responses (infra/db/22_nps_responses.sql)
+# =============================================================================
+
+
+class NpsReq(BaseModel):
+    score: int = Field(ge=0, le=10)
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/nps", response_model=APIResponse, summary="NPS yanıtı gönder")
+async def submit_nps(
+    payload: NpsReq,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """NPS (0-10) yanıtını kaydeder. Kullanıcı başına tek yanıt."""
+    async with service_session() as conn:
+        mevcut = await conn.fetchval(
+            "SELECT 1 FROM nps_responses WHERE user_id = $1", user.user_id,
+        )
+        if mevcut:
+            return APIResponse(ok=True, message="Yanıtınız daha önce alınmış — teşekkürler.")
+        await conn.execute(
+            """INSERT INTO nps_responses (user_id, tenant_id, score, comment)
+               VALUES ($1, $2, $3, $4)""",
+            user.user_id, user.tenant_id, payload.score,
+            (payload.comment or "").strip() or None,
+        )
+
+    await audit(
+        action="nps.submitted",
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        request=request,
+        metadata={"score": payload.score},
+    )
+    return APIResponse(ok=True, message="Teşekkürler! Görüşünüz bizim için çok değerli.")
+
+
+@router.get("/nps/eligible", response_model=APIResponse,
+            summary="NPS anketi gösterilsin mi?")
+async def nps_eligible(user: CurrentUser = Depends(get_current_user)):
+    """Kullanıcı ankete uygun mu: kayıt >= 7 gün önce VE henüz yanıt vermemiş."""
+    from datetime import datetime, timezone
+
+    async with service_session() as conn:
+        created = await conn.fetchval(
+            "SELECT created_at FROM users WHERE id = $1", user.user_id,
+        )
+        yanit_var = await conn.fetchval(
+            "SELECT 1 FROM nps_responses WHERE user_id = $1", user.user_id,
+        )
+    eski_kullanici = bool(
+        created and (datetime.now(timezone.utc) - created).days >= 7
+    )
+    return APIResponse(ok=True, data={"eligible": eski_kullanici and not yanit_var})

@@ -280,3 +280,96 @@ async def list_kaynaklar(user: CurrentUser = Depends(pro)):
         ok=True,
         data={"notlar": notlar, "uretimler": uretimler, "dosyalar": dosyalar},
     )
+
+
+# ---------------------------------------------------------------------------
+# Takvim (.ics) exportu — Google/Outlook/Apple Takvim'e ekleme
+# ---------------------------------------------------------------------------
+
+def _ics_kacir(s: str) -> str:
+    """ICS TEXT alanı kaçışları (RFC 5545)."""
+    return (
+        (s or "")
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def _ics_zaman(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _vevent(r) -> str:
+    """Tek hatırlatıcı → VEVENT (1 saat önce VALARM ile)."""
+    return "\r\n".join([
+        "BEGIN:VEVENT",
+        f"UID:hatirlatici-{r['id']}@hukukemsal",
+        f"DTSTAMP:{_ics_zaman(datetime.now(timezone.utc))}",
+        f"DTSTART:{_ics_zaman(r['remind_at'])}",
+        f"SUMMARY:{_ics_kacir(r['baslik'])}",
+        *(
+            [f"DESCRIPTION:{_ics_kacir(r['not_metni'])}"]
+            if r["not_metni"] else []
+        ),
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        f"DESCRIPTION:{_ics_kacir(r['baslik'])}",
+        "TRIGGER:-PT1H",
+        "END:VALARM",
+        "END:VEVENT",
+    ])
+
+
+def _vcalendar(events: list[str]) -> str:
+    return "\r\n".join([
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Hukuk Emsal//Hatirlaticilar//TR",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        *events,
+        "END:VCALENDAR",
+        "",
+    ])
+
+
+@router.get("/export/ics", summary="Tüm bekleyen hatırlatıcıları .ics indir")
+async def export_ics(user: CurrentUser = Depends(pro)):
+    from fastapi.responses import Response
+
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        rows = await conn.fetch(
+            """SELECT id, baslik, not_metni, remind_at FROM reminders
+               WHERE user_id = $1 AND status = 'pending'
+               ORDER BY remind_at""",
+            user.user_id,
+        )
+    icerik = _vcalendar([_vevent(r) for r in rows])
+    return Response(
+        content=icerik,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="hatirlaticilar.ics"'},
+    )
+
+
+@router.get("/{rid}/ics", summary="Hatırlatıcıyı .ics olarak indir")
+async def tekil_ics(rid: str, user: CurrentUser = Depends(pro)):
+    from fastapi.responses import Response
+
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        r = await conn.fetchrow(
+            """SELECT id, baslik, not_metni, remind_at FROM reminders
+               WHERE id = $1::uuid AND user_id = $2""",
+            rid, user.user_id,
+        )
+    if not r:
+        raise HTTPException(404, "Hatırlatıcı bulunamadı.")
+    icerik = _vcalendar([_vevent(r)])
+    return Response(
+        content=icerik,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="hatirlatici-{rid}.ics"'},
+    )

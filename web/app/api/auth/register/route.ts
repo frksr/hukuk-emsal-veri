@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { createUser, emailTaken } from "@/lib/auth/db";
+import { createUser, emailTaken, getPool } from "@/lib/auth/db";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, email, password, kvkk, marketing } = body;
+    const { name, email, password, kvkk, marketing, davet } = body;
 
     if (!email || !password) {
       return NextResponse.json({ ok: false, message: "E-posta ve şifre zorunlu." }, { status: 400 });
@@ -27,6 +27,20 @@ export async function POST(req: Request) {
       kvkkAccepted: !!kvkk,
       marketingConsent: !!marketing,
     });
+
+    // Bekleme listesi daveti ile geldiyse (kayit?davet=<kod>) CRM durumunu işaretle.
+    // Kod eşleşmezse sessizce geç — kayıt akışını asla engelleme.
+    if (davet && typeof davet === "string" && davet.length <= 64) {
+      try {
+        await getPool().query(
+          `UPDATE waitlist SET status = 'kayit_oldu'
+           WHERE invite_code = $1 AND status <> 'kayit_oldu'`,
+          [davet],
+        );
+      } catch (e) {
+        console.warn("waitlist davet isaretlenemedi", e);
+      }
+    }
 
     return NextResponse.json({ ok: true, data: { id: user.id, email: user.email } });
   } catch (e) {

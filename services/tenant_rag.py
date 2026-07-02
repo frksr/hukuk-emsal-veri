@@ -54,9 +54,13 @@ def index_document(
 
     from services import embeddings
     from services import pg
+    from services.pii_redaction import redact_for_embedding
 
     tid = _tid(tenant_id)
-    vectors = embeddings.embed_passages(chunks)
+    # KVKK: dış embedding API'sine HAM tenant metni GÖNDERİLMEZ. Chunk'lar
+    # anonimleştirilerek embed edilir; orijinal metin yalnızca DB'de (RLS'li
+    # 'document' kolonu) kalır. LLM context'i uyap router'ında ayrıca maskelenir.
+    vectors = embeddings.embed_passages([redact_for_embedding(c) for c in chunks])
 
     base_meta = dict(metadata or {})
     base_meta["document_id"] = document_id
@@ -101,10 +105,12 @@ def search_tenant(
     """Tenant'ın dosyalarında arama (yalnızca kendi tenant_id'si)."""
     from services import embeddings
     from services import pg
+    from services.pii_redaction import redact_for_embedding
 
     tid = _tid(tenant_id)
     try:
-        q_emb = embeddings.embed_query(query)
+        # KVKK: sorgu da (müvekkil adı vb. içerebilir) anonimleştirilerek embed edilir.
+        q_emb = embeddings.embed_query(redact_for_embedding(query))
     except Exception as e:
         log.warning("Embedding üretilemedi: %s", e)
         return []

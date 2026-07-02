@@ -55,6 +55,17 @@ async def purge(dry_run: bool = False) -> dict:
                     # Solo tenant → kriptografik silme
                     if not dry_run:
                         await purge_tenant(tid)  # DEK sil + dosyaları sil
+                        # pgvector chunk'ları DÜZ METİN içerir (document kolonu) —
+                        # kriptografik silme onları kapsamaz; açıkça silinmeli (KVKK).
+                        try:
+                            from services.tenant_rag import delete_tenant_collection
+                            from api.concurrency import run_blocking
+                            await run_blocking(delete_tenant_collection, tid)
+                        except Exception:
+                            log.exception("tenant_rag_chunks silinemedi: %s", tid)
+                        await conn.execute(
+                            "DELETE FROM tenant_documents WHERE tenant_id = $1", tid,
+                        )
                         await conn.execute(
                             "UPDATE tenants SET is_active = FALSE WHERE id = $1", tid,
                         )
