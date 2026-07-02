@@ -106,6 +106,21 @@ export function usePlan(): PlanState {
 
   useEffect(() => {
     let alive = true;
+    // Önceki başarılı sonuç (varsa) — geçici bir hata (5xx/ağ) yüzünden
+    // oturumu açık bir kullanıcıya "giriş yapılmamış" göstermeyelim.
+    const oncekiSonuc = cachedPlan;
+    // Oturum SSR'dan zaten biliniyorsa (seed), /me geçici olarak başarısız
+    // olsa bile "kayıt ol" değil en azından "giriş yapılmış, plan bilinmiyor"
+    // durumuna düş — isPaid'i asla varsayılan olarak açmayız, sadece isLoggedIn'i
+    // yanlışlıkla kapatmayız.
+    const guvenliDusus: PlanState = seed
+      ? {
+          ...BOS, loading: false, isLoggedIn: true,
+          name: seed.name, email: seed.email,
+          isAdmin: seedAdmin, isPaid: seedAdmin,
+          plan: seedAdmin ? "enterprise" : null,
+        }
+      : { ...BOS, loading: false };
     (async () => {
       try {
         // /me ve /me/krediler paralel çek — sıralı iki round-trip yerine tek tur.
@@ -114,7 +129,11 @@ export function usePlan(): PlanState {
           fetch("/api/proxy/me/krediler", { cache: "no-store" }),
         ]);
         if (!r.ok) {
-          cachedPlan = { ...BOS };
+          // Yalnızca gerçek 401 (oturum yok/geçersiz) durumunda tamamen
+          // "çıkış yapılmış" say. Diğer hatalarda (500, 502, ağ vb.) bilinen
+          // en son iyi durumu (veya SSR seed'ini) koru — aksi halde ücretli bir
+          // kullanıcıya geçici bir backend hatasında "Ücretsiz kayıt ol" gösterilir.
+          cachedPlan = r.status === 401 ? { ...BOS } : (oncekiSonuc ?? guvenliDusus);
           if (alive) setState(cachedPlan);
           return;
         }
@@ -148,7 +167,10 @@ export function usePlan(): PlanState {
         cachedPlan = next;
         if (alive) setState(next);
       } catch {
-        if (alive) setState({ ...BOS });
+        // Ağ hatası (ör. sekme arka planda, backend geçici erişilemez) — aynı
+        // şekilde bilinen son iyi durumu veya SSR seed'ini koru.
+        cachedPlan = oncekiSonuc ?? guvenliDusus;
+        if (alive) setState(cachedPlan);
       }
     })();
     return () => {

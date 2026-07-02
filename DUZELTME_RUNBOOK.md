@@ -172,7 +172,7 @@ Proxy ile workstation'dan:
 # Proxy'yi indir (bir kez), sonra:
 ./cloud-sql-proxy $SQL_CONN &          # localhost:5432 açar
 export ADMIN_DATABASE_URL='postgresql://hukuk:GUCLU_SIFRE_1@localhost:5432/hukuk_emsal'
-python scripts/init_db.py              # 01..18 migration'ları sırayla uygular
+python scripts/init_db.py              # 01..25 migration'ları sırayla uygular
 
 # app_user'a tablo yetkileri (RLS'e tabi request kullanıcısı):
 psql "$ADMIN_DATABASE_URL" -c \

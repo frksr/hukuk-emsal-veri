@@ -51,6 +51,13 @@ MIGRATIONS = [
     "16_billing_profile.sql",
     "17_app_config.sql",
     "18_email_verification.sql",  # e-posta doğrulama (kod + link)
+    "19_pgvector.sql",            # Önkoşul: Cloud SQL'de 'vector' eklentisi etkin olmalı
+    "20_blog_articles.sql",
+    "21_onboarding.sql",
+    "22_nps_responses.sql",
+    "23_reminder_retry.sql",
+    "24_waitlist_crm.sql",
+    "25_sablonlar_alarmlar.sql",  # dilekce_sablonlari tablosu (Şablonlar sekmesi)
 ]
 
 # Lokal dev rol parolaları — production'da ASLA uygulanmaz.

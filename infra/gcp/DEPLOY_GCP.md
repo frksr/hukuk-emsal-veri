@@ -81,7 +81,7 @@ Workstation'dan Cloud SQL Auth Proxy ile:
 # proxy'yi indir, ardından:
 ./cloud-sql-proxy PROJECT:REGION:INSTANCE &     # localhost:5432 açar
 export ADMIN_DATABASE_URL='postgresql://hukuk:GUCLU_SIFRE_1@localhost:5432/hukuk_emsal'
-python scripts/init_db.py        # 01..18 migration'ları uygular
+python scripts/init_db.py        # 01..25 migration'ları uygular
 ```
 > 07_rls_hardening prod'da `app_user` rolüne parola atamadığı için: rolleri yukarıda
 > Cloud SQL'de oluşturduk. `app_user`'a tablo yetkilerini ver:
