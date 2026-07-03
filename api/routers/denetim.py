@@ -1,5 +1,6 @@
 """Belge Denetim endpoint'i."""
 from __future__ import annotations
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
 
 from api.deps import rate_limit
@@ -9,6 +10,7 @@ from api.concurrency import run_blocking
 from api.schemas import APIResponse
 from services.uretim_gunlugu import kaydet_uretim
 
+log = logging.getLogger("api.denetim")
 router = APIRouter()
 
 
@@ -39,8 +41,10 @@ async def denetle_text(
     except Exception as e:
         msg = str(e).lower()
         if "llm" in msg or "api" in msg or "key" in msg:
-            raise HTTPException(503, "LLM şu an erişilemez. .env dosyasındaki API key'leri kontrol edin.")
-        raise HTTPException(500, str(e))
+            log.warning(f"Belge denetimi LLM erişim hatası: {e}")
+            raise HTTPException(503, "LLM şu an erişilemez. Birkaç dakika sonra tekrar deneyin.")
+        log.exception("Belge denetimi başarısız")
+        raise HTTPException(500, "Belge denetlenemedi. Lütfen tekrar deneyin.")
 
 
 @router.post("/upload", response_model=APIResponse, summary="PDF/DOCX/TXT yükleyerek denet")
@@ -86,9 +90,11 @@ async def denetle_upload(
         return APIResponse(ok=True, data=result)
     except Exception as e:
         msg = str(e).lower()
-        if "llm" in msg or "api" in msg:
-            raise HTTPException(503, "LLM şu an erişilemez.")
-        raise HTTPException(500, str(e))
+        if "llm" in msg or "api" in msg or "key" in msg:
+            log.warning(f"Belge denetimi (dosya) LLM erişim hatası: {e}")
+            raise HTTPException(503, "LLM şu an erişilemez. Birkaç dakika sonra tekrar deneyin.")
+        log.exception("Belge denetimi (dosya) başarısız")
+        raise HTTPException(500, "Belge denetlenemedi. Lütfen tekrar deneyin.")
 
 
 @router.get("/turler", summary="Desteklenen belge türleri")

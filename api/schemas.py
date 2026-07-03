@@ -43,6 +43,11 @@ class DilekceIstegi(BaseModel):
     dilekce_turu: str = "genel"
     taraflar: dict[str, str] | None = None
     k: int = Field(5, ge=3, le=10)
+    # Dropdown'daki 5 sabit türe girmeyen davalar için: kullanıcının serbest
+    # yazdığı konu ("Boşanma Davası", "Kira Tespiti" vb.) — LLM bunu KONU
+    # başlığı ve gerekçe üretiminde kullanır; dilekce_turu yine de "genel"
+    # (veya en yakın tür) olarak gönderilmelidir.
+    ozel_konu: str | None = Field(default=None, max_length=200)
 
 
 # ---- Karar Özet ----

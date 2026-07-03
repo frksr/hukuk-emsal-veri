@@ -110,11 +110,21 @@ def generate(
 
 
 def is_available(provider: Provider | None = None) -> bool:
-    """API key'ı set edilmiş mi kontrol et — UI'da uyarı için."""
-    p = provider or _get_default_provider()
-    if p == "anthropic":
-        return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
-    return bool(os.environ.get("GOOGLE_API_KEY", "").strip())
+    """API key'ı set edilmiş mi kontrol et — UI'da uyarı için.
+
+    Belirli bir provider istenmediyse (None), `generate()`'in davranışıyla
+    tutarlı olarak İKİ sağlayıcıdan HERHANGİ biri yeterlidir — `generate()`
+    birincil başarısız olursa otomatik ikinciye düşer. Yalnızca varsayılan
+    sağlayıcının key'ine bakmak, ikinci sağlayıcı yapılandırılmışken bile
+    yanlışlıkla "demo modu"na düşülmesine yol açıyordu.
+    """
+    if provider is not None:
+        if provider == "anthropic":
+            return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+        return bool(os.environ.get("GOOGLE_API_KEY", "").strip())
+    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()) or bool(
+        os.environ.get("GOOGLE_API_KEY", "").strip()
+    )
 
 
 def status() -> dict:

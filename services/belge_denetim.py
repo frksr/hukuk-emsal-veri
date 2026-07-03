@@ -10,8 +10,11 @@ Yapılan kontroller:
 """
 from __future__ import annotations
 import json
+import logging
 import re
 from typing import Literal
+
+log = logging.getLogger(__name__)
 
 from services.rag import search as rag_search
 
@@ -172,22 +175,25 @@ Yukarıdaki belgeyi sistem talimatındaki kriterlere göre denetle ve JSON forma
                 out = m.group(1)
         return json.loads(out)
     except Exception as e:
+        # Ham hata metni (bazen API key/kota bilgisi içerebilir) kullanıcıya
+        # gösterilmez, yalnızca loglanır.
+        log.error(f"Belge denetimi LLM analizi başarısız, statik sonuca dönüldü: {e}")
         return {
             "genel_risk_skoru": 50,
-            "ozet": "LLM analizi başarısız oldu, statik kontroller döndürülüyor.",
+            "ozet": "Yapay Zeka analizi şu anda geçici olarak kullanılamıyor; statik kontroller döndürülüyor.",
             "kritik_sorunlar": [],
             "uyarilar": [],
             "eksik_bolumler": [],
             "emsal_uyumsuzluk": [],
             "guclu_yonler": [],
-            "hata": str(e)[:200],
         }
 
 
 def _stub_denetim(metin: str, tur: BelgeTuru, emsaller: list[dict]) -> dict:
+    log.error("Belge denetimi DEMO MODUNA düştü: LLM API key yok (ANTHROPIC_API_KEY / GOOGLE_API_KEY).")
     return {
         "genel_risk_skoru": 50,
-        "ozet": "LLM erişimi yok. Sadece statik kontroller yapıldı.",
+        "ozet": "Yapay Zeka analizi şu anda geçici olarak kullanılamıyor; sadece statik kontroller yapıldı.",
         "kritik_sorunlar": [],
         "uyarilar": [],
         "eksik_bolumler": [],

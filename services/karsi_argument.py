@@ -19,11 +19,21 @@ Kullanım:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
 from services.rag import search
 from llm.provider import generate, is_available
+
+log = logging.getLogger(__name__)
+
+# Kullanıcıya gösterilecek genel mesaj — API key/env gibi iç mimari detaylar
+# son kullanıcıya ASLA sızdırılmaz; gerçek sebep yalnızca sunucu loguna yazılır.
+_KULLANICI_DEMO_MESAJI = (
+    "Yapay Zeka analizi şu anda geçici olarak kullanılamıyor; aşağıda yalnızca "
+    "ilgili emsal kararlar listelendi. Lütfen birkaç dakika sonra tekrar deneyin."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -108,23 +118,39 @@ Anti-tez sorgu: "çek bedeli tahsil edilemez karşılıksız çek itiraz kabul"
 # ---------------------------------------------------------------------------
 
 def _emsal_etiket(meta: dict | None, chunk_id: str) -> dict[str, str]:
-    """Bir emsal için karar_id / atif / kısa özet üret."""
+    """Bir emsal için karar_id / atif / kısa özet üret.
+
+    services.rag.search() 'court_chamber'/'case_no'/'decision_no' döner
+    (pgvector şeması); eski Türkçe anahtarlar (mahkeme/daire/esas_no/karar_no)
+    yalnızca geriye dönük uyumluluk için fallback'te tutulur — bkz.
+    api/routers/arama.py'deki aynı desen.
+    """
     meta = meta or {}
+    mahkeme_bilinmiyor = not (
+        meta.get("court_chamber") or meta.get("mahkeme")
+        or meta.get("daire") or meta.get("source") or meta.get("kaynak")
+    )
     mahkeme = (
-        meta.get("mahkeme")
+        meta.get("court_chamber")
+        or meta.get("mahkeme")
         or meta.get("daire")
+        or meta.get("source")
         or meta.get("kaynak")
         or "Mahkeme bilgisi yok"
     )
-    esas = meta.get("esas_no") or meta.get("esas") or ""
-    karar = meta.get("karar_no") or meta.get("karar") or ""
+    esas = meta.get("case_no") or meta.get("esas_no") or meta.get("esas") or ""
+    karar = meta.get("decision_no") or meta.get("karar_no") or meta.get("karar") or ""
     karar_id = (
-        meta.get("id")
-        or meta.get("decision_id")
+        meta.get("decision_id")
+        or meta.get("id")
         or chunk_id
         or ""
     )
-    if esas and karar:
+    if mahkeme_bilinmiyor:
+        # İyelik ekiyle bozuk bir cümle ("Mahkeme bilgisi yok'nin...") kurmak
+        # yerine dilbilgisel olarak doğru, ayrı bir ifade kullanılır.
+        atif = "İlgili yerleşik içtihat (mahkeme bilgisi mevcut değil)"
+    elif esas and karar:
         atif = f"{mahkeme}'nin {esas} E., {karar} K. sayılı kararı"
     elif esas:
         atif = f"{mahkeme}'nin {esas} E. sayılı kararı"
@@ -303,7 +329,8 @@ def _anti_tez_query_uret(kendi_tezi: str) -> tuple[str, str]:
             temperature=0.4,
         )
     except Exception as e:
-        return _basit_anti_tez(kendi_tezi), f"Anti-tez LLM hatası: {e}"
+        log.warning(f"Anti-tez LLM hatası, basit fallback kullanılıyor: {e}")
+        return _basit_anti_tez(kendi_tezi), ""
 
     sorgu = (sorgu or "").strip().strip('"').strip("'")
     # Tek satırlık olduğundan emin ol.
@@ -321,7 +348,11 @@ def _stub_argumanlar(
     kendi_tezi: str,
     emsaller: list[dict],
 ) -> dict:
-    """LLM yokken kullanılacak basit iskelet sonuç."""
+    """LLM yokken kullanılacak basit iskelet sonuç.
+
+    NOT: Bu içerik doğrudan kullanıcıya gösterilir — iç mimari/altyapı
+    detayı (API key, .env vb.) İÇERMEMELİDİR; kullanıcıyı ilgilendirmez.
+    """
     karar_ids = [
         _emsal_etiket(e.get("meta"), e.get("chunk_id", ""))["karar_id"]
         for e in emsaller[:2]
@@ -330,23 +361,17 @@ def _stub_argumanlar(
         "muhtemel_karsi_argumanlar": [
             {
                 "arguman": (
-                    "[DEMO] LLM bağlı olmadığı için karşı argümanlar üretilemedi. "
-                    "Yine de emsaller RAG ile çekildi — aşağıdaki dayanak emsallerini "
+                    "Karşı argüman analizi şu anda geçici olarak kullanılamıyor. "
+                    "Yine de ilgili emsaller aşağıda listelendi — bunları "
                     "inceleyerek karşı tarafın muhtemel argümanlarını manuel "
                     "değerlendirebilirsiniz."
                 ),
                 "dayanak_emsal": karar_ids,
-                "rebuttal": (
-                    "API key (ANTHROPIC_API_KEY veya GOOGLE_API_KEY) ekleyip "
-                    "tekrar deneyin. Otomatik rebuttal önerisi için LLM gerekli."
-                ),
+                "rebuttal": "Lütfen birkaç dakika sonra tekrar deneyin.",
                 "guc_skoru": 5,
             }
         ],
-        "ozet_uyari": (
-            "DEMO MODU: LLM API key yok. Tam analiz için .env dosyasına "
-            "ANTHROPIC_API_KEY veya GOOGLE_API_KEY ekleyin."
-        ),
+        "ozet_uyari": _KULLANICI_DEMO_MESAJI,
     }
 
 
@@ -460,26 +485,31 @@ def karsi_argument_uret(
         emsaller = search(anti_tez_query, k=k)
     except Exception as e:
         emsaller = []
-        uyari_parcalari.append(f"RAG araması başarısız: {e}")
+        log.warning(f"Karşı argüman için RAG araması başarısız: {e}")
 
     dayanak_emsaller = _dayanak_emsaller_format(emsaller)
 
     # 3) LLM ile argümanları üret.
     demo_modu = not is_available()
     if demo_modu:
-        parsed = _stub_argumanlar(kendi_tezi, emsaller)
-        uyari_parcalari.append(
-            "DEMO MODU: LLM API key bulunamadı (ANTHROPIC_API_KEY veya "
-            "GOOGLE_API_KEY). Karşı argümanlar üretilemedi, sadece emsaller "
-            "listelendi."
+        # Prod'da bu, ANTHROPIC_API_KEY/GOOGLE_API_KEY yapılandırma hatası
+        # anlamına gelir — ops/Sentry görsün diye logla; kullanıcıya iç
+        # mimari detay (env değişkeni adı) asla gösterilmez, onu ilgilendirmez.
+        log.error(
+            "Karşı argüman üretimi DEMO MODUNA düştü: LLM API key yok "
+            "(ANTHROPIC_API_KEY / GOOGLE_API_KEY)."
         )
+        parsed = _stub_argumanlar(kendi_tezi, emsaller)
+        uyari_parcalari.append(_KULLANICI_DEMO_MESAJI)
     else:
         parsed, llm_hata = _llm_argumanlar_uret(
             kendi_tezi, dava_turu_label, anti_tez_query, emsaller,
         )
         if llm_hata:
-            # LLM çağrısı patladı / parse edilemedi → stub'a dön.
-            uyari_parcalari.append(llm_hata)
+            # LLM çağrısı patladı / parse edilemedi → stub'a dön. Teknik
+            # detay yalnızca loglanır, kullanıcıya genel mesaj gösterilir.
+            log.error(f"Karşı argüman LLM çağrısı başarısız: {llm_hata}")
+            uyari_parcalari.append(_KULLANICI_DEMO_MESAJI)
             parsed = _stub_argumanlar(kendi_tezi, emsaller)
             demo_modu = True  # kullanıcı UI'da görsün
 

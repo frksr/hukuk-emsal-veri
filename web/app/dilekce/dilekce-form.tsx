@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Download, Copy, FileText, Sparkles, Lock, Check } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Download, Copy, FileText, Sparkles, Lock, Check, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +18,7 @@ const TURLER = [
   { value: "menfi_tespit", label: "Menfi Tespit (İİK 72)" },
   { value: "tahsilat", label: "Tahsilat Davası" },
   { value: "genel", label: "Genel Hukuk Davası" },
+  { value: "diger", label: "Diğer (belirtin)" },
 ];
 
 type Mode = "sablon" | "ai";
@@ -30,6 +32,9 @@ export function DilekceForm() {
   const [mode, setMode] = useState<Mode>("sablon");
   const [durum, setDurum] = useState("");
   const [tur, setTur] = useState("itirazin_iptali");
+  // "Diğer" seçilince kullanıcının serbest yazdığı dilekçe konusu (örn.
+  // "Boşanma Davası") — dropdown'da olmayan türler için çözüm.
+  const [ozelKonu, setOzelKonu] = useState("");
   const [alacakli, setAlacakli] = useState("");
   const [borclu, setBorclu] = useState("");
   const [loading, setLoading] = useState(false);
@@ -56,9 +61,12 @@ export function DilekceForm() {
   // Plan çözülene kadar formu gösterme (flash önleme)
   if (planLoading) return <AracYukleniyor />;
 
+  const digerSecili = tur === "diger";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!durum.trim()) return;
+    if (digerSecili && !ozelKonu.trim()) return;
     if (!isLoggedIn) { router.push("/kayit"); return; }
     if (mode === "ai" && !dilekceErisim) {
       router.push("/panel/ayarlar/ek-paketler?modul=dilekce");
@@ -68,7 +76,15 @@ export function DilekceForm() {
     setError(null);
     setSonuc(null);
 
-    const params = { durum, dilekce_turu: tur, taraflar: { alacakli, borclu }, k: 5 };
+    // "Diğer" seçiliyse backend'e geçerli bir dilekce_turu ("genel") gönderilir;
+    // asıl konu ozel_konu alanıyla iletilir (dropdown'da olmayan türler için).
+    const params = {
+      durum,
+      dilekce_turu: digerSecili ? "genel" : tur,
+      taraflar: { alacakli, borclu },
+      k: 5,
+      ...(digerSecili ? { ozel_konu: ozelKonu.trim() } : {}),
+    };
 
     // Şablon modu — LLM yok, anında.
     if (mode === "sablon") {
@@ -183,6 +199,15 @@ export function DilekceForm() {
                   </option>
                 ))}
               </select>
+              {digerSecili && (
+                <Input
+                  className="mt-2"
+                  value={ozelKonu}
+                  onChange={(e) => setOzelKonu(e.target.value)}
+                  placeholder="Dilekçe konusunu yazın (örn: Boşanma Davası, Kira Tespiti)"
+                  maxLength={200}
+                />
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -204,7 +229,12 @@ export function DilekceForm() {
               />
             </div>
             <NotHatirlatma q={durum} />
-            <Button type="submit" disabled={loading || !durum.trim()} className="w-full" size="lg">
+            <Button
+              type="submit"
+              disabled={loading || !durum.trim() || (digerSecili && !ozelKonu.trim())}
+              className="w-full"
+              size="lg"
+            >
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : aiKilitli ? (
@@ -328,7 +358,21 @@ export function DilekceForm() {
                 <CardContent className="space-y-3">
                   {sonuc.kullanilan_emsaller.map((em, i) => (
                     <div key={i} className="text-sm border-l-4 border-accent pl-3">
-                      <div className="font-semibold">{em.atif_text}</div>
+                      <div className="font-semibold flex items-center gap-1.5 flex-wrap">
+                        {em.karar_id ? (
+                          <Link
+                            href={`/karar/${encodeURIComponent(em.karar_id)}`}
+                            target="_blank"
+                            className="hover:underline hover:text-primary inline-flex items-center gap-1"
+                            title="Kararın detayına git"
+                          >
+                            {em.atif_text}
+                            <ExternalLink className="h-3 w-3 shrink-0" />
+                          </Link>
+                        ) : (
+                          em.atif_text
+                        )}
+                      </div>
                       <div className="text-muted-foreground text-xs mt-1">{em.ilgili_bolum}</div>
                     </div>
                   ))}

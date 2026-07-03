@@ -177,11 +177,7 @@ export default function FiyatlandirmaPage() {
                 </ul>
               </div>
               <PlanCta
-                planKey={
-                  plan.cta.href.includes("plan=")
-                    ? plan.cta.href.split("plan=")[1]
-                    : null
-                }
+                planKey={plan.tier}
                 label={plan.cta.label}
                 highlight={plan.highlight}
               />

@@ -53,12 +53,13 @@ export interface AramaSonucu {
 }
 
 export interface DilekceParams {
-  konu: string;
-  taraflar?: { davaci?: string; davali?: string };
-  olaylar: string;
-  talep: string;
-  mahkeme?: string;
-  ekler?: string[];
+  durum: string;
+  dilekce_turu: string;
+  taraflar?: { alacakli?: string; borclu?: string };
+  k?: number;
+  /** Dropdown'daki 5 sabit türe girmeyen davalar için serbest yazılan konu
+   * (örn. "Boşanma Davası"). Verilirse KONU başlığı ve gerekçe buna göre üretilir. */
+  ozel_konu?: string;
 }
 
 export interface OzetParams {

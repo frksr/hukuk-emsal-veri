@@ -45,7 +45,7 @@ async def karsi_argument(
                 status_code=503,
                 detail="LLM şu an erişilemez. Birkaç dakika sonra tekrar deneyin.",
             )
-        raise HTTPException(status_code=500, detail=f"Üretim başarısız: {e}")
+        raise HTTPException(status_code=500, detail="Üretim başarısız. Lütfen tekrar deneyin.")
 
     uyari = sonuc.get("uyari") or sonuc.get("ozet_uyari") or ""
     background.add_task(

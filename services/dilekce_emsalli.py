@@ -20,10 +20,22 @@ Kullanım:
 """
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from services.rag import search
 from llm.provider import generate, is_available
+
+log = logging.getLogger(__name__)
+
+# Kullanıcıya gösterilecek genel mesaj — API key/env gibi iç mimari detayları
+# ASLA son kullanıcıya sızdırılmaz. Gerçek sebep yalnızca sunucu loguna yazılır
+# (ops/Sentry görür), kullanıcı bunu görmemeli — onu ilgilendirmiyor.
+_KULLANICI_DEMO_MESAJI = (
+    "Yapay Zeka üretimi şu anda geçici olarak kullanılamıyor; aşağıda emsal "
+    "kararlar ve dilekçe iskeleti sunuldu. Lütfen birkaç dakika sonra tekrar "
+    "deneyin."
+)
 
 
 DilekceTuru = Literal[
@@ -100,16 +112,22 @@ def _emsal_blogu_hazirla(emsaller: list[dict]) -> str:
     satirlar: list[str] = []
     for i, e in enumerate(emsaller, start=1):
         meta = e.get("meta") or {}
+        # services.rag.search() 'court_chamber'/'case_no'/'decision_no'/
+        # 'decision_date' döner (pgvector şeması); eski Türkçe anahtarlar
+        # (mahkeme/daire/esas_no/karar_no) yalnızca geriye dönük uyumluluk için
+        # fallback'te tutulur — bkz. api/routers/arama.py aynı desen.
         mahkeme = (
-            meta.get("mahkeme")
+            meta.get("court_chamber")
+            or meta.get("mahkeme")
             or meta.get("daire")
+            or meta.get("source")
             or meta.get("kaynak")
             or "Mahkeme bilgisi yok"
         )
-        esas = meta.get("esas_no") or meta.get("esas") or "—"
-        karar = meta.get("karar_no") or meta.get("karar") or "—"
-        tarih = meta.get("karar_tarihi") or meta.get("tarih") or "—"
-        karar_id = meta.get("id") or meta.get("decision_id") or e.get("chunk_id", "")
+        esas = meta.get("case_no") or meta.get("esas_no") or meta.get("esas") or "—"
+        karar = meta.get("decision_no") or meta.get("karar_no") or meta.get("karar") or "—"
+        tarih = meta.get("decision_date") or meta.get("karar_tarihi") or meta.get("tarih") or "—"
+        karar_id = meta.get("decision_id") or meta.get("id") or e.get("chunk_id", "")
         ozet = (e.get("text") or "").strip().replace("\n", " ")
         if len(ozet) > 900:
             ozet = ozet[:900] + "..."
@@ -131,22 +149,32 @@ def _kullanilan_emsaller_format(emsaller: list[dict]) -> list[dict]:
     out: list[dict] = []
     for e in emsaller:
         meta = e.get("meta") or {}
+        mahkeme_bilinmiyor = not (
+            meta.get("court_chamber") or meta.get("mahkeme")
+            or meta.get("daire") or meta.get("source") or meta.get("kaynak")
+        )
         mahkeme = (
-            meta.get("mahkeme")
+            meta.get("court_chamber")
+            or meta.get("mahkeme")
             or meta.get("daire")
+            or meta.get("source")
             or meta.get("kaynak")
             or "Mahkeme bilgisi yok"
         )
-        esas = meta.get("esas_no") or meta.get("esas") or ""
-        karar = meta.get("karar_no") or meta.get("karar") or ""
+        esas = meta.get("case_no") or meta.get("esas_no") or meta.get("esas") or ""
+        karar = meta.get("decision_no") or meta.get("karar_no") or meta.get("karar") or ""
         karar_id = (
-            meta.get("id")
-            or meta.get("decision_id")
+            meta.get("decision_id")
+            or meta.get("id")
             or e.get("chunk_id", "")
         )
 
-        # Atıf cümlesi: Türk hukuki üslubuna uygun.
-        if esas and karar:
+        # Atıf cümlesi: Türk hukuki üslubuna uygun. Mahkeme bilinmiyorsa
+        # iyelik eki ile bozuk bir cümle ("Mahkeme bilgisi yok'nin...")
+        # kurmak yerine ayrı, dilbilgisel olarak doğru bir ifade kullanılır.
+        if mahkeme_bilinmiyor:
+            atif = "İlgili yerleşik içtihat (mahkeme bilgisi mevcut değil)"
+        elif esas and karar:
             atif = f"{mahkeme}'nin {esas} E., {karar} K. sayılı kararı"
         elif esas:
             atif = f"{mahkeme}'nin {esas} E. sayılı kararı"
@@ -165,17 +193,27 @@ def _kullanilan_emsaller_format(emsaller: list[dict]) -> list[dict]:
     return out
 
 
+def _dilekce_baslik(dilekce_turu: str, ozel_konu: str | None = None) -> str:
+    """Dropdown'daki 5 sabit türe girmeyen davalar için kullanıcının serbest
+    yazdığı konu varsa onu, yoksa standart tür etiketini döndürür."""
+    ozel_konu = (ozel_konu or "").strip()
+    if ozel_konu:
+        return ozel_konu
+    return DILEKCE_TURU_LABEL.get(dilekce_turu, "Hukuki Dilekçe")
+
+
 def _stub_dilekce(
     durum: str,
     dilekce_turu: str,
     taraflar: dict | None,
     emsaller: list[dict],
+    ozel_konu: str | None = None,
 ) -> str:
     """LLM yokken kullanılacak basit şablon — sadece iskelet."""
     taraflar = taraflar or {}
     alacakli = taraflar.get("alacakli", "[ALACAKLI / DAVACI]")
     borclu = taraflar.get("borclu", "[BORÇLU / DAVALI]")
-    baslik = DILEKCE_TURU_LABEL.get(dilekce_turu, "Hukuki Dilekçe")
+    baslik = _dilekce_baslik(dilekce_turu, ozel_konu)
     dayanak = DILEKCE_TURU_HUKUKI_DAYANAK.get(dilekce_turu, "İlgili mevzuat.")
 
     atiflar = []
@@ -183,14 +221,16 @@ def _stub_dilekce(
         atiflar.append(f"  - {em['atif_text']}")
     atif_blok = "\n".join(atiflar) if atiflar else "  (Emsal bulunamadı)"
 
+    # NOT: Bu metin (demo/iskelet moduna düşüldüğünde) doğrudan kullanıcıya
+    # gösterilir — iç mimari/altyapı detayı (API key, .env vb.) İÇERMEMELİDİR.
+    # Kullanıcıya ayrıca gösterilen genel "şu an kullanılamıyor" uyarısı
+    # (bkz. _KULLANICI_DEMO_MESAJI) yeterlidir; belgenin kendisi temiz kalır.
     return (
         f"SAYIN ... MAHKEMESİ'NE\n\n"
         f"DAVACI: {alacakli}\n"
         f"DAVALI: {borclu}\n\n"
         f"KONU: {baslik} talebimizi içerir.\n\n"
         f"AÇIKLAMALAR:\n"
-        f"[DEMO MODU — LLM API key bulunamadı. Aşağıdaki olay anlatımı ve "
-        f"emsallere göre tam dilekçe metni LLM ile üretilecektir.]\n\n"
         f"Somut Olay:\n{durum}\n\n"
         f"İlgili Emsal Kararlar:\n{atif_blok}\n\n"
         f"HUKUKİ NEDENLER: {dayanak}\n\n"
@@ -243,11 +283,18 @@ def generate_dilekce_template(
     durum: str,
     dilekce_turu: str = "genel",
     taraflar: dict | None = None,
+    ozel_konu: str | None = None,
 ) -> dict:
     """LLM/RAG KULLANMADAN, form alanlarından yapılandırılmış dilekçe iskeleti üretir.
 
     Hızlı/ücretsiz mod: emsal kararlara atıf ve olaya özel hukuki argüman İÇERMEZ —
     bu kısımlar 'AI + Emsal' (Pro) modunun değer katan tarafıdır.
+
+    `ozel_konu`: dropdown'daki 5 sabit türe girmeyen davalar için kullanıcının
+    serbest yazdığı konu (örn. "Boşanma Davası", "Kira Tespiti"). Verilirse
+    KONU başlığında standart tür etiketinin yerine kullanılır; HUKUKİ NEDENLER
+    ve SONUÇ VE İSTEM yine de "genel" şablonundan gelir (bu mod LLM kullanmaz,
+    olaya özel gerekçe üretemez — bunun için 'AI + Emsal' modu gerekir).
     """
     from datetime import date
 
@@ -256,6 +303,7 @@ def generate_dilekce_template(
     davaci = (taraflar.get("alacakli") or "").strip() or "[DAVACI AD SOYAD / UNVAN]"
     davali = (taraflar.get("borclu") or "").strip() or "[DAVALI AD SOYAD / UNVAN]"
     davaci_rol, davali_rol = _TARAF_ROL.get(turu, _TARAF_ROL["genel"])
+    baslik = _dilekce_baslik(turu, ozel_konu)
 
     olay = (durum or "").strip() or "[Olay anlatımı buraya yazılacaktır.]"
     paragraflar = [p.strip() for p in olay.split("\n") if p.strip()]
@@ -269,7 +317,7 @@ def generate_dilekce_template(
         f"SAYIN ( ) NÖBETÇİ MAHKEMESİ'NE\n\n"
         f"{davaci_rol} : {davaci}\n"
         f"{davali_rol} : {davali}\n"
-        f"KONU : {DILEKCE_TURU_LABEL[turu]}\n\n"
+        f"KONU : {baslik}\n\n"
         f"AÇIKLAMALAR :\n{aciklamalar}\n\n"
         f"HUKUKİ NEDENLER : {DILEKCE_TURU_HUKUKI_DAYANAK[turu]}\n\n"
         f"DELİLLER : İcra dosyası, ilgili sözleşme/senet/çek, ticari defterler, "
@@ -300,6 +348,7 @@ def generate_dilekce(
     dilekce_turu: str = "genel",
     taraflar: dict | None = None,
     k: int = 5,
+    ozel_konu: str | None = None,
 ) -> dict:
     """Emsal-bağlamlı dilekçe taslağı üret.
 
@@ -309,6 +358,12 @@ def generate_dilekce(
                       | "tahsilat" | "genel"
         taraflar: {"alacakli": "...", "borclu": "..."} (opsiyonel)
         k: RAG için top-k.
+        ozel_konu: Dropdown'daki 5 sabit türe girmeyen davalar için kullanıcının
+                   serbest yazdığı konu (örn. "Boşanma Davası", "Miras Reddi").
+                   Verilirse LLM, KONU başlığını ve hukuki gerekçeyi bu konuya
+                   göre üretir — statik DILEKCE_TURU_HUKUKI_DAYANAK yalnızca
+                   bir öneri/ipucu olarak kalır, LLM buna bağlı kalmak zorunda
+                   değildir.
 
     Returns:
         {
@@ -335,37 +390,45 @@ def generate_dilekce(
         emsaller = search(durum, k=k)
     except Exception as e:
         emsaller = []
-        rag_hatasi = f"RAG araması başarısız: {e}"
-    else:
-        rag_hatasi = ""
+        log.warning(f"Dilekçe için RAG araması başarısız: {e}")
 
     kullanilan = _kullanilan_emsaller_format(emsaller)
 
     # 2) LLM kontrolü — yoksa demo modu.
     if not is_available():
-        stub = _stub_dilekce(durum, dilekce_turu, taraflar, emsaller)
-        uyari = (
-            "DEMO MODU: LLM API key bulunamadı (ANTHROPIC_API_KEY veya "
-            "GOOGLE_API_KEY). Sadece emsaller listelendi, dilekçe iskeleti "
-            "verildi. Tam üretim için .env dosyasına API key ekleyin."
+        # Bu, prod ortamında ANTHROPIC_API_KEY/GOOGLE_API_KEY yapılandırma
+        # hatası anlamına gelir — ücretli bir Pro özelliği sessizce şablona
+        # düşüyor demektir. Ops/Sentry görsün diye ERROR seviyesinde logla;
+        # kullanıcıya iç mimari detay (env değişkeni, .env) asla gösterilmez.
+        log.error(
+            "Dilekçe üretimi DEMO MODUNA düştü: LLM API key yok "
+            "(ANTHROPIC_API_KEY / GOOGLE_API_KEY). Kullanıcıya yalnızca "
+            "iskelet dilekçe döndürülüyor."
         )
-        if rag_hatasi:
-            uyari = rag_hatasi + " | " + uyari
+        stub = _stub_dilekce(durum, dilekce_turu, taraflar, emsaller, ozel_konu)
         return {
             "dilekce_metni": stub,
             "kullanilan_emsaller": kullanilan,
-            "uyari": uyari,
+            "uyari": _KULLANICI_DEMO_MESAJI,
         }
 
     # 3) Prompt hazırla.
     taraflar = taraflar or {}
     alacakli = (taraflar.get("alacakli") or "").strip() or "[ALACAKLI / DAVACI]"
     borclu = (taraflar.get("borclu") or "").strip() or "[BORÇLU / DAVALI]"
-    baslik = DILEKCE_TURU_LABEL.get(dilekce_turu, "Hukuki Dilekçe")
+    baslik = _dilekce_baslik(dilekce_turu, ozel_konu)
     dayanak = DILEKCE_TURU_HUKUKI_DAYANAK.get(dilekce_turu, "İlgili mevzuat.")
+    if ozel_konu and ozel_konu.strip():
+        # Kullanıcı dropdown'da olmayan bir tür belirtmiş — statik dayanak
+        # metnini bağlayıcı değil, yalnızca ipucu olarak sun.
+        dayanak = (
+            f"(Aşağıdaki '{DILEKCE_TURU_LABEL.get(dilekce_turu, 'genel')}' türü için genel "
+            f"ipucu niteliğindedir, kullanıcının belirttiği '{ozel_konu.strip()}' konusuna göre "
+            f"KENDİN en uygun kanun maddelerini ve içtihatları seç: {dayanak})"
+        )
     emsal_blogu = _emsal_blogu_hazirla(emsaller)
 
-    user_prompt = f"""DİLEKÇE TÜRÜ: {baslik} ({dilekce_turu})
+    user_prompt = f"""DİLEKÇE TÜRÜ: {baslik}{f" ({dilekce_turu})" if not ozel_konu else ""}
 
 TARAFLAR:
   - Davacı / Alacaklı: {alacakli}
@@ -396,14 +459,13 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
             max_tokens=2500,
             temperature=0.3,
         )
-        uyari = rag_hatasi or ""
+        uyari = ""
     except Exception as e:
-        # LLM çağrısı patladı — stub'a dön.
-        metin = _stub_dilekce(durum, dilekce_turu, taraflar, emsaller)
-        uyari = (
-            f"LLM çağrısı başarısız oldu ({e}). Demo iskelet döndürüldü. "
-            "API key'i ve provider ayarlarını kontrol edin."
-        )
+        # LLM çağrısı patladı — stub'a dön. Gerçek sebep (ki bazen API key/
+        # kota/ağ hatası olur) yalnızca loglanır; kullanıcıya iç detay verilmez.
+        log.error(f"Dilekçe için LLM çağrısı başarısız, iskelete düşüldü: {e}")
+        metin = _stub_dilekce(durum, dilekce_turu, taraflar, emsaller, ozel_konu)
+        uyari = _KULLANICI_DEMO_MESAJI
 
     return {
         "dilekce_metni": metin,
@@ -417,6 +479,7 @@ def generate_dilekce_stream(
     dilekce_turu: str = "genel",
     taraflar: dict | None = None,
     k: int = 5,
+    ozel_konu: str | None = None,
 ):
     """Streaming dilekçe üretimi — event dict'leri yield eder.
 
@@ -441,25 +504,24 @@ def generate_dilekce_stream(
     # 1) RAG araması
     try:
         emsaller = search(durum, k=k)
-        rag_hatasi = ""
     except Exception as e:
         emsaller = []
-        rag_hatasi = f"RAG araması başarısız: {e}"
+        log.warning(f"Dilekçe (stream) için RAG araması başarısız: {e}")
 
     kullanilan = _kullanilan_emsaller_format(emsaller)
 
-    # 2) LLM yoksa demo modu — stub'ı tek seferde gönder
+    # 2) LLM yoksa demo modu — stub'ı tek seferde gönder. Gerçek sebep (env
+    # yapılandırma hatası) yalnızca sunucu loguna yazılır, kullanıcıya
+    # gösterilmez — bu onu ilgilendiren bir konu değil.
     if not is_available():
-        uyari = (
-            "DEMO MODU: LLM API key bulunamadı. Sadece emsaller listelendi, "
-            "dilekçe iskeleti verildi."
+        log.error(
+            "Dilekçe (stream) üretimi DEMO MODUNA düştü: LLM API key yok "
+            "(ANTHROPIC_API_KEY / GOOGLE_API_KEY)."
         )
-        if rag_hatasi:
-            uyari = rag_hatasi + " | " + uyari
         yield {"type": "meta", "kullanilan_emsaller": kullanilan,
-               "uyari": uyari, "demo": True}
+               "uyari": _KULLANICI_DEMO_MESAJI, "demo": False}
         yield {"type": "delta",
-               "text": _stub_dilekce(durum, dilekce_turu, taraflar, emsaller)}
+               "text": _stub_dilekce(durum, dilekce_turu, taraflar, emsaller, ozel_konu)}
         yield {"type": "done"}
         return
 
@@ -467,11 +529,17 @@ def generate_dilekce_stream(
     taraflar = taraflar or {}
     alacakli = (taraflar.get("alacakli") or "").strip() or "[ALACAKLI / DAVACI]"
     borclu = (taraflar.get("borclu") or "").strip() or "[BORÇLU / DAVALI]"
-    baslik = DILEKCE_TURU_LABEL.get(dilekce_turu, "Hukuki Dilekçe")
+    baslik = _dilekce_baslik(dilekce_turu, ozel_konu)
     dayanak = DILEKCE_TURU_HUKUKI_DAYANAK.get(dilekce_turu, "İlgili mevzuat.")
+    if ozel_konu and ozel_konu.strip():
+        dayanak = (
+            f"(Aşağıdaki '{DILEKCE_TURU_LABEL.get(dilekce_turu, 'genel')}' türü için genel "
+            f"ipucu niteliğindedir, kullanıcının belirttiği '{ozel_konu.strip()}' konusuna göre "
+            f"KENDİN en uygun kanun maddelerini ve içtihatları seç: {dayanak})"
+        )
     emsal_blogu = _emsal_blogu_hazirla(emsaller)
 
-    user_prompt = f"""DİLEKÇE TÜRÜ: {baslik} ({dilekce_turu})
+    user_prompt = f"""DİLEKÇE TÜRÜ: {baslik}{f" ({dilekce_turu})" if not ozel_konu else ""}
 
 TARAFLAR:
   - Davacı / Alacaklı: {alacakli}
@@ -496,7 +564,7 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
 
     # 4) Önce meta (frontend emsalleri hemen gösterebilsin), sonra delta'lar
     yield {"type": "meta", "kullanilan_emsaller": kullanilan,
-           "uyari": rag_hatasi, "demo": False}
+           "uyari": "", "demo": False}
 
     try:
         for piece in generate_stream(
@@ -505,7 +573,8 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
         ):
             yield {"type": "delta", "text": piece}
     except Exception as e:
+        log.error(f"Dilekçe (stream) LLM akışı kesildi: {e}")
         yield {"type": "error",
-               "message": f"LLM akışı kesildi: {e}. Lütfen tekrar deneyin."}
+               "message": "Üretim sırasında bir sorun oluştu. Lütfen tekrar deneyin."}
         return
     yield {"type": "done"}

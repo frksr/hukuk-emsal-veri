@@ -60,6 +60,7 @@ async def dilekce_sablon(
         durum=istek.durum,
         dilekce_turu=istek.dilekce_turu,
         taraflar=istek.taraflar,
+        ozel_konu=istek.ozel_konu,
     )
     if user:
         background.add_task(
@@ -93,6 +94,7 @@ async def dilekce_uret(
             dilekce_turu=istek.dilekce_turu,
             taraflar=istek.taraflar,
             k=istek.k,
+            ozel_konu=istek.ozel_konu,
         )
     except Exception as e:
         msg = str(e).lower()
@@ -103,7 +105,7 @@ async def dilekce_uret(
                 detail="LLM şu an erişilemez. Birkaç dakika sonra tekrar deneyin.",
             )
         log.exception("Dilekçe üretimi başarısız")
-        raise HTTPException(status_code=500, detail=f"Dilekçe üretilemedi: {e}")
+        raise HTTPException(status_code=500, detail="Dilekçe üretilemedi. Lütfen tekrar deneyin.")
 
     uyari = sonuc.get("uyari") or ""
     background.add_task(
@@ -144,6 +146,7 @@ async def dilekce_stream(
             dilekce_turu=istek.dilekce_turu,
             taraflar=istek.taraflar,
             k=istek.k,
+            ozel_konu=istek.ozel_konu,
         )
         metin_parcalari: list[str] = []
         hata_olustu = False
@@ -160,10 +163,10 @@ async def dilekce_stream(
                     hata_olustu = True
                 if event.get("type") in ("done", "error"):
                     break
-        except Exception as e:
+        except Exception:
             log.exception("Dilekçe stream hatası")
             hata_olustu = True
-            payload = {"type": "error", "message": f"Akış hatası: {e}"}
+            payload = {"type": "error", "message": "Üretim sırasında bir sorun oluştu. Lütfen tekrar deneyin."}
             yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         # Akış başarıyla bittiyse üretimi geçmişe kaydet (stream sonrası).

@@ -3,19 +3,21 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Fiyatlandırma sayfası plan butonu — bekleme listesi modu.
- * Tüm planlar için bekleme listesine yönlendirir.
- * Platform hazır olduğunda bu bileşen eski akışa döndürülecek.
+ * Ücretli planlar bekleme listesine yönlendirir (davetli beta). Ücretsiz plan
+ * beklemeye tabi değil — doğrudan kayıt olup hemen kullanılabilir.
+ * Platform tüm planlarda satışa açıldığında bu bileşen eski akışa döndürülecek.
  */
 export function PlanCta({
   planKey,
-  label: _label,
+  label,
   highlight,
 }: {
   planKey: string | null;
   label: string;
   highlight?: boolean;
 }) {
-  const href = `/bekleme-listesi${planKey ? `?plan=${planKey}` : ""}`;
+  const ucretsiz = planKey === "free";
+  const href = ucretsiz ? "/kayit" : `/bekleme-listesi${planKey ? `?plan=${planKey}` : ""}`;
 
   return (
     <Button
@@ -23,7 +25,7 @@ export function PlanCta({
       className="mt-6 w-full"
       variant={highlight ? "default" : "outline"}
     >
-      <Link href={href}>Bekleme Listesine Katıl</Link>
+      <Link href={href}>{ucretsiz ? label : "Bekleme Listesine Katıl"}</Link>
     </Button>
   );
 }
