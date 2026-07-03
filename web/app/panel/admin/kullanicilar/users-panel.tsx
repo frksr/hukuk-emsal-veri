@@ -50,13 +50,14 @@ export function UsersPanel() {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
         const detay = typeof j.detail === "string" ? j.detail : j.detail?.message;
-        throw new Error(j.message || detay || "Plan güncellenemedi.");
+        throw new Error(j.message || detay || `Plan güncellenemedi (HTTP ${r.status}).`);
       }
+      toast(`Plan güncellendi: ${plan}`, "success");
       setSuccess(`Plan güncellendi: ${plan}`);
       await load();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Hata", "error");
+      toast(err instanceof Error ? err.message : "Sunucuya ulaşılamadı.", "error");
     } finally { setUpgrading(null); }
   }
 
@@ -128,8 +129,12 @@ export function UsersPanel() {
                     {u.tenant && (
                       <div className="flex gap-1">
                         <select
+                          key={`${u.tenant.id}-${u.tenant.plan}`}
                           disabled={upgrading === u.tenant.id}
-                          onChange={(e) => upgrade(u.tenant!.id, e.target.value)}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            upgrade(u.tenant!.id, e.target.value);
+                          }}
                           defaultValue=""
                           className="h-8 text-xs rounded border bg-background px-2"
                         >

@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buildMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
-import { MAKALELER } from "./makaleler";
 import { KapakYerTutucu } from "./_kapak";
 
 const API_BASE =
@@ -55,14 +54,11 @@ export const metadata: Metadata = buildMetadata({
 });
 
 export default async function BlogIndexPage() {
-  // Statik küratörlü makaleler + admin panelden yayınlananları birleştir.
-  // Aynı slug varsa statik (küratörlü) öncelikli.
-  const yayinlananlar = await getYayinlananlar();
-  const staticSlugs = new Set(MAKALELER.map((m) => m.slug));
-  const kartlar: Kart[] = [
-    ...MAKALELER.map((m) => ({ slug: m.slug, baslik: m.baslik, ozet: m.ozet, kapak: null })),
-    ...yayinlananlar.filter((m) => !staticSlugs.has(m.slug)),
-  ];
+  // Tüm makaleler admin panelden (blog_articles tablosu) yönetilir — tekil
+  // kaynak. Eskiden statik/küratörlü ayrı bir liste vardı (makaleler.ts); bu
+  // ikili yapı bazı yazıların admin panelde görünmemesine ve kapak
+  // görselinin hep placeholder çıkmasına yol açıyordu; kaldırıldı.
+  const kartlar: Kart[] = await getYayinlananlar();
 
   return (
     <>

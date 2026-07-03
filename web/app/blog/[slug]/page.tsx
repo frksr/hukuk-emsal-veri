@@ -8,7 +8,6 @@ import {
   faqJsonLd,
 } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
-import { makaleBul } from "../makaleler";
 import { KapakYerTutucu } from "../_kapak";
 
 const API_BASE =
@@ -70,15 +69,45 @@ export async function generateMetadata({
   });
 }
 
-// --- Hafif Markdown render (bağımlılıksız): ## h2, ### h3, - liste, **kalın**, > vurgu kutusu ---
+// --- Hafif Markdown render (bağımlılıksız): ## h2, ### h3, - liste, **kalın**,
+// [metin](url) link, > vurgu kutusu ---
 function inline(text: string, keyBase: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) => {
-    if (/^\*\*[^*]+\*\*$/.test(p)) {
-      return <strong key={`${keyBase}-${i}`}>{p.slice(2, -2)}</strong>;
+  // Önce [metin](url) linklerini ayır, kalan parçalarda **kalın** işle.
+  const linkParts = text.split(/(\[[^\]]+\]\([^)]+\))/g);
+  const out: React.ReactNode[] = [];
+  let i = 0;
+  for (const seg of linkParts) {
+    const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(seg);
+    if (linkMatch) {
+      const [, label, href] = linkMatch;
+      out.push(
+        href.startsWith("/") ? (
+          <Link key={`${keyBase}-l${i++}`} href={href} className="text-primary font-medium hover:underline">
+            {label}
+          </Link>
+        ) : (
+          <a
+            key={`${keyBase}-l${i++}`}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary font-medium hover:underline"
+          >
+            {label}
+          </a>
+        )
+      );
+      continue;
     }
-    return <span key={`${keyBase}-${i}`}>{p}</span>;
-  });
+    seg.split(/(\*\*[^*]+\*\*)/g).forEach((p) => {
+      if (/^\*\*[^*]+\*\*$/.test(p)) {
+        out.push(<strong key={`${keyBase}-b${i++}`}>{p.slice(2, -2)}</strong>);
+      } else if (p) {
+        out.push(<span key={`${keyBase}-s${i++}`}>{p}</span>);
+      }
+    });
+  }
+  return out;
 }
 
 function renderBody(body: string): React.ReactNode[] {
@@ -243,7 +272,10 @@ export default async function BlogMakalePage({
           )}
         </div>
 
-        <div className="prose prose-sm md:prose-base max-w-none space-y-4">
+        {/* Okurken nefes alan bir düzen için: prose-sm yerine prose-base/lg
+            (daha geniş paragraf boşluğu ve satır aralığı) + daha büyük
+            eleman-arası boşluk. Önceki prose-sm çok sık/bitişik görünüyordu. */}
+        <div className="prose prose-base md:prose-lg max-w-none leading-relaxed space-y-6">
           {renderBody(m.body || "")}
         </div>
 

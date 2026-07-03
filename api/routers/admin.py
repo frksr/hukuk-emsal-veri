@@ -628,13 +628,28 @@ async def list_users(
     args.extend([limit, offset])
 
     async with service_session() as conn:
+        # NOT: bir kullanıcı birden fazla tenant_members satırına sahip olabilir
+        # (ör. hem kendi çalışma alanı hem davet edildiği bir ekip). Doğrudan
+        # LEFT JOIN yapılırsa Postgres eşleşen satırlardan HANGİSİNİ döndüreceğini
+        # garanti etmez — bu da admin panelde "plan değiştirdim, sayfayı
+        # yeniledim eski haline döndü" görüntüsüne yol açar (aslında plan doğru
+        # güncellenmiştir, ama liste her seferinde farklı bir tenant satırına
+        # eşleşip eski/başka bir tenant'ın plan_tier'ını gösterebilir).
+        # Bunun önüne geçmek için her kullanıcı için TEK ve HER ZAMAN AYNI
+        # "birincil tenant"ı (owner rolü öncelikli, sonra en eski üyelik)
+        # deterministik biçimde seçiyoruz.
         rows = await conn.fetch(
-            f"""SELECT u.id, u.email, u.name, u.role, u.email_verified, u.created_at,
+            f"""WITH primary_tenant AS (
+                    SELECT DISTINCT ON (tm.user_id) tm.user_id, tm.tenant_id
+                    FROM tenant_members tm
+                    ORDER BY tm.user_id, (tm.role = 'owner') DESC, tm.created_at ASC
+                )
+                SELECT u.id, u.email, u.name, u.role, u.email_verified, u.created_at,
                        u.last_login_at,
                        t.id tid, t.name tname, t.plan_tier, t.beta_program
                 FROM users u
-                LEFT JOIN tenant_members tm ON tm.user_id = u.id
-                LEFT JOIN tenants t ON t.id = tm.tenant_id
+                LEFT JOIN primary_tenant pt ON pt.user_id = u.id
+                LEFT JOIN tenants t ON t.id = pt.tenant_id
                 {where}
                 ORDER BY (u.role = 'admin') DESC, u.created_at DESC
                 LIMIT ${len(args) - 1} OFFSET ${len(args)}""",

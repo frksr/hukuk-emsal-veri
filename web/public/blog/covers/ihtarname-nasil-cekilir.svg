@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16283f"/>
+      <stop offset="55%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#274b78"/>
+    </linearGradient>
+    <radialGradient id="glow6" cx="50%" cy="46%" r="42%">
+      <stop offset="0%" stop-color="#c9a961" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#c9a961" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg6)"/>
+
+  <g stroke="#c9a961" stroke-opacity="0.14" fill="none" stroke-width="1.5">
+    <circle cx="600" cy="315" r="270"/>
+    <circle cx="600" cy="315" r="230"/>
+  </g>
+  <g fill="#c9a961" fill-opacity="0.16">
+    <circle cx="120" cy="90" r="3"/>
+    <circle cx="150" cy="120" r="3"/>
+    <circle cx="180" cy="90" r="3"/>
+    <circle cx="1080" cy="540" r="3"/>
+    <circle cx="1050" cy="510" r="3"/>
+    <circle cx="1020" cy="540" r="3"/>
+  </g>
+
+  <rect x="0" y="0" width="1200" height="630" fill="url(#glow6)"/>
+
+  <g transform="translate(64,56)">
+    <rect x="0" y="0" width="9" height="26" fill="#c9a961"/>
+    <text x="22" y="19" font-family="Georgia, 'Times New Roman', serif" font-size="17" letter-spacing="3" fill="#e7d9b8">HUKUK REHBERİ</text>
+  </g>
+
+  <!-- Ana motif: zarf + noter mührü (ihtarname teması) -->
+  <g transform="translate(600,300)">
+    <!-- zarf gövdesi -->
+    <rect x="-200" y="-90" width="400" height="240" rx="14" fill="#0f2136" fill-opacity="0.35" stroke="#e9dcb9" stroke-width="6"/>
+    <!-- zarf kapağı -->
+    <path d="M -200,-90 L 0,60 L 200,-90" fill="none" stroke="#e9dcb9" stroke-width="5" stroke-linejoin="round"/>
+    <!-- zarf alt çizgiler (mektup ipucu) -->
+    <line x1="-150" y1="100" x2="60" y2="100" stroke="#e9dcb9" stroke-width="3" stroke-opacity="0.5"/>
+
+    <!-- noter mührü -->
+    <g transform="translate(150,-10) rotate(-12)">
+      <circle r="78" fill="none" stroke="#c9a961" stroke-width="7"/>
+      <circle r="58" fill="none" stroke="#c9a961" stroke-width="3"/>
+      <text x="0" y="8" text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="22" fill="#c9a961">NOTER</text>
+      <text x="0" y="-28" text-anchor="middle" font-family="Georgia, serif" font-size="12" letter-spacing="2" fill="#e9dcb9">İHTARNAME</text>
+    </g>
+
+    <!-- tüy kalem -->
+    <g transform="translate(-190,120) rotate(-40)">
+      <rect x="-6" y="-90" width="12" height="90" rx="5" fill="#e9dcb9"/>
+      <path d="M -6,-90 L 6,-90 L 0,-112 Z" fill="#c9a961"/>
+    </g>
+  </g>
+
+  <!-- süre etiketi -->
+  <g transform="translate(600,555)" text-anchor="middle" font-family="Georgia, serif">
+    <text font-size="17" letter-spacing="2" fill="#c9a961">TEBLİĞDEN İTİBAREN SÜRE İŞLER</text>
+  </g>
+
+  <g transform="translate(1136,566)" text-anchor="end">
+    <text font-family="Georgia, serif" font-size="18" fill="#c9a961" font-style="italic">Hukuk Emsal</text>
+  </g>
+</svg>

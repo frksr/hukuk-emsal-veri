@@ -1,37 +1,24 @@
-// Blog/rehber makalelerinin tek kaynağı (single source of truth).
-// Yeni makale eklerken: buraya bir kayıt + app/blog/<slug>/page.tsx ekleyin
-// ve app/sitemap.ts'e /blog/<slug> satırını koyun.
+// ARTIK KULLANILMIYOR — tüm blog/rehber makaleleri artık `blog_articles`
+// veritabanı tablosundan, admin panel (İçerik/Blog Yönetimi) üzerinden
+// yönetiliyor (bkz. api/routers/icerik.py, web/app/panel/admin/icerik/).
+// Burada statik olarak tutulan "emsal-karar-nedir" ve "ihtarname-nasil-cekilir"
+// makaleleri veritabanına taşındı ve app/blog/<slug>/page.tsx statik route'ları
+// kaldırıldı — aksi halde bu sabit route'lar admin panelde görünmeyen ve her
+// zaman placeholder kapak gösteren "gizli/yönetilemeyen" içerik olarak
+// kalıyordu. Bu dosya geriye dönük uyumluluk için boş bırakıldı; yeni kod
+// buraya referans EKLEMEMELİDİR.
 
 export interface Makale {
   slug: string;
   baslik: string;
   ozet: string;
-  yayinTarihi: string; // ISO
-  guncelleme?: string; // ISO
+  yayinTarihi: string;
+  guncelleme?: string;
   yazar: string;
   ilgiliArac?: { etiket: string; href: string };
 }
 
-export const MAKALELER: Makale[] = [
-  {
-    slug: "emsal-karar-nedir",
-    baslik: "Emsal Karar Nedir? Yargıtay ve Danıştay Kararları Nasıl Kullanılır?",
-    ozet:
-      "Emsal karar kavramı, bağlayıcılığı, içtihatla farkı ve bir davada emsal kararın nasıl gerekçe olarak kullanılacağı.",
-    yayinTarihi: "2026-06-26",
-    yazar: "Hukukçu Yapay Zekası Editör Ekibi",
-    ilgiliArac: { etiket: "Emsal karar arama", href: "/emsal-arama" },
-  },
-  {
-    slug: "ihtarname-nasil-cekilir",
-    baslik: "İhtarname Nasıl Çekilir? Adım Adım Noter İhtarnamesi Rehberi",
-    ozet:
-      "İhtarnamenin hukuki işlevi, noter ihtarnamesi süreci, alacak ve kira tahliye ihtarnamelerinde dikkat edilecekler.",
-    yayinTarihi: "2026-06-26",
-    yazar: "Hukukçu Yapay Zekası Editör Ekibi",
-    ilgiliArac: { etiket: "İhtarname üretici", href: "/ihtarname" },
-  },
-];
+export const MAKALELER: Makale[] = [];
 
 export function makaleBul(slug: string): Makale | undefined {
   return MAKALELER.find((m) => m.slug === slug);

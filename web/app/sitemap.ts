@@ -54,8 +54,10 @@ const STATIC_ROUTES: Array<{
   { path: "/trend", changeFrequency: "weekly", priority: 0.6 },
   // Blog / rehber hub (Cluster B — SEO_ANALIZ B7)
   { path: "/blog", changeFrequency: "weekly", priority: 0.7 },
-  { path: "/blog/emsal-karar-nedir", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/blog/ihtarname-nasil-cekilir", changeFrequency: "monthly", priority: 0.6 },
+  // NOT: /blog/emsal-karar-nedir ve /blog/ihtarname-nasil-cekilir artık statik
+  // sayfa değil, blog_articles tablosundan (aşağıdaki dinamik `blog` listesi)
+  // geliyor — burada sabit tekrar tanımlanmıyor (mükerrer + yanlış lastmod
+  // tarihi önlenir).
   { path: "/yasal-uyari", changeFrequency: "yearly", priority: 0.3 },
   { path: "/gizlilik", changeFrequency: "yearly", priority: 0.3 },
   { path: "/kullanim-sartlari", changeFrequency: "yearly", priority: 0.3 },
