@@ -914,7 +914,11 @@ async def get_config(admin: CurrentUser = Depends(require_admin)):
     from api.rate_limit import tool_daily_limit
     from services import app_config, krediler
 
-    override = await app_config.get_plan_limits()
+    # force=True: bu ekran admin'in az önce kaydettiği değeri HEMEN görmesi
+    # gereken tek yer — worker-başına bellek cache'ini atlayıp DB'den taze
+    # okur (bkz. app_config.get docstring'i: 4 worker process'i olduğu için
+    # bir worker'ın yazdığı değer diğerlerine ~30sn'ye kadar yansımayabilir).
+    override = await app_config.get_plan_limits(force=True)
 
     etkin: dict[str, dict[str, int | None]] = {}
     for tool in _CONFIG_TOOLS:
@@ -922,7 +926,7 @@ async def get_config(admin: CurrentUser = Depends(require_admin)):
         for tier in _CONFIG_TIERS:
             etkin[tool][tier] = tool_daily_limit(tier, tool, override)
 
-    paketler = await krediler.aktif_paketler()
+    paketler = await krediler.aktif_paketler(force=True)
     packs = {
         k: {
             "ad": p.get("ad", ""),

@@ -158,10 +158,15 @@ def _normalize_pack(p: dict) -> dict:
     return out
 
 
-async def aktif_paketler() -> dict:
-    """Etkin ek paket kataloğu — DB override varsa o, yoksa kod EK_PAKETLER'i."""
+async def aktif_paketler(force: bool = False) -> dict:
+    """Etkin ek paket kataloğu — DB override varsa o, yoksa kod EK_PAKETLER'i.
+
+    force=True: app_config'in worker-başına bellek cache'ini atla (bkz.
+    app_config.get force parametresi açıklaması) — admin panel gibi
+    kayıttan hemen sonra güncel veri gerektiren ekranlarda kullanılır.
+    """
     from services import app_config
-    db = await app_config.get_credit_packs()
+    db = await app_config.get_credit_packs(force=force)
     if not db or not isinstance(db, dict):
         return EK_PAKETLER
     try:

@@ -30,9 +30,22 @@ def _fresh(key: str) -> bool:
     return bool(entry) and (time.monotonic() - entry[1]) < CACHE_TTL
 
 
-async def get(key: str, default: Any = None) -> Any:
-    """Bir config key'inin değerini döndürür (cache + DB fallback)."""
-    if _fresh(key):
+async def get(key: str, default: Any = None, force: bool = False) -> Any:
+    """Bir config key'inin değerini döndürür (cache + DB fallback).
+
+    force=True: process-içi cache'i atlayıp her zaman DB'den okur. Backend
+    birden fazla worker process'iyle çalışıyor (bkz. railway.json
+    "--workers 4") — her worker'ın kendi belleğinde AYRI bir _cache sözlüğü
+    var. Bir worker set_value() ile yazınca yalnızca KENDİ cache'ini
+    tazeler; admin panelin "Kaydet" sonrası yaptığı yeniden-okuma isteği
+    round-robin ile FARKLI bir worker'a düşerse, o worker hâlâ eski değeri
+    (TTL dolana kadar, en fazla CACHE_TTL saniye) döndürür — admin panelde
+    "kaydettim ama sayfayı yenileyince eskisine dönüyor" görüntüsüne yol
+    açar. Admin'in kendi düzenleme ekranını her zaman force=True ile
+    okutuyoruz ki kayıttan hemen sonra hangi worker'a düşerse düşsün güncel
+    veriyi görsün.
+    """
+    if not force and _fresh(key):
         return _cache[key][0]
     try:
         async with service_session() as conn:
@@ -80,15 +93,15 @@ async def set_value(key: str, value: dict) -> None:
         raise
 
 
-async def get_plan_limits() -> dict:
+async def get_plan_limits(force: bool = False) -> dict:
     """Plan limit override'ı. Şekil: {tool: {tier: int|null}}. Yoksa {}."""
-    val = await get("plan_limits", {})
+    val = await get("plan_limits", {}, force=force)
     return val if isinstance(val, dict) else {}
 
 
-async def get_credit_packs() -> Optional[dict]:
+async def get_credit_packs(force: bool = False) -> Optional[dict]:
     """Ek paket kataloğu override'ı. Yoksa None → kod default'u kullanılır."""
-    val = await get("credit_packs", None)
+    val = await get("credit_packs", None, force=force)
     if val is None:
         return None
     return val if isinstance(val, dict) else None
