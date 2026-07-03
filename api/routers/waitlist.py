@@ -19,6 +19,7 @@ PLAN_ETIKET = {
     "pro_solo": "Pro Solo",
     "pro_solo_uyap": "Pro + UYAP",
     "team": "Team",
+    "team_uyap": "Team + UYAP",
 }
 
 # Bekleme listesi CRM durumları (infra/db/24_waitlist_crm.sql)

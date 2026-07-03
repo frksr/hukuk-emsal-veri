@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SATIS_ACIK } from "@/lib/satis-modu";
 import { CheckCircle2, ArrowRight, Loader2, Crown } from "lucide-react";
@@ -10,7 +9,7 @@ import { BasariModal } from "@/components/basari-modal";
 import { Portal } from "@/components/portal";
 import { Switch } from "@/components/ui/switch";
 import { ShieldCheck } from "lucide-react";
-import { refreshPlan } from "@/lib/use-plan";
+import { refreshPlan, usePlan } from "@/lib/use-plan";
 
 const PLANS = [
   { key: "free", name: "Free", price: "₺0", desc: "Bireysel deneme",
@@ -55,12 +54,45 @@ const _subTokenSonuc = new Map<string, Promise<{ ok: boolean; message?: string }
 export function AbonelikPanel() {
   const router = useRouter();
   const sp = useSearchParams();
+  const plan = usePlan();
   const [current, setCurrent] = useState<Current | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [basari, setBasari] = useState<string | null>(null);
+
+  // Bekleme listesi (lansman modu) — kullanıcı zaten giriş yapmış, ad/e-posta
+  // tekrar sorulmaz; hesap bilgisiyle sessizce kaydedilir.
+  const [beklemeKatilan, setBeklemeKatilan] = useState<Set<string>>(new Set());
+  const [beklemeYukleniyor, setBeklemeYukleniyor] = useState<string | null>(null);
+
+  async function beklemeListesineKatil(planKey: string) {
+    if (!plan.email) {
+      setError("E-posta adresiniz okunamadı, lütfen sayfayı yenileyip tekrar deneyin.");
+      return;
+    }
+    setBeklemeYukleniyor(planKey);
+    setError(null);
+    try {
+      const r = await fetch("/api/proxy/waitlist/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: plan.name?.trim() || plan.email.split("@")[0],
+          email: plan.email,
+          plan: planKey,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message || "Bekleme listesine eklenemedi.");
+      setBeklemeKatilan((s) => new Set(s).add(planKey));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hata");
+    } finally {
+      setBeklemeYukleniyor(null);
+    }
+  }
 
   // Ödeme (fatura) modalı — iyzico canlı modda TC/adres/şehir gerekli.
   const [secilenPlan, setSecilenPlan] = useState<string | null>(null);
@@ -605,9 +637,18 @@ export function AbonelikPanel() {
                        Satış açılınca (SATIS_ACIK=true) alttaki normal akış geri gelir. */
                     p.key === "free" ? (
                       <Button disabled className="w-full" variant="outline">Bu Plana Geç</Button>
+                    ) : beklemeKatilan.has(p.key) ? (
+                      <Button disabled className="w-full" variant="outline">
+                        <CheckCircle2 className="h-4 w-4 mr-1.5 text-emerald-600" /> Listeye Eklendiniz
+                      </Button>
                     ) : (
-                      <Button asChild variant={p.popular ? "default" : "outline"} className="w-full">
-                        <Link href={`/bekleme-listesi?plan=${p.key}`}>Bekleme Listesine Katıl</Link>
+                      <Button
+                        onClick={() => beklemeListesineKatil(p.key)}
+                        disabled={beklemeYukleniyor === p.key}
+                        variant={p.popular ? "default" : "outline"}
+                        className="w-full"
+                      >
+                        {beklemeYukleniyor === p.key ? "Ekleniyor…" : "Bekleme Listesine Katıl"}
                       </Button>
                     )
                   ) : (
