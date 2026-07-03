@@ -102,12 +102,19 @@ async def get_current_user(
             tenant_role = mem["role"]
             tenant_plan = mem["plan_tier"]
         else:
-            # İlk tenant üyeliğini bul
+            # Birincil tenant üyeliğini bul — owner rolü önce, sonra en eski üyelik.
+            # NOT: admin panelin kullanıcı listesi de AYNI kuralla (owner önce,
+            # sonra en eski) "birincil tenant"ı seçiyor (bkz. admin.py list_users).
+            # Burada sadece "en eski üyelik" kullanılsaydı, birden fazla tenant'a
+            # üye bir kullanıcı için admin panelin gösterdiği/güncellediği tenant
+            # ile bu kullanıcının OTURUMUNUN bağlı olduğu tenant FARKLI olabilirdi
+            # — admin planı değiştirir ama kullanıcı hep başka bir tenant'ın
+            # planını görür (kullanıcı panelinde hiç değişmiyormuş gibi görünür).
             mem = await conn.fetchrow(
                 """SELECT tm.tenant_id, tm.role, t.plan_tier FROM tenant_members tm
                    JOIN tenants t ON t.id = tm.tenant_id
                    WHERE tm.user_id = $1 AND t.is_active = TRUE
-                   ORDER BY tm.created_at LIMIT 1""",
+                   ORDER BY (tm.role = 'owner') DESC, tm.created_at ASC LIMIT 1""",
                 user_id,
             )
             if mem:
