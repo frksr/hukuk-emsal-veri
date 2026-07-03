@@ -270,18 +270,17 @@ export default function HomePage() {
           <div className="mx-auto flex max-w-6xl flex-col items-center px-4 py-20 text-center sm:py-28">
             <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-sm font-medium text-foreground/80 shadow-sm">
               <Sparkles className="h-4 w-4 text-accent" aria-hidden />
-              Yapay Zeka destekli Türk hukuk asistanı
+              İcra ve Tahsilat Hukukuna Özel Yapay Zeka
             </span>
             <h1
               id="hero-heading"
               className="max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl"
             >
-              İcra ve Tahsilat Hukukunda Emsal Kararları Yapay Zeka ile Arayın
+              İcra ve Tahsilat Hukukunun Uzmanı
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
-              Yargıtay, Danıştay ve AİHM kararları arasında doğal dilde arama
-              yapın; dilekçe, ihtarname ve faiz hesaplamalarınızı saniyeler
-              içinde tamamlayın.
+              10.000&apos;i aşkın Yargıtay ve Danıştay kararıyla, alanında en
+              kapsamlı emsal karar arşivi ve Yapay Zeka asistanı.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="text-lg px-8 py-6 font-semibold">
