@@ -1,24 +1,28 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Gavel } from "lucide-react";
 
 import { buildMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
 import { AramaForm } from "./arama-form";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Türk Hukuk Emsal Karar Arama | Yargıtay, Danıştay, AİHM",
+  title: "İcra ve Tahsilat Hukuku Emsal Karar Arama | Yargıtay, Danıştay, AİHM",
   description:
-    "10.000+ emsal karar arasında doğal dil ile arama yapın. İcra, tahsilat, ihtar konularında Yapay Zeka destekli emsal bulucu.",
+    "10.000+ emsal karar arasında doğal dil ile arama yapın. Uzmanlık alanımız icra ve tahsilat hukuku (Yargıtay 12. Hukuk Dairesi); ayrıca Danıştay ve AİHM kararları da veritabanımızda.",
   path: "/emsal-arama",
   keywords: [
+    "icra hukuku emsal karar",
+    "tahsilat hukuku emsal karar",
+    "yargıtay 12 hukuk dairesi",
+    "icra takibi emsal karar",
+    "haciz emsal karar",
+    "ödeme emrine itiraz emsal",
     "emsal karar arama",
     "yargıtay karar arama",
     "danıştay karar arama",
     "aihm hudoc",
-    "icra emsal kararları",
-    "tahsilat emsal karar",
     "ihtarname emsal",
-    "yargıtay 12 hukuk dairesi",
   ],
 });
 
@@ -95,6 +99,32 @@ export default function EmsalAramaPage() {
             atıf olarak ekleyin.
           </p>
         </header>
+
+        <section
+          aria-label="Uzmanlık alanımız"
+          className="mb-8 rounded-xl border border-primary/20 bg-primary/5 p-5 sm:p-6"
+        >
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-primary/10 p-2 text-primary shrink-0">
+              <Gavel className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                Uzmanlık alanımız: İcra ve Tahsilat Hukuku
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                Veritabanımızdaki kararların büyük çoğunluğu icra takibi, haciz,
+                ödeme emrine itiraz, ihtarname ve amme alacağının tahsili gibi
+                icra ve tahsilat hukuku konularını kapsıyor — başta Yargıtay 12.
+                Hukuk Dairesi (icra ve iflas) olmak üzere. Bu sayede icra
+                dosyalarınızla ilgili emsal aramalarında en derin ve güncel
+                sonuçları sunuyoruz. Danıştay&apos;ın vergi/amme alacağı tahsilat
+                kararları ve AİHM (HUDOC) emsalleri de ayrıca veritabanımızda yer
+                alıyor.
+              </p>
+            </div>
+          </div>
+        </section>
 
         <AramaForm />
       </main>
