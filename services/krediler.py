@@ -176,9 +176,9 @@ async def aktif_paketler(force: bool = False) -> dict:
         return EK_PAKETLER
 
 
-async def paket_bilgi_async(pack_key: str) -> Optional[dict]:
+async def paket_bilgi_async(pack_key: str, force: bool = False) -> Optional[dict]:
     """Tek paket bilgisi (dinamik katalog üzerinden)."""
-    return (await aktif_paketler()).get(pack_key)
+    return (await aktif_paketler(force=force)).get(pack_key)
 
 
 async def modul_paketleri_async(module: str) -> list[str]:

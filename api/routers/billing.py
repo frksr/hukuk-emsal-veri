@@ -97,7 +97,9 @@ async def public_plan_limits():
     from api.rate_limit import tool_daily_limit
     from services import app_config
 
-    override = await app_config.get_plan_limits()
+    # force=True: fiyatlandırma sayfası düşük trafikli, admin değişikliğinin
+    # hemen görünmesi (worker-başına cache gecikmeden) burada da önemli.
+    override = await app_config.get_plan_limits(force=True)
     tiers = ["free", "pro_solo", "pro_solo_uyap", "team", "team_uyap", "enterprise"]
     tools = ["arama", "dilekce", "ihtarname", "ozet", "denetim",
              "karsi_argument", "sozlesme", "kvkk"]
@@ -513,8 +515,13 @@ async def list_invoices(user: CurrentUser = Depends(get_current_user)):
 
 @router.get("/addons", response_model=APIResponse)
 async def list_addons():
-    """Satın alınabilir ek paket kataloğu (dinamik — admin panelden düzenlenebilir)."""
-    paketler = await krediler.aktif_paketler()
+    """Satın alınabilir ek paket kataloğu (dinamik — admin panelden düzenlenebilir).
+
+    force=True: worker-başına bellek cache'ini atla (bkz. services/app_config.py
+    docstring'i) — admin panelde paket değiştirince kullanıcı panelinde de
+    ANINDA (bir sonraki worker'ın 30sn'lik TTL'ini beklemeden) görünsün.
+    """
+    paketler = await krediler.aktif_paketler(force=True)
     return APIResponse(ok=True, data={
         "packs": [
             {
@@ -584,7 +591,10 @@ async def addon_checkout(
 ):
     """Ek paket satın alma başlat. Dev modda (iyzico yok) krediler hemen yüklenir."""
     _require_verified(user)
-    pack = await krediler.paket_bilgi_async(payload.pack_key)
+    # force=True: fiyat/kredi miktarı burada belirleniyor — admin az önce
+    # değiştirdiyse müşteriye eski fiyattan tahsilat yapılmasın (worker-başına
+    # cache gecikmesi burada kabul edilemez, salt görüntüleme değil).
+    pack = await krediler.paket_bilgi_async(payload.pack_key, force=True)
     if not pack:
         raise HTTPException(400, "Geçersiz paket.")
 
