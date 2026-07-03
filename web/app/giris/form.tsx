@@ -6,6 +6,7 @@ import { Loader2, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { oturumPenceresiAc } from "@/lib/auth/oturum-penceresi";
 
 export function GirisForm() {
   const router = useRouter();
@@ -31,6 +32,9 @@ export function GirisForm() {
       setError("E-posta veya şifre hatalı.");
       return;
     }
+    // Tarayıcı bu oturumda açık kaldığı sürece geçerli işaretçi — middleware
+    // bunu görmezse (tarayıcı kapanıp yeniden açılmışsa) oturumu sonlandırır.
+    oturumPenceresiAc();
     // Varsayılan hedefte (belirli bir callbackUrl yoksa) admin'i doğrudan
     // admin paneline yönlendir; diğer kullanıcıları panele.
     let hedef = callbackUrl;

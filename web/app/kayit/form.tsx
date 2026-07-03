@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { oturumPenceresiAc } from "@/lib/auth/oturum-penceresi";
 
 // Ücretli planlar — kayıt sonrası doğrulama + ödeme akışına yönlendirilir.
 const PAID_PLANS = new Set(["pro_solo", "pro_solo_uyap", "team", "team_uyap"]);
@@ -38,6 +39,7 @@ export function KayitForm() {
       // Auto login → e-posta doğrulama. Ücretli plan seçildiyse doğrulama sonrası
       // o planın ödeme ekranına yönlendir (free ise panele).
       await signIn("credentials", { email, password, redirect: false });
+      oturumPenceresiAc();
       const next =
         secilenPlan && PAID_PLANS.has(secilenPlan)
           ? `/panel/ayarlar/abonelik?plan=${secilenPlan}`
