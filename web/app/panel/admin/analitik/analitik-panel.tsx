@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   BarChart3, Users, UserPlus, Activity, TrendingUp, Wallet, Package,
-  Coins, Sparkles, Wrench, Cpu, Receipt, RefreshCw, Crown,
+  Coins, Sparkles, Wrench, Cpu, Receipt, RefreshCw, Crown, Database,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,14 @@ type Analytics = {
     toplam: { provider: string; adet: number }[];
     son_30g: { provider: string; adet: number }[];
   };
+  embedding_kullanimi: {
+    tahmini: boolean; para_birimi: string; model: string;
+    toplam: { istek: number; oge: number; karakter: number; tahmini_maliyet_usd: number };
+    son_24s: { istek: number; tahmini_maliyet_usd: number };
+    son_7g: { istek: number; tahmini_maliyet_usd: number };
+    son_30g: { istek: number; tahmini_maliyet_usd: number };
+    tur_dagilimi: { request_type: string; adet: number }[];
+  };
 };
 type MaliyetKalem = {
   event_type: string; etiket: string; adet: number; birim_try: number; tutar_try: number;
@@ -51,8 +59,12 @@ const PLAN_ETIKET: Record<string, string> = {
 const SAGLAYICI_ETIKET: Record<string, string> = {
   anthropic: "Anthropic (Claude)", gemini: "Google Gemini", bilinmiyor: "Bilinmiyor (eski kayıt)",
 };
+const EMBED_TUR_ETIKET: Record<string, string> = {
+  retrieval_query: "Arama sorgusu", retrieval_document: "Doküman/chunk indeksleme",
+};
 
 const tl = (n: number) => n.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const usd = (n: number) => `$${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
 const tarih = (s: string | null) =>
   s ? new Date(s).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" }) : "—";
 
@@ -130,6 +142,7 @@ export function AnalitikPanel() {
   const krediler = [...d.krediler].filter((k) => k.satin_alinan > 0 || k.tuketilen > 0).slice(0, 12);
   const krediMax = Math.max(1, ...krediler.map((k) => Math.max(k.satin_alinan, k.tuketilen)));
   const provMax = Math.max(1, ...d.saglayici_dagilimi.toplam.map((p) => p.adet));
+  const embedMax = Math.max(1, ...d.embedding_kullanimi.tur_dagilimi.map((t) => t.adet));
 
   return (
     <div className="space-y-6">
@@ -321,6 +334,39 @@ export function AnalitikPanel() {
             <p className="text-[11px] text-muted-foreground pt-2">
               Birim maliyetler yapılandırılabilir tahminlerdir (backend: TAHMINI_MALIYET_TRY).
               Gerçek sağlayıcı faturasını yansıtmaz.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* i) Embedding API kullanımı */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Database className="h-4 w-4 text-primary" /> Embedding API Kullanımı
+          <span className="text-xs font-normal text-muted-foreground">({d.embedding_kullanimi.model} — arama + indeksleme)</span>
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Metrik icon={Database} etiket="İstek (24s)" deger={d.embedding_kullanimi.son_24s.istek}
+                  alt={`≈ ${usd(d.embedding_kullanimi.son_24s.tahmini_maliyet_usd)}`} />
+          <Metrik icon={Database} etiket="İstek (7g)" deger={d.embedding_kullanimi.son_7g.istek}
+                  alt={`≈ ${usd(d.embedding_kullanimi.son_7g.tahmini_maliyet_usd)}`} />
+          <Metrik icon={Database} etiket="İstek (30g)" deger={d.embedding_kullanimi.son_30g.istek}
+                  alt={`≈ ${usd(d.embedding_kullanimi.son_30g.tahmini_maliyet_usd)}`} />
+          <Metrik icon={Database} etiket="İstek (toplam)" deger={d.embedding_kullanimi.toplam.istek}
+                  alt={`≈ ${usd(d.embedding_kullanimi.toplam.tahmini_maliyet_usd)}`} />
+        </div>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">İstek türü dağılımı (tüm zamanlar)</CardTitle></CardHeader>
+          <CardContent className="space-y-2.5">
+            {d.embedding_kullanimi.tur_dagilimi.length === 0
+              ? <p className="text-sm text-muted-foreground">Kayıt yok.</p>
+              : d.embedding_kullanimi.tur_dagilimi.map((t) => (
+                  <Bar key={t.request_type} label={EMBED_TUR_ETIKET[t.request_type] ?? t.request_type} value={t.adet} max={embedMax} />
+                ))}
+            <p className="text-[11px] text-muted-foreground pt-1">
+              Maliyet TAHMİNİDİR: karakter sayısından kabaca token'a çevrilir (≈4 karakter/token) ve
+              Google&apos;ın gemini-embedding-001 fiyatına ($0.15 / 1M token) uygulanır. Gerçek fatura değildir;
+              önbellekten (cache) karşılanan sorgular sayılmaz.
             </p>
           </CardContent>
         </Card>

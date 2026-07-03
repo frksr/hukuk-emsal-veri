@@ -265,6 +265,14 @@ TAHMINI_MALIYET_TRY: dict[str, float] = {
 }
 _VARSAYILAN_AI_MALIYET = 0.50  # kataloğa eklenmemiş yeni AI event_type için
 
+# Google embedding (gemini-embedding-001) fiyatı — 2026 itibarıyla doğrulanmış.
+# Kaynak: ai.google.dev/gemini-api/docs/pricing — $0.15 / 1M girdi token (standart).
+# Çıktı token'ı yok (embedding'in kendisi "çıktı" sayılmıyor, ücretlendirilmiyor).
+# Token sayısı loglanmıyor (yalnızca karakter) → kabaca 1 token ≈ 4 karakter
+# varsayımıyla tahmin ediliyor. Bu da GERÇEK fatura değil, TAHMİNİ bir değerdir.
+_EMBEDDING_USD_PER_1M_TOKEN = 0.15
+_EMBEDDING_KARAKTER_PER_TOKEN = 4
+
 
 @router.get("/analytics", response_model=APIResponse)
 async def analytics(admin: CurrentUser = Depends(require_admin)):
@@ -397,6 +405,35 @@ async def analytics(admin: CurrentUser = Depends(require_admin)):
             list(AI_EVENTS), month_ago,
         )
 
+        # ---- i) Embedding API kullanımı (Google embedding, RAG arama/indeksleme) --
+        # Not: embedding_usage_log tablosu RAG'ın senkron psycopg havuzundan
+        # (services/pg.py, services/embeddings.py) yazılır; asyncpg havuzuyla
+        # (burada) aynı fiziksel veritabanına bağlı olduğundan normal okunur.
+        embed_total_row = await conn.fetchrow(
+            """SELECT COUNT(*) istek, COALESCE(SUM(item_count),0) ogeler,
+                      COALESCE(SUM(char_count),0) karakter
+               FROM embedding_usage_log"""
+        )
+        embed_24h_row = await conn.fetchrow(
+            """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
+               FROM embedding_usage_log WHERE created_at > $1""",
+            day_ago,
+        )
+        embed_7d_row = await conn.fetchrow(
+            """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
+               FROM embedding_usage_log WHERE created_at > $1""",
+            week_ago,
+        )
+        embed_30d_row = await conn.fetchrow(
+            """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
+               FROM embedding_usage_log WHERE created_at > $1""",
+            month_ago,
+        )
+        embed_type_rows = await conn.fetch(
+            """SELECT request_type, COUNT(*) c FROM embedding_usage_log
+               GROUP BY request_type ORDER BY c DESC"""
+        )
+
         # ---- g0) Maliyet için AI-only olay sayıları (sablon dilekçe hariç) --
         # tool_total/tool_30d sablon olaylarını da içerir; maliyet onlara dahil
         # edilmemeli. Bu yüzden maliyet için ayrı, sablon-hariç sayım haritası.
@@ -442,6 +479,11 @@ async def analytics(admin: CurrentUser = Depends(require_admin)):
     ai_cost_30d_map = {r["event_type"]: r["c"] for r in ai_cost_30d_rows}
     maliyet_toplam = _maliyet(ai_cost_total_map)
     maliyet_30g = _maliyet(ai_cost_30d_map)
+
+    # ---- i) Embedding maliyeti (TAHMİNİ — karakter → token yaklaşıklaması) ---
+    def _embed_maliyet_usd(karakter: int) -> float:
+        tahmini_token = (int(karakter or 0)) / _EMBEDDING_KARAKTER_PER_TOKEN
+        return round(tahmini_token / 1_000_000 * _EMBEDDING_USD_PER_1M_TOKEN, 4)
 
     sub_count = int(sub_row["c"] or 0)
     sub_toplam = float(sub_row["toplam"] or 0)
@@ -522,6 +564,33 @@ async def analytics(admin: CurrentUser = Depends(require_admin)):
         "saglayici_dagilimi": {
             "toplam": [{"provider": r["provider"], "adet": r["c"]} for r in provider_rows],
             "son_30g": [{"provider": r["provider"], "adet": r["c"]} for r in provider_30d_rows],
+        },
+        # i) Embedding API kullanımı (Google gemini-embedding-001, RAG arama/indeksleme)
+        "embedding_kullanimi": {
+            "tahmini": True,
+            "para_birimi": "USD",
+            "model": "gemini-embedding-001",
+            "toplam": {
+                "istek": int(embed_total_row["istek"] or 0),
+                "oge": int(embed_total_row["ogeler"] or 0),
+                "karakter": int(embed_total_row["karakter"] or 0),
+                "tahmini_maliyet_usd": _embed_maliyet_usd(embed_total_row["karakter"]),
+            },
+            "son_24s": {
+                "istek": int(embed_24h_row["istek"] or 0),
+                "tahmini_maliyet_usd": _embed_maliyet_usd(embed_24h_row["karakter"]),
+            },
+            "son_7g": {
+                "istek": int(embed_7d_row["istek"] or 0),
+                "tahmini_maliyet_usd": _embed_maliyet_usd(embed_7d_row["karakter"]),
+            },
+            "son_30g": {
+                "istek": int(embed_30d_row["istek"] or 0),
+                "tahmini_maliyet_usd": _embed_maliyet_usd(embed_30d_row["karakter"]),
+            },
+            "tur_dagilimi": [
+                {"request_type": r["request_type"], "adet": r["c"]} for r in embed_type_rows
+            ],
         },
     })
 

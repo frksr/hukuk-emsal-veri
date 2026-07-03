@@ -58,6 +58,7 @@ MIGRATIONS = [
     "23_reminder_retry.sql",
     "24_waitlist_crm.sql",
     "25_sablonlar_alarmlar.sql",  # dilekce_sablonlari tablosu (Şablonlar sekmesi)
+    "26_embedding_usage_log.sql",  # Embedding API kullanım/maliyet logu (admin panel)
 ]
 
 # Lokal dev rol parolaları — production'da ASLA uygulanmaz.

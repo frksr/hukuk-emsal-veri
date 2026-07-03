@@ -97,6 +97,31 @@ def cache_stats() -> dict:
     return _query_cache.stats()
 
 
+# ---------------------------------------------------------------------------
+# Kullanım logu — admin panelde istek sayısı + tahmini maliyet göstermek için.
+# Sadece GERÇEK API çağrılarında yazılır (cache hit'lerde YAZILMAZ).
+# Best-effort: log yazımı asla asıl embedding akışını bozmamalı.
+# ---------------------------------------------------------------------------
+def _log_usage(request_type: str, texts: List[str], ok: bool = True) -> None:
+    try:
+        from services import pg
+        model = API_MODEL if PROVIDER == "google" else LOCAL_MODEL
+        item_count = len(texts)
+        char_count = sum(len(t or "") for t in texts)
+        with pg.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO embedding_usage_log
+                        (provider, model, request_type, item_count, char_count, ok)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (PROVIDER, model, request_type, item_count, char_count, ok),
+                )
+    except Exception:
+        log.warning("Embedding kullanım logu yazılamadı (yoksayıldı)", exc_info=True)
+
+
 def _norm(text: str) -> str:
     return " ".join((text or "").strip().lower().split())
 
@@ -219,6 +244,7 @@ def embed_query(text: str) -> List[float]:
         vec = _local_embed([text], is_query=True)[0]
     else:
         vec = _google_embed([text], task_type="retrieval_query")[0]
+    _log_usage("retrieval_query", [text])
 
     _query_cache.set(key, vec)
     return vec
@@ -229,8 +255,11 @@ def embed_passages(texts: List[str]) -> List[List[float]]:
     if not texts:
         return []
     if PROVIDER == "local":
-        return _local_embed(texts, is_query=False)
-    return _google_embed(texts, task_type="retrieval_document")
+        out = _local_embed(texts, is_query=False)
+    else:
+        out = _google_embed(texts, task_type="retrieval_document")
+    _log_usage("retrieval_document", texts)
+    return out
 
 
 def embed_passage(text: str) -> List[float]:
