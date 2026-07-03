@@ -276,11 +276,11 @@ export default function HomePage() {
               id="hero-heading"
               className="max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl"
             >
-              İcra ve Tahsilat Hukukunun Uzmanı
+              İcra ve Tahsilat Hukukunun En İyisiyle Çalışıyorsunuz
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
-              10.000&apos;i aşkın Yargıtay ve Danıştay kararıyla, alanında en
-              kapsamlı emsal karar arşivi ve Yapay Zeka asistanı.
+              10.000&apos;i aşkın Yargıtay ve Danıştay kararıyla oluşturduğumuz
+              emsal arşivi ve Yapay Zeka desteğiyle, alanında fark yaratıyoruz.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="text-lg px-8 py-6 font-semibold">
