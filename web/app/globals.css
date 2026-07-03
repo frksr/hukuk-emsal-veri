@@ -116,6 +116,23 @@
     @apply bg-accent/40 text-foreground;
   }
 
+  /* Tarayıcı otomatik doldurma (autofill) rengini ez: Chrome/Edge/Safari
+     varsayılan olarak inputun arka planını gri/mavimsi bir renkle
+     boyuyor ve bizim bg-background/text-foreground stilimizi görmezden
+     geliyor — giriş/kayıt formlarında "soluk gri kutu" görünümüne sebep
+     olan asıl neden bu. -webkit-box-shadow inset hilesiyle inputun kendi
+     temasına (açık/koyu) uygun rengi zorluyoruz. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: hsl(var(--foreground));
+    caret-color: hsl(var(--foreground));
+    box-shadow: 0 0 0 1000px hsl(var(--background)) inset;
+    -webkit-box-shadow: 0 0 0 1000px hsl(var(--background)) inset;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading tracking-tight;
     text-wrap: balance;
