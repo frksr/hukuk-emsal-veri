@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BarChart3, Receipt, FileText, Mail, Scale, FileSearch, Swords, FileCheck, Search, Shield, Calculator, Clock, Package, CreditCard } from "lucide-react";
+import { BarChart3, Receipt, FileText, Mail, Scale, FileSearch, Swords, FileCheck, Search, Shield, Calculator, Clock, Package, CreditCard, Activity, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CountUp } from "@/components/count-up";
@@ -109,17 +109,26 @@ export function RaporlarPanel() {
     <div className="space-y-6">
       {/* Özet kartlar */}
       <div className="grid sm:grid-cols-3 gap-3 stagger">
-        <Card className="hover-lift"><CardContent className="p-4">
-          <div className="text-xs text-muted-foreground">Toplam İşlem</div>
-          <div className="text-3xl font-bold tabular-nums"><CountUp value={rapor?.toplam_kullanim ?? 0} /></div>
+        <Card className="hover-lift"><CardContent className="p-4 flex items-center gap-3">
+          <span className="rounded-lg p-2 bg-primary/10 text-primary shrink-0"><Activity className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Toplam İşlem</div>
+            <div className="text-3xl font-bold tabular-nums"><CountUp value={rapor?.toplam_kullanim ?? 0} /></div>
+          </div>
         </CardContent></Card>
-        <Card className="hover-lift"><CardContent className="p-4">
-          <div className="text-xs text-muted-foreground">Üretim (dilekçe/ihtarname/özet…)</div>
-          <div className="text-3xl font-bold tabular-nums"><CountUp value={rapor?.uretim_toplam ?? 0} /></div>
+        <Card className="hover-lift"><CardContent className="p-4 flex items-center gap-3">
+          <span className="rounded-lg p-2 bg-accent/15 text-accent shrink-0"><Sparkles className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Üretim (dilekçe/ihtarname/özet…)</div>
+            <div className="text-3xl font-bold tabular-nums"><CountUp value={rapor?.uretim_toplam ?? 0} /></div>
+          </div>
         </CardContent></Card>
-        <Card className="hover-lift"><CardContent className="p-4">
-          <div className="text-xs text-muted-foreground">Emsal Arama</div>
-          <div className="text-3xl font-bold tabular-nums"><CountUp value={rapor?.arama_toplam ?? 0} /></div>
+        <Card className="hover-lift"><CardContent className="p-4 flex items-center gap-3">
+          <span className="rounded-lg p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0"><Search className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Emsal Arama</div>
+            <div className="text-3xl font-bold tabular-nums"><CountUp value={rapor?.arama_toplam ?? 0} /></div>
+          </div>
         </CardContent></Card>
       </div>
 

@@ -4,8 +4,10 @@
 
 @layer base {
   :root {
-    /* Açık tema — legal navy + warm gold */
-    --background: 0 0% 100%;
+    /* Açık tema — legal navy + warm gold.
+       Not: --background artık hafif lacivert tonlu (saf beyaz değil) ki
+       --card (saf beyaz) üzerinde belirginleşsin — düz/beyaz görünümü azaltır. */
+    --background: 213 35% 97.5%;
     --foreground: 215 45% 12%;
 
     --card: 0 0% 100%;
@@ -22,10 +24,10 @@
     --accent: 42 49% 59%;
     --accent-foreground: 215 45% 12%;
 
-    --secondary: 213 25% 95%;
+    --secondary: 213 30% 93%;
     --secondary-foreground: 213 52% 25%;
 
-    --muted: 213 15% 96%;
+    --muted: 213 22% 93.5%;
     --muted-foreground: 215 15% 40%;
 
     --destructive: 0 72% 51%;
@@ -34,8 +36,8 @@
     --success: 142 60% 38%;
     --success-foreground: 0 0% 98%;
 
-    --border: 213 20% 90%;
-    --input: 213 20% 90%;
+    --border: 213 22% 89%;
+    --input: 213 22% 89%;
     --ring: 213 52% 25%;
 
     --radius: 0.625rem;
@@ -92,6 +94,16 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Açık temada sayfaya çok hafif lacivert/altın "wash" — düz beyaz hissini kırar.
+       Sabit (fixed) konumlu, scroll ile kaymaz; koyu temada dokunulmaz (zaten renkli). */
+    background-image:
+      radial-gradient(ellipse 70% 45% at 15% -8%, hsl(var(--primary) / 0.05), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, hsl(var(--accent) / 0.06), transparent);
+    background-attachment: fixed;
+  }
+
+  .dark body {
+    background-image: none;
   }
 
   /* Türkçe locale uyumu — tireleme ve seçim renkleri */

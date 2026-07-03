@@ -22,6 +22,7 @@ type Stat = {
   label: string;
   value: number;
   renk: string;
+  bg: string;
   href?: string;
   title?: string;
 };
@@ -61,12 +62,12 @@ export function DashboardStats() {
 
         if (!alive) return;
         setStats([
-          { icon: Activity, label: "Son 30 gün işlem", value: son30, renk: "text-primary" },
-          { icon: FileText, label: "Toplam üretim", value: d.uretim_toplam ?? 0, renk: "text-accent" },
-          { icon: Search, label: "Toplam arama", value: d.arama_toplam ?? 0, renk: "text-emerald-600 dark:text-emerald-400" },
+          { icon: Activity, label: "Son 30 gün işlem", value: son30, renk: "text-primary", bg: "bg-primary/10" },
+          { icon: FileText, label: "Toplam üretim", value: d.uretim_toplam ?? 0, renk: "text-accent", bg: "bg-accent/15" },
+          { icon: Search, label: "Toplam arama", value: d.arama_toplam ?? 0, renk: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
           {
             icon: Coins, label: krediLabel, value: krediToplam,
-            renk: "text-amber-600 dark:text-amber-400",
+            renk: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10",
             href: "/panel/ayarlar/ek-paketler", title: krediTitle,
           },
         ]);
@@ -91,7 +92,7 @@ export function DashboardStats() {
       {stats.map((s) => {
         const inner = (
           <>
-            <span className={`rounded-lg bg-muted p-2 ${s.renk}`}>
+            <span className={`rounded-lg p-2 ${s.bg} ${s.renk}`}>
               <s.icon className="h-4 w-4" />
             </span>
             <div className="min-w-0">

@@ -20,7 +20,7 @@ export default function AyarlarLayout({ children }: { children: React.ReactNode 
           Profil, güvenlik ve KVKK haklarınızı yönetin.
         </p>
       </div>
-      <nav className="flex gap-1 border-b overflow-x-auto">
+      <nav className="flex gap-1 p-1 rounded-lg bg-muted/70 w-fit max-w-full overflow-x-auto">
         {TABS.map((t) => {
           const active = pathname === t.href;
           return (
@@ -28,10 +28,10 @@ export default function AyarlarLayout({ children }: { children: React.ReactNode 
               key={t.href}
               href={t.href}
               className={cn(
-                "px-4 py-2 text-sm border-b-2 transition-colors whitespace-nowrap",
+                "px-4 py-1.5 rounded-md text-sm transition-all whitespace-nowrap",
                 active
-                  ? "border-primary text-foreground font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-primary/40"
+                  ? "bg-card text-primary font-medium shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-card/60"
               )}
             >
               {t.label}

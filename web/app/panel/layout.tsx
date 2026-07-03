@@ -30,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="container py-6 grid grid-cols-12 gap-6 min-h-[calc(100vh-4rem)]">
-      <aside className="col-span-12 md:col-span-3 lg:col-span-2">
+      <aside className="col-span-12 md:col-span-3 lg:col-span-2 md:rounded-xl md:border md:border-border/60 md:bg-gradient-to-b md:from-muted/50 md:to-transparent md:p-2">
         <AppSidebar userName={session.user.name ?? session.user.email ?? ""} />
       </aside>
       <main className="col-span-12 md:col-span-9 lg:col-span-10">
