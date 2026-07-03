@@ -134,8 +134,9 @@ export default function FiyatlandirmaPage() {
             Seçili avukatlara özel erken erişim
           </h1>
           <p className="text-muted-foreground">
-            Hukuk Emsal şu an davetli beta aşamasındadır. Bekleme listesine katılın,
-            uygun görülen kullanıcılar öncelikli erişim davetini alacak.
+            Hukuk Emsal şu an davetli beta aşamasındadır. Bekleme listesine katılarak
+            seçili kullanıcılar arasına girin — davetiyeler sırayla gönderiliyor,
+            ne kadar erken katılırsanız o kadar öne geçersiniz.
           </p>
         </div>
 

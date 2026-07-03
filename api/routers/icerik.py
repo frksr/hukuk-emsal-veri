@@ -103,7 +103,7 @@ async def public_liste() -> APIResponse:
         async with db_session() as conn:
             rows = await conn.fetch(
                 """SELECT slug, title, excerpt, meta_description, keywords,
-                          author, published_at
+                          author, cover_image, published_at
                    FROM blog_articles
                    WHERE status = 'published'
                    ORDER BY published_at DESC NULLS LAST"""
@@ -143,7 +143,7 @@ async def admin_liste(admin: CurrentUser = Depends(require_admin)) -> APIRespons
     async with service_session() as conn:
         rows = await conn.fetch(
             """SELECT id, slug, title, excerpt, status, seo_score,
-                      author, published_at, updated_at, created_at
+                      author, cover_image, published_at, updated_at, created_at
                FROM blog_articles
                ORDER BY updated_at DESC"""
         )

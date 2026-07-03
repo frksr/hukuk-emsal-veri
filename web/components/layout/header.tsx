@@ -17,6 +17,7 @@ const NAV = [
   { href: "/faiz-hesaplayici", label: "Faiz" },
   { href: "/zamanasimi", label: "Zamanaşımı" },
   { href: "/kvkk", label: "KVKK" },
+  { href: "/blog", label: "Blog" },
   { href: "/fiyatlandirma", label: "Fiyatlandırma" },
 ];
 

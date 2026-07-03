@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16283f"/>
+      <stop offset="55%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#274b78"/>
+    </linearGradient>
+    <radialGradient id="glow4" cx="50%" cy="46%" r="42%">
+      <stop offset="0%" stop-color="#c9a961" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#c9a961" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg4)"/>
+
+  <g stroke="#c9a961" stroke-opacity="0.14" fill="none" stroke-width="1.5">
+    <circle cx="600" cy="315" r="270"/>
+    <circle cx="600" cy="315" r="230"/>
+  </g>
+  <g fill="#c9a961" fill-opacity="0.16">
+    <circle cx="120" cy="90" r="3"/>
+    <circle cx="150" cy="120" r="3"/>
+    <circle cx="180" cy="90" r="3"/>
+    <circle cx="1080" cy="540" r="3"/>
+    <circle cx="1050" cy="510" r="3"/>
+    <circle cx="1020" cy="540" r="3"/>
+  </g>
+
+  <rect x="0" y="0" width="1200" height="630" fill="url(#glow4)"/>
+
+  <g transform="translate(64,56)">
+    <rect x="0" y="0" width="9" height="26" fill="#c9a961"/>
+    <text x="22" y="19" font-family="Georgia, 'Times New Roman', serif" font-size="17" letter-spacing="3" fill="#e7d9b8">İCRA &amp; TAHSİLAT HUKUKU</text>
+  </g>
+
+  <!-- Ana motif: çek/senet belgesi + mühür -->
+  <g transform="translate(560,315) rotate(-4)">
+    <rect x="-220" y="-130" width="440" height="260" rx="16" fill="#f4ead0" fill-opacity="0.08" stroke="#e9dcb9" stroke-width="6"/>
+    <!-- üst bant -->
+    <rect x="-220" y="-130" width="440" height="46" rx="16" fill="#e9dcb9" fill-opacity="0.9"/>
+    <line x1="-190" y1="-45" x2="60" y2="-45" stroke="#e9dcb9" stroke-width="4" stroke-opacity="0.7"/>
+    <line x1="-190" y1="10" x2="140" y2="10" stroke="#e9dcb9" stroke-width="4" stroke-opacity="0.5"/>
+    <!-- imza çizgisi -->
+    <path d="M -190,75 q 30,-34 60,0 t 60,0 t 60,0 t 60,-6"
+          fill="none" stroke="#c9a961" stroke-width="5" stroke-linecap="round"/>
+    <line x1="-190" y1="100" x2="60" y2="100" stroke="#e9dcb9" stroke-width="3" stroke-opacity="0.6"/>
+  </g>
+
+  <!-- mühür / kaşe -->
+  <g transform="translate(830,235) rotate(10)">
+    <circle r="86" fill="none" stroke="#c9a961" stroke-width="7"/>
+    <circle r="66" fill="none" stroke="#c9a961" stroke-width="3"/>
+    <text x="0" y="8" text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="30" fill="#c9a961">İİK</text>
+    <text x="0" y="-34" text-anchor="middle" font-family="Georgia, serif" font-size="13" letter-spacing="2" fill="#e9dcb9">MADDE 168</text>
+  </g>
+
+  <!-- süre etiketleri -->
+  <g font-family="Georgia, serif" text-anchor="middle" fill="#f4ead0">
+    <text x="330" y="470" font-size="40" font-weight="bold">10 gün</text>
+    <text x="330" y="500" font-size="15" fill="#c9a961" letter-spacing="1">ÖDEME SÜRESİ</text>
+    <text x="800" y="470" font-size="40" font-weight="bold">5 gün</text>
+    <text x="800" y="500" font-size="15" fill="#c9a961" letter-spacing="1">İTİRAZ SÜRESİ</text>
+  </g>
+
+  <g transform="translate(1136,566)" text-anchor="end">
+    <text font-family="Georgia, serif" font-size="18" fill="#c9a961" font-style="italic">Hukuk Emsal</text>
+  </g>
+</svg>

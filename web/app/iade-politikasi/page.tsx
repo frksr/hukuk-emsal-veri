@@ -19,13 +19,46 @@ export default function IadePolitikasiPage() {
       <h1>Cayma ve İade Politikası</h1>
       <p>
         Bu politika, Hukuk Emsal platformu üzerinden satın alınan aylık
-        abonelikler ve tek seferlik ek paketler için cayma hakkının kullanımını
-        ve iade sürecini açıklar. Ayrıntılı sözleşme hükümleri için{" "}
+        abonelikler ve tek seferlik ek paketler için iptal, cayma hakkı ve
+        iade sürecini açıklar. Ayrıntılı sözleşme hükümleri için{" "}
         <a href="/mesafeli-satis">Mesafeli Satış Sözleşmesi</a> sayfasına
         bakınız.
       </p>
 
-      <h2>Cayma Hakkı Özeti</h2>
+      <p className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-4 not-prose">
+        <strong>Özet:</strong> Hukuk Emsal, dijital bir hizmettir ve satın
+        alınan/kullanılan dönemler için <strong>ücret iadesi yapılmaz</strong>.
+        Aboneliğinizi dilediğiniz an iptal edebilirsiniz; iptal yalnızca bir
+        sonraki dönemin tahsilatını durdurur — <strong>ödemesi yapılmış cari
+        dönem sonuna kadar kullanımınız açık kalır</strong>, dönem bitiminde
+        erişiminiz otomatik olarak kısıtlanır/ücretsiz plana döner. Aşağıdaki
+        14 günlük yasal cayma hakkı, yalnızca hizmeti hiç kullanmamış yeni
+        satın almalar için geçerli olan dar kapsamlı bir istisnadır.
+      </p>
+
+      <h2>Genel Kural: Kullanılan Dönemler İçin İade Yok</h2>
+      <ul>
+        <li>
+          Abonelik yenileme dönemleri için: bir sonraki dönemin tahsilatını
+          istemiyorsanız, yenileme tarihinden önce panel üzerinden aboneliğinizi
+          iptal edebilirsiniz. İptal işlemi geriye dönük iade doğurmaz;
+          ödemesi zaten yapılmış <strong>cari dönem sonuna kadar erişiminiz
+          devam eder</strong>, dönem sonunda hesabınız otomatik olarak
+          ücretsiz plan koşullarına döner veya ek paket kredileriniz varsa
+          onlarla sınırlı kullanıma geçer.
+        </li>
+        <li>
+          Ay içinde iptal etseniz dahi, o aya ait ödenen tutarın gün bazında
+          orantılı (pro-rata) iadesi yapılmaz.
+        </li>
+        <li>
+          Yenileme tahsilatının kart/ödeme sorunu nedeniyle başarısız olması
+          farklı bir durumdur; bu durumda ücret zaten tahsil edilmediği için
+          hizmet askıya alınır, iade söz konusu olmaz.
+        </li>
+      </ul>
+
+      <h2>14 Günlük Yasal Cayma Hakkı (Dar Kapsamlı İstisna)</h2>
       <ul>
         <li>
           Satın alma tarihinden itibaren <strong>14 gün</strong> içinde gerekçe
@@ -41,13 +74,11 @@ export default function IadePolitikasiPage() {
         </li>
         <li>
           Buna rağmen, abonelik veya ek paket haklarınızı{" "}
-          <strong>henüz hiç kullanmadıysanız</strong>, 14 gün içinde yapacağınız
-          cayma talebini kabul ediyor ve bedelin tamamını iade ediyoruz.
-        </li>
-        <li>
-          Abonelik yenileme dönemleri için: bir sonraki dönemin tahsilatını
-          istemiyorsanız, yenileme tarihinden önce panel üzerinden aboneliğinizi
-          iptal edebilirsiniz; dönem sonuna kadar erişiminiz devam eder.
+          <strong>henüz hiç kullanmadıysanız</strong> (tek bir arama, hesaplama
+          veya üretim dahi yapmadıysanız), 14 gün içinde yapacağınız cayma
+          talebini kabul ediyor ve bedelin tamamını iade ediyoruz. Hizmeti
+          kullanmaya başladığınız andan itibaren bu istisna sona erer ve
+          yukarıdaki genel kural (iade yok) uygulanır.
         </li>
       </ul>
 

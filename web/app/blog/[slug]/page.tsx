@@ -9,6 +9,7 @@ import {
 } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
 import { makaleBul } from "../makaleler";
+import { KapakYerTutucu } from "../_kapak";
 
 const API_BASE =
   process.env.API_INTERNAL_URL ||
@@ -30,6 +31,7 @@ interface Makale {
   keywords?: string[];
   faq?: Faq[];
   author?: string;
+  cover_image?: string | null;
   published_at?: string;
   updated_at?: string;
 }
@@ -68,7 +70,7 @@ export async function generateMetadata({
   });
 }
 
-// --- Hafif Markdown render (bağımlılıksız): ## h2, ### h3, - liste, **kalın** ---
+// --- Hafif Markdown render (bağımlılıksız): ## h2, ### h3, - liste, **kalın**, > vurgu kutusu ---
 function inline(text: string, keyBase: string): React.ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((p, i) => {
@@ -84,6 +86,7 @@ function renderBody(body: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let para: string[] = [];
   let list: string[] = [];
+  let quote: string[] = [];
   let k = 0;
 
   const flushPara = () => {
@@ -104,12 +107,26 @@ function renderBody(body: string): React.ReactNode[] {
       list = [];
     }
   };
+  const flushQuote = () => {
+    if (quote.length) {
+      nodes.push(
+        <div
+          key={`bq-${k++}`}
+          className="not-prose my-6 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-[0.95em]"
+        >
+          {inline(quote.join(" "), `bq${k}`)}
+        </div>
+      );
+      quote = [];
+    }
+  };
 
   for (const raw of lines) {
     const line = raw.trimEnd();
     if (/^###\s+/.test(line)) {
       flushPara();
       flushList();
+      flushQuote();
       nodes.push(
         <h3 key={`h3-${k++}`} className="text-lg font-semibold mt-6 mb-2">
           {line.replace(/^###\s+/, "")}
@@ -118,24 +135,33 @@ function renderBody(body: string): React.ReactNode[] {
     } else if (/^##\s+/.test(line)) {
       flushPara();
       flushList();
+      flushQuote();
       nodes.push(
         <h2 key={`h2-${k++}`} className="text-2xl font-bold mt-8 mb-3">
           {line.replace(/^##\s+/, "")}
         </h2>
       );
+    } else if (/^>\s+/.test(line)) {
+      flushPara();
+      flushList();
+      quote.push(line.replace(/^>\s+/, ""));
     } else if (/^[-*]\s+/.test(line)) {
       flushPara();
+      flushQuote();
       list.push(line.replace(/^[-*]\s+/, ""));
     } else if (line.trim() === "") {
       flushPara();
       flushList();
+      flushQuote();
     } else {
       flushList();
+      flushQuote();
       para.push(line);
     }
   }
   flushPara();
   flushList();
+  flushQuote();
   return nodes;
 }
 
@@ -189,8 +215,33 @@ export default async function BlogMakalePage({
 
         <h1 className="text-3xl md:text-4xl font-bold mb-3">{m.title}</h1>
         {m.author && (
-          <p className="text-sm text-muted-foreground mb-6">{m.author}</p>
+          <p className="text-sm text-muted-foreground mb-6">
+            {m.author}
+            {m.published_at && (
+              <>
+                {" · "}
+                {new Date(m.published_at).toLocaleDateString("tr-TR", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </>
+            )}
+          </p>
         )}
+
+        <div className="mb-8 aspect-[16/9] w-full overflow-hidden rounded-xl border">
+          {m.cover_image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={m.cover_image}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <KapakYerTutucu slug={m.slug} />
+          )}
+        </div>
 
         <div className="prose prose-sm md:prose-base max-w-none space-y-4">
           {renderBody(m.body || "")}
@@ -199,10 +250,13 @@ export default async function BlogMakalePage({
         {faqList.length > 0 && (
           <section className="mt-10">
             <h2 className="text-2xl font-bold mb-4">Sıkça Sorulan Sorular</h2>
-            <div className="space-y-5">
+            <div className="space-y-3">
               {faqList.map((f, i) => (
-                <div key={i}>
-                  <h3 className="font-semibold mb-1">{f.soru}</h3>
+                <div key={i} className="rounded-lg border bg-card p-4">
+                  <h3 className="font-semibold mb-1.5 flex items-start gap-2">
+                    <span className="text-accent">?</span>
+                    {f.soru}
+                  </h3>
                   <p className="text-muted-foreground text-sm">{f.cevap}</p>
                 </div>
               ))}

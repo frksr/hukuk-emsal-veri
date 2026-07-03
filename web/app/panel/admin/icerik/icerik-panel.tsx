@@ -30,6 +30,7 @@ type Makale = {
   seo_notes?: string[];
   status?: string;
   author?: string | null;
+  cover_image?: string | null;
   published_at?: string | null;
   updated_at?: string | null;
 };
@@ -43,6 +44,7 @@ const BOS: Makale = {
   meta_description: "",
   keywords: [],
   faq: [],
+  cover_image: "",
 };
 
 function ScoreBadge({ score }: { score?: number }) {
@@ -121,6 +123,7 @@ export function IcerikPanel() {
         keywords: current.keywords,
         faq: current.faq,
         author: current.author,
+        cover_image: current.cover_image || null,
       };
       const url = current.id
         ? `/api/proxy/icerik/admin/makale/${current.id}`
@@ -258,6 +261,16 @@ export function IcerikPanel() {
             {items.map((m) => (
               <Card key={m.id}>
                 <CardContent className="p-4 flex flex-wrap items-center gap-3">
+                  {m.cover_image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={m.cover_image}
+                      alt=""
+                      className="h-12 w-20 shrink-0 rounded-md border object-cover bg-muted"
+                    />
+                  ) : (
+                    <div className="h-12 w-20 shrink-0 rounded-md border bg-gradient-to-br from-primary/15 to-accent/15" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">{m.title}</span>
@@ -423,6 +436,37 @@ export function IcerikPanel() {
               value={current.excerpt || ""}
               onChange={(e) => setCurrent({ ...current, excerpt: e.target.value })}
             />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">
+              Kapak Görseli (URL){" "}
+              <span className="text-xs text-muted-foreground">
+                — liste kartında ve makale başında görünür, boş bırakılırsa
+                otomatik bir marka görseli kullanılır
+              </span>
+            </label>
+            <div className="flex gap-3 items-start mt-1">
+              <input
+                className={inputCls}
+                value={current.cover_image || ""}
+                onChange={(e) =>
+                  setCurrent({ ...current, cover_image: e.target.value })
+                }
+                placeholder="/blog/covers/ornek.svg veya https://..."
+              />
+              {current.cover_image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={current.cover_image}
+                  alt="Kapak önizleme"
+                  className="h-16 w-28 shrink-0 rounded-md border object-cover bg-muted"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.visibility = "hidden";
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           <div>

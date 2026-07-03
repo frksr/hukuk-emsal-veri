@@ -3,6 +3,7 @@
 Beta yönetimi, manuel plan upgrade, audit log, feedback yönetimi.
 """
 from __future__ import annotations
+import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from api.auth import CurrentUser, get_current_user
 from api.db import service_session
 from api.schemas import APIResponse
 
+log = logging.getLogger("api.admin")
 router = APIRouter()
 
 
@@ -192,8 +194,8 @@ async def system_issues(admin: CurrentUser = Depends(require_admin), limit: int 
             "WHERE status='failed' ORDER BY created_at DESC LIMIT $1", lim,
         )
         webhook_err = await conn.fetch(
-            "SELECT id, event_type, process_error, processed, created_at FROM webhook_events "
-            "WHERE process_error IS NOT NULL OR processed = FALSE ORDER BY created_at DESC LIMIT $1", lim,
+            "SELECT id, event_type, process_error, processed, received_at AS created_at FROM webhook_events "
+            "WHERE process_error IS NOT NULL OR processed = FALSE ORDER BY received_at DESC LIMIT $1", lim,
         )
         pending_orders = await conn.fetch(
             "SELECT id, pack_key, amount_try, status, created_at FROM credit_orders "
@@ -409,30 +411,44 @@ async def analytics(admin: CurrentUser = Depends(require_admin)):
         # Not: embedding_usage_log tablosu RAG'ın senkron psycopg havuzundan
         # (services/pg.py, services/embeddings.py) yazılır; asyncpg havuzuyla
         # (burada) aynı fiziksel veritabanına bağlı olduğundan normal okunur.
-        embed_total_row = await conn.fetchrow(
-            """SELECT COUNT(*) istek, COALESCE(SUM(item_count),0) ogeler,
-                      COALESCE(SUM(char_count),0) karakter
-               FROM embedding_usage_log"""
-        )
-        embed_24h_row = await conn.fetchrow(
-            """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
-               FROM embedding_usage_log WHERE created_at > $1""",
-            day_ago,
-        )
-        embed_7d_row = await conn.fetchrow(
-            """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
-               FROM embedding_usage_log WHERE created_at > $1""",
-            week_ago,
-        )
-        embed_30d_row = await conn.fetchrow(
-            """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
-               FROM embedding_usage_log WHERE created_at > $1""",
-            month_ago,
-        )
-        embed_type_rows = await conn.fetch(
-            """SELECT request_type, COUNT(*) c FROM embedding_usage_log
-               GROUP BY request_type ORDER BY c DESC"""
-        )
+        # Migration 26 henüz uygulanmamışsa (tablo yok) TÜM /analytics'i 500'e
+        # düşürmesin diye try/except ile korunuyor — sıfırlanmış veri döner.
+        _embed_bos = {"istek": 0, "karakter": 0}
+        embed_total_row: dict = {"istek": 0, "ogeler": 0, "karakter": 0}
+        embed_24h_row: dict = dict(_embed_bos)
+        embed_7d_row: dict = dict(_embed_bos)
+        embed_30d_row: dict = dict(_embed_bos)
+        embed_type_rows: list = []
+        try:
+            embed_total_row = await conn.fetchrow(
+                """SELECT COUNT(*) istek, COALESCE(SUM(item_count),0) ogeler,
+                          COALESCE(SUM(char_count),0) karakter
+                   FROM embedding_usage_log"""
+            )
+            embed_24h_row = await conn.fetchrow(
+                """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
+                   FROM embedding_usage_log WHERE created_at > $1""",
+                day_ago,
+            )
+            embed_7d_row = await conn.fetchrow(
+                """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
+                   FROM embedding_usage_log WHERE created_at > $1""",
+                week_ago,
+            )
+            embed_30d_row = await conn.fetchrow(
+                """SELECT COUNT(*) istek, COALESCE(SUM(char_count),0) karakter
+                   FROM embedding_usage_log WHERE created_at > $1""",
+                month_ago,
+            )
+            embed_type_rows = await conn.fetch(
+                """SELECT request_type, COUNT(*) c FROM embedding_usage_log
+                   GROUP BY request_type ORDER BY c DESC"""
+            )
+        except Exception:
+            log.warning(
+                "embedding_usage_log okunamadı (migration 26 uygulanmamış olabilir) — "
+                "embedding kullanım verisi sıfır dönüyor.", exc_info=True,
+            )
 
         # ---- g0) Maliyet için AI-only olay sayıları (sablon dilekçe hariç) --
         # tool_total/tool_30d sablon olaylarını da içerir; maliyet onlara dahil

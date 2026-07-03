@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16283f"/>
+      <stop offset="55%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#274b78"/>
+    </linearGradient>
+    <radialGradient id="glow2" cx="50%" cy="46%" r="42%">
+      <stop offset="0%" stop-color="#c9a961" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#c9a961" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg2)"/>
+
+  <g stroke="#c9a961" stroke-opacity="0.14" fill="none" stroke-width="1.5">
+    <circle cx="600" cy="315" r="270"/>
+    <circle cx="600" cy="315" r="230"/>
+  </g>
+  <g fill="#c9a961" fill-opacity="0.16">
+    <circle cx="120" cy="90" r="3"/>
+    <circle cx="150" cy="120" r="3"/>
+    <circle cx="180" cy="90" r="3"/>
+    <circle cx="1080" cy="540" r="3"/>
+    <circle cx="1050" cy="510" r="3"/>
+    <circle cx="1020" cy="540" r="3"/>
+  </g>
+
+  <rect x="0" y="0" width="1200" height="630" fill="url(#glow2)"/>
+
+  <g transform="translate(64,56)">
+    <rect x="0" y="0" width="9" height="26" fill="#c9a961"/>
+    <text x="22" y="19" font-family="Georgia, 'Times New Roman', serif" font-size="17" letter-spacing="3" fill="#e7d9b8">İCRA &amp; TAHSİLAT HUKUKU</text>
+  </g>
+
+  <!-- Ana motif: kum saati (zamanaşımı teması) -->
+  <g transform="translate(600,315)">
+    <!-- üst ve alt çerçeve -->
+    <rect x="-110" y="-190" width="220" height="26" rx="8" fill="#e9dcb9"/>
+    <rect x="-110" y="164" width="220" height="26" rx="8" fill="#e9dcb9"/>
+
+    <!-- cam gövde -->
+    <path d="M -95,-164 L 95,-164 L 14,-8 L 95,164 L -95,164 L -14,-8 Z"
+          fill="none" stroke="#e9dcb9" stroke-width="6" stroke-linejoin="round"/>
+
+    <!-- üst kum -->
+    <path d="M -78,-150 L 78,-150 L 10,-24 L -10,-24 Z" fill="#c9a961" fill-opacity="0.85"/>
+    <!-- akan kum -->
+    <line x1="0" y1="-24" x2="0" y2="18" stroke="#c9a961" stroke-width="5"/>
+    <!-- alt kum yığını -->
+    <path d="M -55,150 L 55,150 L 30,90 L -30,90 Z" fill="#c9a961" fill-opacity="0.6"/>
+
+    <!-- yıl etiketleri: 10 / 5 / 3 (zamanaşımı süreleri) -->
+    <g font-family="Georgia, serif" font-weight="bold" text-anchor="middle" fill="#f4ead0">
+      <text x="-230" y="-90" font-size="46">10</text>
+      <text x="-230" y="-58" font-size="15" fill="#c9a961" letter-spacing="1">YIL</text>
+      <text x="230" y="-10" font-size="46">5</text>
+      <text x="230" y="22" font-size="15" fill="#c9a961" letter-spacing="1">YIL</text>
+      <text x="-230" y="110" font-size="46">3</text>
+      <text x="-230" y="142" font-size="15" fill="#c9a961" letter-spacing="1">YIL</text>
+    </g>
+    <g stroke="#c9a961" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="4 5">
+      <line x1="-190" y1="-100" x2="-100" y2="-140"/>
+      <line x1="190" y1="-20" x2="100" y2="10"/>
+      <line x1="-190" y1="100" x2="-100" y2="150"/>
+    </g>
+  </g>
+
+  <g transform="translate(1136,566)" text-anchor="end">
+    <text font-family="Georgia, serif" font-size="18" fill="#c9a961" font-style="italic">Hukuk Emsal</text>
+  </g>
+</svg>
