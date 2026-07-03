@@ -620,7 +620,7 @@ async def list_users(
                 LEFT JOIN tenant_members tm ON tm.user_id = u.id
                 LEFT JOIN tenants t ON t.id = tm.tenant_id
                 {where}
-                ORDER BY u.created_at DESC
+                ORDER BY (u.role = 'admin') DESC, u.created_at DESC
                 LIMIT ${len(args) - 1} OFFSET ${len(args)}""",
             *args,
         )
@@ -685,20 +685,20 @@ async def manual_upgrade(
                beta_invited_by = $4,
                beta_signed_at = CASE WHEN $3 THEN NOW() ELSE beta_signed_at END,
                max_uyap_documents = CASE
-                 WHEN $1 = 'pro_solo_uyap' THEN 50
-                 WHEN $1 = 'team_uyap' THEN 250
-                 WHEN $1 = 'enterprise' THEN 100000
+                 WHEN $1::text = 'pro_solo_uyap' THEN 50
+                 WHEN $1::text = 'team_uyap' THEN 250
+                 WHEN $1::text = 'enterprise' THEN 100000
                  ELSE 0
                END,
                max_monthly_queries = CASE
-                 WHEN $1 = 'pro_solo_uyap' THEN 200
-                 WHEN $1 = 'team_uyap' THEN 1000
-                 WHEN $1 = 'enterprise' THEN 100000
+                 WHEN $1::text = 'pro_solo_uyap' THEN 200
+                 WHEN $1::text = 'team_uyap' THEN 1000
+                 WHEN $1::text = 'enterprise' THEN 100000
                  ELSE 0
                END,
                max_users = CASE
-                 WHEN $1 LIKE 'team%' THEN 5
-                 WHEN $1 = 'enterprise' THEN 50
+                 WHEN $1::text LIKE 'team%' THEN 5
+                 WHEN $1::text = 'enterprise' THEN 50
                  ELSE 1
                END
                WHERE id = $5::uuid""",

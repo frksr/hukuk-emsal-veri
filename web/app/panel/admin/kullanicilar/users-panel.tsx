@@ -4,6 +4,7 @@ import { Search, Crown, CheckCircle2, Gift, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/components/toast";
 
 type User = {
   id: string; email: string; name: string | null; role: string;
@@ -14,6 +15,7 @@ type User = {
 const PLANS = ["free", "pro_solo", "pro_solo_uyap", "team", "team_uyap", "enterprise"];
 
 export function UsersPanel() {
+  const toast = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -45,13 +47,16 @@ export function UsersPanel() {
           beta_invited_by: days ? "admin" : null,
         }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message);
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const detay = typeof j.detail === "string" ? j.detail : j.detail?.message;
+        throw new Error(j.message || detay || "Plan güncellenemedi.");
+      }
       setSuccess(`Plan güncellendi: ${plan}`);
       await load();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Hata");
+      toast(err instanceof Error ? err.message : "Hata", "error");
     } finally { setUpgrading(null); }
   }
 
