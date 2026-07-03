@@ -21,7 +21,7 @@ export function Verifier({ token, next }: { token?: string; next?: string }) {
 function CodeVerifier({ next }: { next?: string }) {
   const router = useRouter();
   const toast = useToast();
-  const hedef = next || "/app";
+  const hedef = next || "/panel";
 
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<"idle" | "checking" | "ok" | "error">("idle");
@@ -165,7 +165,7 @@ function CodeVerifier({ next }: { next?: string }) {
 
 /** E-postadaki linke tıklanınca token ile otomatik doğrular. */
 function LinkVerifier({ token, next }: { token: string; next?: string }) {
-  const hedef = next || "/app";
+  const hedef = next || "/panel";
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [msg, setMsg] = useState("");
 

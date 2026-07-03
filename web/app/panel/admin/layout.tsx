@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getUserRole } from "@/lib/auth/db";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +24,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // Sekmeler artık sol menüde (AppSidebar). Burada yalnızca başlık + içerik.
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          🛡️ Admin Panel
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Sistem, müşteri, paket ve kredi izleme — soldaki menüden bölümlere geçin.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            🛡️ Admin Panel
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Sistem, müşteri, paket ve kredi izleme — soldaki menüden bölümlere geçin.
+          </p>
+        </div>
+        <ThemeToggle className="shrink-0" />
       </div>
       <div>{children}</div>
     </div>

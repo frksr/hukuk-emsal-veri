@@ -139,3 +139,20 @@ export async function getUserRole(userId: string): Promise<string | null> {
   if (!r || !r.is_active) return null;
   return r.role;
 }
+
+/**
+ * Kullanıcının e-posta doğrulama durumunu DB'den okur (JWT'de tutulmaz —
+ * doğrulama anında JWT yenilenmiyor). Panel'e girişte zorunlu doğrulama
+ * kapısı (web/app/panel/layout.tsx) için kullanılır. Admin muaf tutulur
+ * (çağıran taraf role kontrolünü ayrıca yapar).
+ */
+export async function getEmailVerified(userId: string): Promise<boolean> {
+  const pool = getPool();
+  const res = await pool.query<{ email_verified: Date | string | null; is_active: boolean }>(
+    `SELECT email_verified, is_active FROM users WHERE id = $1`,
+    [userId],
+  );
+  const r = res.rows[0];
+  if (!r || !r.is_active) return false;
+  return !!r.email_verified;
+}

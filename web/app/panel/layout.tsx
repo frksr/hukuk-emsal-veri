@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
+import { getEmailVerified } from "@/lib/auth/db";
 import { AppSidebar } from "./_sidebar";
 import { DogrulamaBanner } from "@/components/dogrulama-banner";
 import { PageTransition } from "@/components/page-transition";
@@ -26,6 +27,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // server-side exception olur.
   if (!isAppRoute || !session?.user) {
     return <>{children}</>;
+  }
+
+  // Zorunlu e-posta doğrulama kapısı — doğrulanmamış kullanıcı panele hiç
+  // giremez (admin muaf). Rol/doğrulama JWT'de tutulmaz (verify anında token
+  // yenilenmiyor), bu yüzden DB'den canlı okunur — admin rolü kontrolüyle aynı
+  // desende (bkz. panel/admin/layout.tsx). DB'ye erişilemezse kilitlenmeyi
+  // önlemek için erişime İZİN VERİLİR (fail-open).
+  const userId = (session.user as { id?: string }).id;
+  const role = (session.user as { role?: string }).role;
+  if (userId && role !== "admin") {
+    // NOT: redirect() Next.js içinde özel bir throw ile çalışır — bu yüzden
+    // try/catch'in İÇİNE alınmamalı (aksi halde catch onu yutar ve yönlendirme
+    // hiç gerçekleşmez). Sadece DB okuması try/catch'te.
+    let verified = true; // DB'ye erişilemezse varsayılan: erişime izin ver (fail-open)
+    try {
+      verified = await getEmailVerified(userId);
+    } catch {
+      verified = true;
+    }
+    if (!verified) {
+      redirect("/giris/dogrulama?next=" + encodeURIComponent(pathname));
+    }
   }
 
   return (
