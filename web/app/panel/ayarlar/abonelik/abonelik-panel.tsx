@@ -627,14 +627,20 @@ export function AbonelikPanel() {
                     ))}
                   </ul>
                   {p.key === "enterprise" ? (
-                    <Button asChild className="w-full" variant="outline">
+                    <Button asChild className="w-full">
                       <a href="mailto:satis@hukukcuyapayzekasi.com?subject=Enterprise%20paket">İletişime Geç</a>
                     </Button>
                   ) : isCurrent ? (
                     <Button disabled className="w-full" variant="outline">Aktif Plan</Button>
                   ) : !SATIS_ACIK ? (
                     /* LANSMAN MODU — satış kapalı, bekleme listesine yönlendir.
-                       Satış açılınca (SATIS_ACIK=true) alttaki normal akış geri gelir. */
+                       Satış açılınca (SATIS_ACIK=true) alttaki normal akış geri gelir.
+                       NOT: gerçekten tıklanabilir CTA'lar (Bekleme Listesine Katıl /
+                       İletişime Geç) hepsi "default" (dolu/koyu) varyantla gösterilir —
+                       yalnızca gerçekten pasif olan durumlar (Aktif Plan, Free'nin
+                       otomatik planı, zaten listeye eklenmiş) soluk "outline" kalır.
+                       Aksi halde tıklanabilir butonlar pasif olanlarla aynı soluk gri
+                       görünüp kullanıcıya devre dışıymış hissi veriyordu. */
                     p.key === "free" ? (
                       <Button disabled className="w-full" variant="outline">Bu Plana Geç</Button>
                     ) : beklemeKatilan.has(p.key) ? (
@@ -645,7 +651,6 @@ export function AbonelikPanel() {
                       <Button
                         onClick={() => beklemeListesineKatil(p.key)}
                         disabled={beklemeYukleniyor === p.key}
-                        variant={p.popular ? "default" : "outline"}
                         className="w-full"
                       >
                         {beklemeYukleniyor === p.key ? "Ekleniyor…" : "Bekleme Listesine Katıl"}
@@ -655,7 +660,7 @@ export function AbonelikPanel() {
                     <Button
                       onClick={() => planSec(p.key)}
                       disabled={checkingOut === p.key || p.key === "free"}
-                      variant={p.popular ? "default" : "outline"}
+                      variant={p.key === "free" ? "outline" : "default"}
                       className="w-full"
                     >
                       {checkingOut === p.key ? (

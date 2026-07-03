@@ -158,13 +158,18 @@ export function DilekceForm() {
           <CardDescription>Bilgiler ne kadar detaylı olursa dilekçe o kadar isabetli olur.</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Mod seçici */}
-          <div className="grid grid-cols-2 gap-2 mb-4 p-1 rounded-lg bg-muted/50">
+          {/* Mod seçici — seçili sekme belirgin beyaz/kart zemin + gölge + halka ile
+              gri konteynerden net ayrışır; "Yapay Zeka" seçiliyken ayrıca primary
+              renkli ince çerçeve alır ki iki sekme arasındaki fark her zaman
+              (özellikle açık temada) göz ile hemen ayırt edilebilsin. */}
+          <div className="grid grid-cols-2 gap-2 mb-4 p-1 rounded-lg bg-muted">
             <button
               type="button"
               onClick={() => setMode("sablon")}
               className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                mode === "sablon" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                mode === "sablon"
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-black/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/60"
               }`}
             >
               Hızlı Şablon
@@ -174,7 +179,9 @@ export function DilekceForm() {
               type="button"
               onClick={() => setMode("ai")}
               className={`rounded-md px-3 py-2 text-sm font-medium transition flex flex-col items-center ${
-                mode === "ai" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                mode === "ai"
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-primary/30 border border-primary/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/60"
               }`}
             >
               <span className="inline-flex items-center gap-1">
