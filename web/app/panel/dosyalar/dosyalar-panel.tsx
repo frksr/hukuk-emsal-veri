@@ -80,18 +80,39 @@ export function DosyalarPanel() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Backend 25 MB'da reddediyor; sunucuya hiç gitmeden burada yakala —
+    // aksi halde büyük dosyalar bağlantı seviyesinde (ERR_CONNECTION_RESET)
+    // koptuğu için kullanıcı anlamsız bir hata görüyordu.
+    const MAX_UPLOAD_MB = 25;
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setError(
+        `Dosya ${MAX_UPLOAD_MB} MB sınırını aşıyor (${(file.size / (1024 * 1024)).toFixed(1)} MB). ` +
+        "Lütfen dosyayı sıkıştırın veya bölerek yükleyin.",
+      );
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
     setUploading(true); setError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("title", file.name);
       const r = await fetch("/api/proxy/uyap/upload", { method: "POST", body: fd });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message || "Yüklenemedi");
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message || "Yüklenemedi");
       await loadDocs();
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Yükleme hatası");
+      const msg = err instanceof Error ? err.message : "Yükleme hatası";
+      // Tarayıcı ağ hatası (ör. bağlantı koptu) genelde "Failed to fetch" döner —
+      // kullanıcıya daha anlamlı bir mesaj göster.
+      setError(
+        msg === "Failed to fetch"
+          ? "Yükleme sırasında bağlantı koptu. İnternet bağlantınızı kontrol edip tekrar deneyin."
+          : msg,
+      );
     } finally { setUploading(false); }
   }
 

@@ -67,34 +67,55 @@ async function handle(req: Request, params: { path: string[] }) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const body = req.method === "GET" || req.method === "HEAD"
-    ? undefined
-    : await req.arrayBuffer();
-
-  // Node fetch (undici), POST/PATCH/DELETE için 307/308 redirect'i takip ETMEZ
-  // (FastAPI trailing-slash redirect'i → "fetch failed"). Bu yüzden elle takip et.
-  const doFetch = (u: string) =>
-    fetch(u, {
-      method: req.method,
-      headers,
-      body: body && body.byteLength > 0 ? Buffer.from(body) : undefined,
-      cache: "no-store",
-      redirect: "manual",
-    });
+  const contentType = req.headers.get("content-type") || "";
+  const isMultipart = contentType.includes("multipart/form-data");
+  const hasBody = !(req.method === "GET" || req.method === "HEAD");
 
   try {
-    let r = await doFetch(target);
-    let hop = 0;
-    while ([301, 302, 307, 308].includes(r.status) && hop < 3) {
-      const loc = r.headers.get("location");
-      if (!loc) break;
-      const nextUrl = loc.startsWith("http") ? loc : `${API_URL}${loc}`;
-      r = await doFetch(nextUrl);
-      hop++;
+    let r: Response;
+    if (isMultipart && hasBody && req.body) {
+      // Dosya yüklemede tüm body'yi arrayBuffer() ile belleğe almak büyük
+      // dosyalarda (Cloud Run konteyner belleği sınırlı) bağlantının
+      // ERR_CONNECTION_RESET ile kopmasına yol açabiliyordu. Bu yüzden
+      // multipart body'yi buffer'lamadan doğrudan stream ediyoruz.
+      // Not: stream tek kullanımlık — redirect retry burada uygulanmaz
+      // (upload endpoint'i zaten trailing-slash redirect'e girmiyor).
+      r = await fetch(target, {
+        method: req.method,
+        headers,
+        body: req.body,
+        // @ts-expect-error - Node'un undici fetch'i stream body için gerektirir
+        duplex: "half",
+        cache: "no-store",
+        redirect: "manual",
+      });
+    } else {
+      const body = hasBody ? await req.arrayBuffer() : undefined;
+
+      // Node fetch (undici), POST/PATCH/DELETE için 307/308 redirect'i takip ETMEZ
+      // (FastAPI trailing-slash redirect'i → "fetch failed"). Bu yüzden elle takip et.
+      const doFetch = (u: string) =>
+        fetch(u, {
+          method: req.method,
+          headers,
+          body: body && body.byteLength > 0 ? Buffer.from(body) : undefined,
+          cache: "no-store",
+          redirect: "manual",
+        });
+
+      r = await doFetch(target);
+      let hop = 0;
+      while ([301, 302, 307, 308].includes(r.status) && hop < 3) {
+        const loc = r.headers.get("location");
+        if (!loc) break;
+        const nextUrl = loc.startsWith("http") ? loc : `${API_URL}${loc}`;
+        r = await doFetch(nextUrl);
+        hop++;
+      }
     }
-    const contentType = r.headers.get("content-type") || "";
+    const respContentType = r.headers.get("content-type") || "";
     // SSE (streaming dilekçe vb.) — buffer'lamadan akıt
-    if (contentType.includes("text/event-stream") && r.body) {
+    if (respContentType.includes("text/event-stream") && r.body) {
       return new NextResponse(r.body, {
         status: r.status,
         headers: {
@@ -104,14 +125,14 @@ async function handle(req: Request, params: { path: string[] }) {
         },
       });
     }
-    if (contentType.includes("application/json")) {
+    if (respContentType.includes("application/json")) {
       const data = await r.json();
       return NextResponse.json(data, { status: r.status });
     }
     const text = await r.text();
     return new NextResponse(text, {
       status: r.status,
-      headers: { "Content-Type": contentType || "text/plain" },
+      headers: { "Content-Type": respContentType || "text/plain" },
     });
   } catch (e) {
     return NextResponse.json(
