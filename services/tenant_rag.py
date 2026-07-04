@@ -117,11 +117,11 @@ def search_tenant(
 
     sql = """
         SELECT chunk_id, document_id, chunk_index, document, meta,
-               1 - (embedding <=> %(q)s) AS similarity
+               1 - (embedding <=> %(q)s::vector) AS similarity
         FROM tenant_rag_chunks
         WHERE tenant_id = %(tid)s
           AND (%(docs)s::text[] IS NULL OR document_id = ANY(%(docs)s))
-        ORDER BY embedding <=> %(q)s
+        ORDER BY embedding <=> %(q)s::vector
         LIMIT %(k)s
     """
     params = {
