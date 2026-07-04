@@ -736,6 +736,20 @@ async def manual_upgrade(
             payload.plan_tier, expires_at, is_beta, payload.beta_invited_by, tenant_id,
         )
 
+        # NOT: /billing/current, tenant'ın en son 'active' subscriptions kaydıyla
+        # tenants.plan_tier'ı otomatik senkronlar ("kendi kendine onarım" —
+        # ödeme başarılı olduğu halde tenant güncellenmemiş eski/yarım
+        # aktivasyonları düzeltmek için). Ama bu tabloyu burada güncellemezsek,
+        # kullanıcı panelini her açtığında o eski subscription kaydı yüzünden
+        # planı SESSİZCE eski haline geri alıyor — admin'in manuel değişikliği
+        # "hiç işlememiş" gibi görünüyor. Var olan aktif abonelik varsa onu da
+        # yeni plana eşitliyoruz ki iki tablo çelişmesin.
+        await conn.execute(
+            """UPDATE subscriptions SET plan_tier = $1::plan_tier, updated_at = NOW()
+               WHERE tenant_id = $2::uuid AND status = 'active'""",
+            payload.plan_tier, tenant_id,
+        )
+
     await audit(
         action="admin.tenant_upgraded",
         user_id=admin.user_id,
