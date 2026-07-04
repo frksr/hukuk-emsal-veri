@@ -164,8 +164,8 @@ export function DosyalarPanel() {
       <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 flex gap-2">
         <Lock className="h-4 w-4 flex-shrink-0 mt-0.5" />
         <div>
-          Dosyalarınız <strong>AES-256 ile şifreli</strong> olarak Türkiye lokasyonunda saklanır.
-          Her dosya size özel anahtarla şifrelidir, başka kullanıcılar veya biz okuyamayız.
+          Dosyalarınız <strong>AES-256 ile şifreli</strong> olarak, KVKK m.9 kapsamında AB (Avrupa Birliği)
+          sunucularında saklanır. Her dosya size özel anahtarla şifrelidir, başka kullanıcılar veya biz okuyamayız.
           Yapay Zeka sorgusunda kişisel veriler (TC, IBAN, telefon) maskelenerek işlenir.
         </div>
       </div>
