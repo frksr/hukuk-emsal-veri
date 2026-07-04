@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from api.audit import audit
@@ -98,6 +98,19 @@ async def upload_document(
         except Exception:
             parsed_tags = [t.strip() for t in tags.split(",") if t.strip()]
 
+    # extract_decision_date() metin içinden bulduğu tarihi "YYYY-MM-DD" string
+    # olarak döner. document_date sütunu gerçek DATE tipinde ve $18::date cast'i
+    # yüzünden asyncpg parametre tipini binary "date" olarak bekliyor — ham str
+    # geçilirse "'str' object has no attribute 'toordinal'" ile patlar. Bu yüzden
+    # önce gerçek date nesnesine çeviriyoruz (parse edilemezse None geçilir).
+    raw_decision_date = metadata.get("decision_date")
+    document_date: date | None = None
+    if raw_decision_date:
+        try:
+            document_date = date.fromisoformat(raw_decision_date)
+        except (ValueError, TypeError):
+            document_date = None
+
     async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
         await conn.execute(
             """INSERT INTO tenant_documents
@@ -117,7 +130,7 @@ async def upload_document(
             folder_id,
             json.dumps(parsed_tags),
             json.dumps(pii_info),
-            metadata.get("decision_date"),
+            document_date,
         )
 
     # Vector store'a ekle. Orijinal metin yalnızca RLS'li DB'de kalır;
