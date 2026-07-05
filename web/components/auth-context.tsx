@@ -1,7 +1,13 @@
 "use client";
 import { createContext, useContext, type ReactNode } from "react";
 
-export type AuthUser = { name: string | null; email: string | null; role: string | null } | null;
+export type AuthUser = {
+  name: string | null;
+  email: string | null;
+  role: string | null;
+  /** E-posta doğrulandı mı. Admin için her zaman true (muaf). */
+  emailVerified: boolean;
+} | null;
 
 const AuthContext = createContext<AuthUser>(null);
 

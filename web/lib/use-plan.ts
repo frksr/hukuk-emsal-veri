@@ -46,12 +46,15 @@ export function modulKullanabilir(plan: PlanState, module: string): boolean {
  * Aksiyon kapısı. Bir özelliği KULLANMAK için yönlendirme gerekiyorsa hedefi döndürür,
  * izin varsa null.
  *  - Giriş yoksa → "/kayit" (önce ücretsiz kayıt; tüm araçlar kayıt ister)
+ *  - Giriş yapılmış ama e-posta doğrulanmamışsa → "/giris/dogrulama" (kayıt anında
+ *    otomatik açılan oturum, doğrulama tamamlanmadan hiçbir araca erişim vermemeli)
  *  - Pro gerekiyor ve plan ücretsizse → "/fiyatlandirma"
  * Plan henüz yükleniyorsa null döner (buton zaten devre dışı tutulmalı).
  */
 export function actionGateHref(plan: PlanState, requirePro: boolean): string | null {
   if (plan.loading) return null;
   if (!plan.isLoggedIn) return "/kayit";
+  if (!plan.isAdmin && !plan.emailVerified) return "/giris/dogrulama";
   if (requirePro && !plan.isPaid) return "/fiyatlandirma";
   return null;
 }
@@ -92,6 +95,7 @@ export function usePlan(): PlanState {
             name: seed.name, email: seed.email,
             isAdmin: seedAdmin,
             isPaid: seedAdmin,
+            emailVerified: seed.emailVerified,
             plan: seedAdmin ? "enterprise" : null,
           }
         : { ...BOS, loading: true })
@@ -118,6 +122,7 @@ export function usePlan(): PlanState {
           ...BOS, loading: false, isLoggedIn: true,
           name: seed.name, email: seed.email,
           isAdmin: seedAdmin, isPaid: seedAdmin,
+          emailVerified: seed.emailVerified,
           plan: seedAdmin ? "enterprise" : null,
         }
       : { ...BOS, loading: false };

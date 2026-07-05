@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { auth } from "@/auth";
+import { getEmailVerified } from "@/lib/auth/db";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Providers } from "@/components/providers";
@@ -156,11 +157,27 @@ export default async function RootLayout({
   // Giriş durumunu SUNUCUDA çöz → ilk render'da doğru header/oturum durumu
   // (client fetch'i beklemeden). "çıkış-yapmış → giriş-yapmış" titremesini önler.
   const session = await auth();
+  const role = session?.user ? (session.user as { role?: string }).role ?? null : null;
+  const isAdmin = role === "admin";
+  // Doğrulama durumu DB'den okunur (JWT'de tutulmaz — bkz. getEmailVerified).
+  // Admin muaf. Kayıt anında oturum kodu girilmeden açıldığı için, doğrulanmamış
+  // kullanıcıya "Panele Git" gibi tam-erişim ögeleri gösterilmemeli.
+  let emailVerified = isAdmin;
+  if (session?.user && !isAdmin) {
+    const userId = (session.user as { id?: string }).id;
+    try {
+      emailVerified = userId ? await getEmailVerified(userId) : false;
+    } catch {
+      // DB'ye erişilemezse fail-open (panel/layout.tsx ile tutarlı politika).
+      emailVerified = true;
+    }
+  }
   const initialUser = session?.user
     ? {
         name: session.user.name ?? null,
         email: session.user.email ?? null,
-        role: (session.user as { role?: string }).role ?? null,
+        role,
+        emailVerified,
       }
     : null;
   return (

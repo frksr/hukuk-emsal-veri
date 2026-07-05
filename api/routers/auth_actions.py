@@ -4,6 +4,7 @@ NOT: Login/logout NextAuth tarafında (Next.js'te). Buradakiler backend-side
 state management gereken işlemler.
 """
 from __future__ import annotations
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +17,7 @@ from api.auth import CurrentUser, get_current_user
 from api.db import service_session
 from api.schemas import APIResponse
 
+log = logging.getLogger("api.auth_actions")
 router = APIRouter()
 
 VERIFICATION_TOKEN_HOURS = 24
@@ -166,9 +168,21 @@ async def _kod_olustur_gonder(conn, user_id: str, email: str, name) -> None:
            VALUES ($1, $2, $3, $4, $5)""",
         user_id, email, _hash_code(code), link_token, expires,
     )
-    await send_verification_email(
+    gonderildi = await send_verification_email(
         email, name, code, token=link_token, expires_minutes=CODE_EXPIRE_MINUTES,
     )
+    if not gonderildi:
+        # send_verification_email SMTP hatasında sessizce False dönüyordu; bu durumda
+        # kod DB'ye yazılmış olsa bile kullanıcıya "gönderildi" denip yanıltılmamalı —
+        # aksi halde API 200 döner ama mail hiç gitmemiş olur (görünürlüğü olmayan hata).
+        log.error(
+            "Doğrulama e-postası gönderilemedi: user_id=%s email=%s", user_id, email
+        )
+        raise HTTPException(
+            502,
+            "Doğrulama e-postası gönderilemedi. Lütfen birkaç dakika sonra tekrar deneyin "
+            "veya destek ile iletişime geçin.",
+        )
 
 
 @router.post("/send-code", response_model=APIResponse)

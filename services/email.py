@@ -4,6 +4,7 @@ Production'da: Resend / Postmark / SendGrid önerilir.
 Development: Gmail SMTP veya Mailtrap.
 """
 from __future__ import annotations
+import logging
 import os
 import smtplib
 import ssl
@@ -13,6 +14,8 @@ from email.utils import formataddr
 from typing import Optional
 
 import aiosmtplib
+
+log = logging.getLogger("services.email")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -46,7 +49,14 @@ async def send_email(
     text: Optional[str] = None,
 ) -> bool:
     if not is_configured():
-        # Development: konsola yaz, gönderme
+        # SMTP_HOST tanımlı değilse gerçek mail ATILMAZ. Development'ta beklenen
+        # davranış budur; ama production'da (env değişkeni eksik/boş kalırsa) bu
+        # dala düşülmesi mail'in sessizce hiç gönderilmediği anlamına gelir — bu
+        # yüzden WARNING seviyesinde loglanır (print değil, prod'da görünür olsun).
+        log.warning(
+            "SMTP_HOST tanımlı değil — e-posta GERÇEKTEN GÖNDERİLMEDİ (dev-mode "
+            "fallback). to=%s subject=%s", to, subject,
+        )
         print(f"\n[EMAIL DEV MODE]\nTo: {to}\nSubject: {subject}\n{text or html}\n")
         return True
 
@@ -75,8 +85,13 @@ async def send_email(
     try:
         await aiosmtplib.send(msg, **gonderim)
         return True
-    except Exception as e:
-        print(f"[EMAIL ERROR] to={to} host={SMTP_HOST}:{SMTP_PORT} starttls={gonderim['start_tls']} -> {e}")
+    except Exception:
+        # log.exception (ERROR seviyesi + traceback) — önceki print() prod
+        # loglarında düz stdout satırı olarak görünüyordu ve kolayca kaçırılıyordu.
+        log.exception(
+            "SMTP gönderim hatası: to=%s host=%s:%s starttls=%s",
+            to, SMTP_HOST, SMTP_PORT, gonderim["start_tls"],
+        )
         return False
 
 

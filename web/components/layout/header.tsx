@@ -26,6 +26,10 @@ export function Header() {
   // Giriş durumu SUNUCUDAN gelir (ilk render'da doğru) → titreme yok.
   const user = useAuthUser();
   const isLoggedIn = !!user;
+  // "Panele Git" / hesap menüsü yalnızca e-posta doğrulanmışsa (veya admin ise)
+  // gösterilir — aksi halde kayıt sonrası otomatik açılan ama henüz doğrulanmamış
+  // oturumla panele "girilebiliyormuş" gibi görünüp doğrulama ekranına geri atılırdı.
+  const canAccessPanel = isLoggedIn && (user?.role === "admin" || !!user?.emailVerified);
   const name = user?.name ?? null;
   const email = user?.email ?? null;
   const panelHref = user?.role === "admin" ? "/panel/admin" : "/panel";
@@ -74,7 +78,7 @@ export function Header() {
           {/* Oturum durumu — SSR'dan bilindiği için doğrudan render (titreme yok).
               Pazarlama sayfalarında kimlik gösterilmez; sadece "Panele Git" (best
               practice). Hesap menüsü /panel içindedir. */}
-          {isLoggedIn ? (
+          {canAccessPanel ? (
             menuGoster ? (
               <Link
                 href={panelHref}
@@ -87,6 +91,13 @@ export function Header() {
                 <ProfileMenu name={name} email={email} />
               </div>
             )
+          ) : isLoggedIn ? (
+            <Link
+              href="/giris/dogrulama"
+              className="ml-2 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary-600 whitespace-nowrap"
+            >
+              E-postayı Doğrula
+            </Link>
           ) : (
             <div className="ml-2 flex items-center gap-2">
               <Link
@@ -151,7 +162,7 @@ export function Header() {
             </Link>
           )}
           <div className="mt-2 border-t border-border pt-2">
-            {isLoggedIn ? (
+            {canAccessPanel ? (
               <>
                 <Link
                   href={panelHref}
@@ -175,6 +186,14 @@ export function Header() {
                   <LogOut className="h-4 w-4" /> Çıkış yap
                 </button>
               </>
+            ) : isLoggedIn ? (
+              <Link
+                href="/giris/dogrulama"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-foreground/90 hover:bg-secondary"
+              >
+                <LayoutDashboard className="h-4 w-4" /> E-postayı Doğrula
+              </Link>
             ) : (
               <div className="flex gap-2">
                 <Link

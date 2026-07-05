@@ -63,9 +63,16 @@ def kota(event_type: str, min_tier: str | None = None):
         rank = _TIER_ORDER.get(tier, 0)
 
         # 0) E-posta doğrulama kapısı — giriş yapmış ama doğrulanmamış kullanıcı
-        # AI üretimi / UYAP araçlarını kullanamaz (arama + hesaplayıcılar serbest).
+        # AI üretimi / UYAP araçlarını VE emsal aramayı kullanamaz (yalnızca
+        # hesaplayıcılar serbest kalır). Kayıt anında oturum otomatik açıldığı için
+        # (kod girilmeden önce) bu kapı olmadan doğrulama fiilen atlanabiliyordu.
         # Anonim kullanıcının doğrulayacak hesabı yoktur, admin ise muaftır.
-        if not is_admin and user_id and event_type in AI_MODULES and not getattr(user, "email_verified", False):
+        if (
+            not is_admin
+            and user_id
+            and (event_type in AI_MODULES or event_type == "arama")
+            and not getattr(user, "email_verified", False)
+        ):
             raise HTTPException(
                 403,
                 {
