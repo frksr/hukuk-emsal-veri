@@ -80,14 +80,18 @@ export function middleware(request: NextRequest) {
   // iyzico gömülü ödeme formu (checkoutFormContent) iyzico alan adlarından script,
   // iframe (3DS) ve form-post yükler → CSP'de izin ver.
   const iyzico = "https://*.iyzipay.com";
+  // Google tag (gtag.js/GA4) — script googletagmanager.com'dan yükleniyor,
+  // ölçüm istekleri google-analytics.com / analytics.google.com'a gidiyor.
+  const gtag = "https://www.googletagmanager.com";
+  const gaConnect = "https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com";
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${iyzico}`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${iyzico} ${gtag}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https:",
     `font-src 'self' data: https://fonts.gstatic.com ${iyzico}`,
     // https: prod domainleri, localhost:* lokalde hangi portta backend olursa olsun kapsar
-    `connect-src 'self' https: ${apiOrigin} http://localhost:* http://127.0.0.1:*`,
+    `connect-src 'self' https: ${apiOrigin} ${gaConnect} http://localhost:* http://127.0.0.1:*`,
     `frame-src 'self' ${iyzico}`,
     "frame-ancestors 'self'",
     "base-uri 'self'",

@@ -8,6 +8,7 @@ import { Providers } from "@/components/providers";
 import { CookieConsent } from "@/components/cookie-consent";
 import { ChromeGuard } from "@/components/layout/chrome-guard";
 import { InactivityLogout } from "@/components/inactivity-logout";
+import { GoogleAnalytics } from "@/components/analytics/google-analytics";
 import "./globals.css";
 
 const inter = Inter({
@@ -203,6 +204,7 @@ export default async function RootLayout({
             __html: JSON.stringify(legalServiceJsonLd).replace(/</g, "\\u003c"),
           }}
         />
+        <GoogleAnalytics />
       </head>
       <body className="min-h-screen flex flex-col bg-background font-sans">
         <Providers initialUser={initialUser}>
