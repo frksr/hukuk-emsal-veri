@@ -47,3 +47,6 @@ aiosmtplib>=3.0
 
 # Observability
 sentry-sdk[fastapi]>=2.0
+
+# Blog görsel yükleme (public GCS bucket)
+google-cloud-storage>=2.16

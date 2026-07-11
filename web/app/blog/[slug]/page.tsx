@@ -70,7 +70,24 @@ export async function generateMetadata({
 }
 
 // --- Hafif Markdown render (bağımlılıksız): ## h2, ### h3, - liste, **kalın**,
-// [metin](url) link, > vurgu kutusu ---
+// [metin](url) link, > vurgu kutusu, ![açıklama](url){pozisyon} resim ---
+
+// Admin panelde (icerik-panel.tsx) gövdeye eklenen resimler bu formatta gelir:
+// ![açıklama](https://...) veya konum belirtilmişse ![açıklama](https://...){left|right|center|full}
+const IMG_LINE_RE = /^!\[([^\]]*)\]\(([^)\s]+)\)(?:\{(left|right|center|full)\})?$/;
+
+function resimKonumSinifi(pos: string): string {
+  switch (pos) {
+    case "left":
+      return "float-left mr-6 mb-4 w-full sm:w-1/2";
+    case "right":
+      return "float-right ml-6 mb-4 w-full sm:w-1/2";
+    case "full":
+      return "w-full";
+    default:
+      return "mx-auto w-full sm:w-3/4";
+  }
+}
 function inline(text: string, keyBase: string): React.ReactNode[] {
   // Önce [metin](url) linklerini ayır, kalan parçalarda **kalın** işle.
   const linkParts = text.split(/(\[[^\]]+\]\([^)]+\))/g);
@@ -178,6 +195,31 @@ function renderBody(body: string): React.ReactNode[] {
       flushPara();
       flushQuote();
       list.push(line.replace(/^[-*]\s+/, ""));
+    } else if (IMG_LINE_RE.test(line.trim())) {
+      flushPara();
+      flushList();
+      flushQuote();
+      const [, alt, src, posRaw] = IMG_LINE_RE.exec(line.trim())!;
+      const pos = posRaw || "center";
+      nodes.push(
+        <figure
+          key={`img-${k++}`}
+          className={`not-prose my-6 ${resimKonumSinifi(pos)}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={alt}
+            loading="lazy"
+            className="w-full rounded-lg border object-cover"
+          />
+          {alt && (
+            <figcaption className="mt-1.5 text-center text-xs text-muted-foreground">
+              {alt}
+            </figcaption>
+          )}
+        </figure>
+      );
     } else if (line.trim() === "") {
       flushPara();
       flushList();
@@ -191,6 +233,9 @@ function renderBody(body: string): React.ReactNode[] {
   flushPara();
   flushList();
   flushQuote();
+  // Sol/sağ hizalı (float) resimlerden sonra takip eden içeriğin (SSS, footer
+  // notu vb.) görselle üst üste binmemesi için taşmayı temizle.
+  nodes.push(<div key="clearfix" className="clear-both" />);
   return nodes;
 }
 

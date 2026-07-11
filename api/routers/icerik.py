@@ -13,6 +13,7 @@ Admin (role=admin):
   POST   /api/icerik/admin/makale/{id}/yayinla→ yayınla
   POST   /api/icerik/admin/makale/{id}/taslak → taslağa al
   DELETE /api/icerik/admin/makale/{id}        → sil
+  POST   /api/icerik/admin/upload-gorsel      → kapak/gövde görseli yükle (public URL döner)
 
 Tablo GLOBAL (RLS yok, bkz. infra/db/20_blog_articles.sql). Admin yazımları
 service_session ile yapılır; public okuma yalnız status='published' filtreler.
@@ -22,7 +23,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile
 from pydantic import BaseModel
 
 from api.auth import CurrentUser, get_current_user
@@ -30,6 +31,7 @@ from api.cache import TTLCache
 from api.concurrency import run_blocking
 from api.db import db_session, service_session
 from api.schemas import APIResponse
+from services.blog_storage import BLOG_IMAGE_MAX_SIZE, upload_blog_image
 from services.seo_uret import makale_seo_uret, slugify, seo_skor_hesapla
 
 log = logging.getLogger("api.icerik")
@@ -326,6 +328,39 @@ async def admin_taslak(
         raise HTTPException(404, "Makale bulunamadı.")
     _liste_cache.clear()
     return APIResponse(ok=True, data=_row(rec), message="Makale taslağa alındı.")
+
+
+@router.post("/admin/upload-gorsel", response_model=APIResponse)
+async def admin_gorsel_yukle(
+    file: UploadFile = File(...),
+    admin: CurrentUser = Depends(require_admin),
+) -> APIResponse:
+    """Kapak görseli veya gövde içi resim yükler, herkese açık URL döner.
+
+    Kapak görseli: dönen URL doğrudan `cover_image` alanına yazılır.
+    Gövde resmi: dönen URL frontend'de `![açıklama](url){pozisyon}` olarak
+    imleç konumuna eklenir (bkz. icerik-panel.tsx, blog/[slug]/page.tsx).
+    """
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(415, "Yalnızca görsel dosyaları yüklenebilir (jpg/png/webp/gif/svg).")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(422, "Boş dosya.")
+    if len(content) > BLOG_IMAGE_MAX_SIZE:
+        raise HTTPException(
+            413, f"Görsel {BLOG_IMAGE_MAX_SIZE // (1024 * 1024)} MB'dan büyük olamaz."
+        )
+
+    try:
+        url = await run_blocking(
+            upload_blog_image, content, file.filename or "gorsel", file.content_type
+        )
+    except Exception as e:
+        log.exception("Blog görsel yükleme hatası")
+        raise HTTPException(500, f"Görsel yüklenemedi: {e}")
+
+    return APIResponse(ok=True, data={"url": url}, message="Görsel yüklendi.")
 
 
 @router.delete("/admin/makale/{makale_id}", response_model=APIResponse)

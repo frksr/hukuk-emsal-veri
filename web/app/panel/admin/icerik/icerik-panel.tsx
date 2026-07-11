@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Plus,
   Sparkles,
@@ -10,6 +10,7 @@ import {
   ExternalLink,
   CheckCircle2,
   AlertCircle,
+  ImagePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,6 +70,77 @@ export function IcerikPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Görsel yükleme (kapak + gövde içi)
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [govdeUploading, setGovdeUploading] = useState(false);
+  const [govdePozisyon, setGovdePozisyon] = useState<"center" | "left" | "right" | "full">("center");
+  const coverFileRef = useRef<HTMLInputElement>(null);
+  const govdeFileRef = useRef<HTMLInputElement>(null);
+  const govdeTextRef = useRef<HTMLTextAreaElement>(null);
+
+  async function gorselYukle(file: File): Promise<string | null> {
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await fetch("/api/proxy/icerik/admin/upload-gorsel", {
+        method: "POST",
+        body: fd,
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        flash(false, j.detail || j.error || "Görsel yüklenemedi.");
+        return null;
+      }
+      return j.data.url as string;
+    } catch {
+      flash(false, "Görsel yüklenemedi — bağlantı hatası.");
+      return null;
+    }
+  }
+
+  async function kapakDosyaSecildi(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setCoverUploading(true);
+    const url = await gorselYukle(f);
+    setCoverUploading(false);
+    if (url) setCurrent((c) => ({ ...c, cover_image: url }));
+  }
+
+  // Gövde textarea'sındaki imleç konumuna görsel markdown'ı ekler:
+  // ![açıklama](url){pozisyon} — renderer bunu blog/[slug]/page.tsx'te işler.
+  function govdeyeGorselEkle(url: string, alt: string, pos: string) {
+    const snippet = `\n![${alt}](${url}){${pos}}\n`;
+    const ta = govdeTextRef.current;
+    if (!ta) {
+      setCurrent((c) => ({ ...c, body: (c.body || "") + snippet }));
+      return;
+    }
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    const yeniDeger = ta.value.slice(0, start) + snippet + ta.value.slice(end);
+    setCurrent((c) => ({ ...c, body: yeniDeger }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      const yeniPos = start + snippet.length;
+      ta.setSelectionRange(yeniPos, yeniPos);
+    });
+  }
+
+  async function govdeDosyaSecildi(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setGovdeUploading(true);
+    const url = await gorselYukle(f);
+    setGovdeUploading(false);
+    if (url) {
+      const alt = f.name.replace(/\.[^.]+$/, "");
+      govdeyeGorselEkle(url, alt, govdePozisyon);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -455,6 +527,24 @@ export function IcerikPanel() {
                 }
                 placeholder="/blog/covers/ornek.svg veya https://..."
               />
+              <input
+                ref={coverFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={kapakDosyaSecildi}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => coverFileRef.current?.click()}
+                disabled={coverUploading}
+              >
+                <ImagePlus className="h-4 w-4 mr-1.5" />
+                {coverUploading ? "Yükleniyor…" : "Bilgisayardan Yükle"}
+              </Button>
               {current.cover_image && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -470,10 +560,50 @@ export function IcerikPanel() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">
-              Gövde (Markdown destekli)
-            </label>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <label className="text-sm font-medium">
+                Gövde (Markdown destekli)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={govdeFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={govdeDosyaSecildi}
+                />
+                <select
+                  className="rounded-md border bg-background px-2 py-1.5 text-xs"
+                  value={govdePozisyon}
+                  onChange={(e) =>
+                    setGovdePozisyon(e.target.value as typeof govdePozisyon)
+                  }
+                  title="Eklenecek resmin konumu"
+                >
+                  <option value="center">Orta (varsayılan)</option>
+                  <option value="left">Sol — metin sağından devam eder</option>
+                  <option value="right">Sağ — metin solundan devam eder</option>
+                  <option value="full">Tam genişlik</option>
+                </select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => govdeFileRef.current?.click()}
+                  disabled={govdeUploading}
+                >
+                  <ImagePlus className="h-4 w-4 mr-1.5" />
+                  {govdeUploading ? "Yükleniyor…" : "Resim Ekle"}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 mb-1.5">
+              Resim, imlecin bulunduğu yere <code>![açıklama](url){"{"}pozisyon{"}"}</code>{" "}
+              olarak eklenir — konumu seçip imleci istediğiniz satıra koyduktan
+              sonra &quot;Resim Ekle&quot;ye basın.
+            </p>
             <textarea
+              ref={govdeTextRef}
               className={`${inputCls} min-h-[260px] font-mono`}
               value={current.body || ""}
               onChange={(e) => setCurrent({ ...current, body: e.target.value })}
