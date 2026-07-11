@@ -114,9 +114,26 @@ async def lifespan(app: FastAPI):
 
     _hatirlatici_task = _asyncio.create_task(_hatirlatici_dongusu())
     log.info("Hatırlatıcı dispatch döngüsü başlatıldı (60 sn)")
+
+    # Uptime self-check — 5 dk'da bir siteyi kontrol eder, erişilemezse
+    # ADMIN_EMAIL'e mail atar (services/uptime_monitor.py). Bu, API sürecinin
+    # İÇİNDE çalıştığı için instance'ın kendisi tamamen düşerse alarm
+    # göndermeyi garanti ETMEZ — bunun için ayrıca GCP Uptime Check gerekir.
+    async def _uptime_dongusu():
+        from services.uptime_monitor import check_and_alert
+        while True:
+            try:
+                await check_and_alert()
+            except Exception as e:
+                log.warning(f"Uptime kontrol hatası: {e}")
+            await _asyncio.sleep(300)
+
+    _uptime_task = _asyncio.create_task(_uptime_dongusu())
+    log.info("Uptime izleme döngüsü başlatıldı (5 dk)")
     yield
     log.info("API kapatılıyor")
     _hatirlatici_task.cancel()
+    _uptime_task.cancel()
     try:
         from api.db import close_pool
         await close_pool()
