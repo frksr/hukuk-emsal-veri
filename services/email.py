@@ -287,3 +287,52 @@ async def send_emsal_alarm_email(
         subject=f"Yeni emsal: {query[:60]}",
         html=html,
     )
+
+
+async def send_publish_approval_email(
+    to: str,
+    *,
+    site_name: str,
+    title: str,
+    meta_description: Optional[str],
+    keyword: Optional[str],
+    preview_url: str,
+    approve_url: str,
+    reject_url: str,
+    expires_at: str,
+) -> bool:
+    """Blog otomasyonu onay maili — yeni taslak geldiğinde admin'e gönderilir.
+
+    İki adımlı akış: 'Onayla' butonu bir onay SAYFASINA gider (henüz yayınlamaz);
+    o sayfadaki butonla (POST) yayınlanır. Bu, mail istemcilerinin linkleri
+    ön-taramasının istem dışı yayına yol açmasını engeller.
+    """
+    kw = f"<p style='margin:4px 0;'><strong>Hedef kelime:</strong> {keyword}</p>" if keyword else ""
+    md = f"<p style='margin:4px 0;'><strong>Açıklama:</strong> {meta_description}</p>" if meta_description else ""
+    body = (
+        f"<p>Yeni bir blog taslağı onay bekliyor.</p>"
+        f"<div style='background:#f5f5f7;border-radius:6px;padding:16px;margin:16px 0;'>"
+        f"<p style='margin:0 0 8px;font-size:16px;'><strong>{title}</strong></p>"
+        f"{md}{kw}"
+        f"</div>"
+        f"<p>Yayınlamadan önce <a href='{preview_url}' "
+        f"style='color:#1e3a5f;font-weight:600;'>önizlemeyi açın</a> "
+        f"(sayfa arama motorlarına kapalıdır).</p>"
+        # İki buton — CTA helper tek buton alır, bu yüzden elle basıyoruz.
+        f"<p style='margin:28px 0;text-align:center;'>"
+        f"<a href='{approve_url}' style='display:inline-block;padding:14px 28px;"
+        f"background:#15803d;color:#fff;text-decoration:none;border-radius:6px;"
+        f"font-weight:600;margin:0 6px;'>✅ Onayla</a>"
+        f"<a href='{reject_url}' style='display:inline-block;padding:14px 28px;"
+        f"background:#b91c1c;color:#fff;text-decoration:none;border-radius:6px;"
+        f"font-weight:600;margin:0 6px;'>❌ Reddet</a>"
+        f"</p>"
+        f"<p style='color:#888;font-size:13px;'>Bu bağlantılar "
+        f"<strong>{expires_at}</strong> tarihine kadar geçerlidir.</p>"
+    )
+    html = _wrap(f"Onay bekliyor: {title[:80]}", body)
+    return await send_email(
+        to=to,
+        subject=f"[{site_name}] Onay bekliyor: {title[:80]}",
+        html=html,
+    )
