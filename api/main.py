@@ -115,25 +115,36 @@ async def lifespan(app: FastAPI):
     _hatirlatici_task = _asyncio.create_task(_hatirlatici_dongusu())
     log.info("Hatırlatıcı dispatch döngüsü başlatıldı (60 sn)")
 
-    # Uptime self-check — 5 dk'da bir siteyi kontrol eder, erişilemezse
-    # ADMIN_EMAIL'e mail atar (services/uptime_monitor.py). Bu, API sürecinin
-    # İÇİNDE çalıştığı için instance'ın kendisi tamamen düşerse alarm
-    # göndermeyi garanti ETMEZ — bunun için ayrıca GCP Uptime Check gerekir.
-    async def _uptime_dongusu():
-        from services.uptime_monitor import check_and_alert
-        while True:
-            try:
-                await check_and_alert()
-            except Exception as e:
-                log.warning(f"Uptime kontrol hatası: {e}")
-            await _asyncio.sleep(300)
+    # Uptime self-check — VARSAYILAN OLARAK KAPALI.
+    #
+    # Bu kontrol API sürecinin İÇİNDE çalışır ve iki nedenle güvenilir değildir:
+    #   1) Instance'ın kendisi tamamen düşerse döngü de durur, alarm gitmez.
+    #   2) max-instances>1 iken HER instance kendi _state'iyle ayrı ayrı kontrol
+    #      edip ayrı ayrı mail atar → geçici bir dalgalanmada N kat "düştü/ayakta"
+    #      spam'i. ALERT_COOLDOWN yalnızca instance içinde geçerlidir.
+    # Bu yüzden tek güvenilir kaynak GCP Uptime Check'tir. İç monitör yalnızca
+    # UPTIME_SELFCHECK_ENABLED=1 ile ve tek instance (min=max=1) senaryosunda
+    # bilinçli olarak açılmalıdır.
+    _uptime_task = None
+    if os.environ.get("UPTIME_SELFCHECK_ENABLED", "").strip().lower() in ("1", "true", "yes", "on"):
+        async def _uptime_dongusu():
+            from services.uptime_monitor import check_and_alert
+            while True:
+                try:
+                    await check_and_alert()
+                except Exception as e:
+                    log.warning(f"Uptime kontrol hatası: {e}")
+                await _asyncio.sleep(300)
 
-    _uptime_task = _asyncio.create_task(_uptime_dongusu())
-    log.info("Uptime izleme döngüsü başlatıldı (5 dk)")
+        _uptime_task = _asyncio.create_task(_uptime_dongusu())
+        log.info("Uptime izleme döngüsü başlatıldı (5 dk) — UPTIME_SELFCHECK_ENABLED açık")
+    else:
+        log.info("Uptime iç monitörü KAPALI (UPTIME_SELFCHECK_ENABLED set değil) — GCP Uptime Check kullanılıyor")
     yield
     log.info("API kapatılıyor")
     _hatirlatici_task.cancel()
-    _uptime_task.cancel()
+    if _uptime_task is not None:
+        _uptime_task.cancel()
     try:
         from api.db import close_pool
         await close_pool()
