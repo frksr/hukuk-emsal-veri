@@ -103,7 +103,7 @@ npm start
 - [ ] LLM usage tracking (Anthropic / Google dashboard)
 
 ### Cost Optimization
-- [ ] LLM provider seçimi: Gemini 2.0 Flash daha ucuz, Claude Sonnet daha kaliteli
+- [ ] LLM provider seçimi: gemini-3.1-flash-lite daha ucuz, Claude Sonnet daha kaliteli
 - [ ] LLM response cache (aynı sorgu → cache'den)
 - [ ] Streaming responses (uzun çıktılar için)
 - [ ] Embedding model: e5-small (384-dim) daha hızlı

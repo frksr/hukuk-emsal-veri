@@ -62,7 +62,7 @@ def _gemini_call(system: str, user: str, max_tokens: int,
     if not api_key:
         raise RuntimeError("GOOGLE_API_KEY yok. .env dosyasına ekle.")
     genai.configure(api_key=api_key)
-    model_name = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-exp")
+    model_name = model or os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
     gen_model = genai.GenerativeModel(
         model_name=model_name,
         system_instruction=system,
@@ -171,7 +171,7 @@ def _gemini_stream(system: str, user: str, max_tokens: int,
     if not api_key:
         raise RuntimeError("GOOGLE_API_KEY yok. .env dosyasına ekle.")
     genai.configure(api_key=api_key)
-    model_name = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-exp")
+    model_name = model or os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
     gen_model = genai.GenerativeModel(
         model_name=model_name, system_instruction=system,
     )
