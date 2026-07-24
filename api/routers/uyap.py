@@ -16,41 +16,15 @@ from api.schemas import APIResponse
 log = logging.getLogger("api.uyap")
 router = APIRouter()
 
-MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
-ALLOWED_EXT = {"pdf", "docx", "txt", "md"}
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB — tek dosya
+ALLOWED_EXT = {"pdf", "docx", "txt", "md", "udf"}
+
+MAX_BATCH_FILES = 100  # .zip içinde tek seferde işlenecek azami dosya sayısı
+MAX_BATCH_ARCHIVE_SIZE = 300 * 1024 * 1024  # 300 MB — zip bomb koruması
 
 
-@router.post("/upload", response_model=APIResponse)
-async def upload_document(
-    request: Request,
-    file: UploadFile = File(...),
-    folder_id: str | None = Form(None),
-    title: str | None = Form(None),
-    tags: str | None = Form(None),  # JSON string
-    user: CurrentUser = Depends(require_uyap),
-):
-    """UYAP belgesi yükle. Şifrelenir, parse edilir, vector store'a eklenir."""
-    from services.uyap_parser import parse_file, extract_metadata, guess_document_type
-    from services.tenant_storage import store as storage_store
-    from services.tenant_rag import index_document
-    from services.pii_redaction import audit_pii
-
-    if not user.tenant_id:
-        raise HTTPException(400, "Tenant gerekli.")
-
-    # Dosya boyut kontrol
-    filename = file.filename or "dosya"
-    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    if ext not in ALLOWED_EXT:
-        raise HTTPException(400, f"Desteklenmeyen format. İzinli: {ALLOWED_EXT}")
-
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(413, f"Dosya {MAX_FILE_SIZE // (1024*1024)} MB'dan büyük.")
-    if len(content) < 100:
-        raise HTTPException(400, "Dosya çok küçük veya boş.")
-
-    # Kota kontrolü
+async def _check_quota(user: CurrentUser) -> tuple[int, int]:
+    """(mevcut dosya sayısı, plan üst sınırı) döner. max_docs=0 → sınırsız."""
     async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
         usage = await conn.fetchrow(
             """SELECT COUNT(*) c, t.max_uyap_documents
@@ -62,20 +36,45 @@ async def upload_document(
         )
         current = usage["c"] if usage else 0
         max_docs = (usage["max_uyap_documents"] if usage else 0) or 0
-        if max_docs > 0 and current >= max_docs:
-            raise HTTPException(
-                402,
-                f"UYAP dosya kotanız doldu ({current}/{max_docs}). Planı yükseltin.",
-            )
+        return current, max_docs
 
-    # Parse
+
+async def _ingest_document(
+    *,
+    request: Request,
+    user: CurrentUser,
+    filename: str,
+    content: bytes,
+    folder_id: str | None,
+    title: str | None,
+    tags: str | None,
+) -> dict:
+    """Tek bir belgeyi doğrula, parse et, şifreli sakla, indeksle.
+
+    `/upload` (tekli) ve `/upload/batch` (zip) tarafından paylaşılan ortak
+    mantık. Doğrulama/parse hataları ValueError olarak fırlatılır (çağıran
+    HTTP status'a çevirir); storage/db hataları olduğu gibi yükselir.
+    """
+    from services.uyap_parser import parse_file, extract_metadata, guess_document_type
+    from services.tenant_storage import store as storage_store
+    from services.tenant_rag import index_document
+    from services.pii_redaction import audit_pii
+
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    if ext not in ALLOWED_EXT:
+        raise ValueError(f"Desteklenmeyen format. İzinli: {sorted(ALLOWED_EXT)}")
+    if len(content) > MAX_FILE_SIZE:
+        raise ValueError(f"Dosya {MAX_FILE_SIZE // (1024*1024)} MB'dan büyük.")
+    if len(content) < 100:
+        raise ValueError("Dosya çok küçük veya boş.")
+
     try:
         text = parse_file(content, ext)
     except Exception as e:
-        raise HTTPException(400, f"Dosya okunamadı: {e}")
+        raise ValueError(f"Dosya okunamadı: {e}")
 
     if not text or len(text) < 50:
-        raise HTTPException(400, "Dosyadan yeterli metin çıkarılamadı.")
+        raise ValueError("Dosyadan yeterli metin çıkarılamadı.")
 
     metadata = extract_metadata(text)
     doc_type = guess_document_type(text, filename)
@@ -83,14 +82,9 @@ async def upload_document(
 
     document_id = str(uuid.uuid4())
 
-    # Şifreli sakla
-    try:
-        storage = await storage_store(user.tenant_id, document_id, content)
-    except Exception as e:
-        log.exception("Storage hatası")
-        raise HTTPException(500, f"Dosya saklanamadı: {e}")
+    # Şifreli sakla — storage/db hataları burada bilerek yutulmuyor (500'e düşer)
+    storage = await storage_store(user.tenant_id, document_id, content)
 
-    # DB kaydı
     parsed_tags = []
     if tags:
         try:
@@ -124,7 +118,7 @@ async def upload_document(
             document_id, user.tenant_id, user.user_id,
             title or filename, metadata.get("case_no"), metadata.get("decision_no"),
             metadata.get("court"), doc_type, filename,
-            storage["file_size"], file.content_type or "application/octet-stream",
+            storage["file_size"], "application/octet-stream",
             storage["storage_key"], text,
             storage["encryption_iv"],
             folder_id,
@@ -136,6 +130,8 @@ async def upload_document(
     # Vector store'a ekle. Orijinal metin yalnızca RLS'li DB'de kalır;
     # embedding, tenant_rag.index_document içinde ANONİMLEŞTİRİLEREK üretilir
     # (dış embedding API'sine PII gitmez — bkz. services/pii_redaction.redact_for_embedding).
+    status = "ready"
+    chunk_count = 0
     try:
         chunk_count = index_document(
             user.tenant_id, document_id, text,
@@ -155,6 +151,7 @@ async def upload_document(
             )
     except Exception as e:
         log.exception("Indexing hatası")
+        status = "error"
         async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
             await conn.execute(
                 """UPDATE tenant_documents
@@ -174,7 +171,7 @@ async def upload_document(
         },
     )
 
-    return APIResponse(ok=True, data={
+    return {
         "id": document_id,
         "title": title or filename,
         "filename": filename,
@@ -182,7 +179,153 @@ async def upload_document(
         "doc_type": doc_type,
         "metadata": metadata,
         "pii_audit": pii_info,
-        "status": "ready",
+        "status": status,
+        "chunk_count": chunk_count,
+    }
+
+
+@router.post("/upload", response_model=APIResponse)
+async def upload_document(
+    request: Request,
+    file: UploadFile = File(...),
+    folder_id: str | None = Form(None),
+    title: str | None = Form(None),
+    tags: str | None = Form(None),  # JSON string
+    user: CurrentUser = Depends(require_uyap),
+):
+    """UYAP belgesi yükle. Şifrelenir, parse edilir, vector store'a eklenir."""
+    if not user.tenant_id:
+        raise HTTPException(400, "Tenant gerekli.")
+
+    filename = file.filename or "dosya"
+    content = await file.read()
+
+    current, max_docs = await _check_quota(user)
+    if max_docs > 0 and current >= max_docs:
+        raise HTTPException(
+            402,
+            f"UYAP dosya kotanız doldu ({current}/{max_docs}). Planı yükseltin.",
+        )
+
+    try:
+        doc = await _ingest_document(
+            request=request, user=user, filename=filename, content=content,
+            folder_id=folder_id, title=title, tags=tags,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        log.exception("Dosya işlenemedi")
+        raise HTTPException(500, f"Dosya saklanamadı: {e}")
+
+    return APIResponse(ok=True, data=doc)
+
+
+@router.post("/upload/batch", response_model=APIResponse)
+async def upload_batch(
+    request: Request,
+    file: UploadFile = File(...),
+    folder_id: str | None = Form(None),
+    tags: str | None = Form(None),
+    user: CurrentUser = Depends(require_uyap),
+):
+    """ZIP içindeki tüm desteklenen belgeleri tek seferde yükle.
+
+    Avukat UYAP'tan indirdiği çok sayıda dosyayı (pdf/docx/txt/md/udf) tek
+    bir .zip halinde sıkıştırıp yükleyebilir; her dosya sırayla parse edilip
+    indekslenir. Desteklenmeyen dosyalar ve kota dolduktan sonraki dosyalar
+    atlanır (skipped) — arşivin tamamı reddedilmez, kısmi sonuç dönülür.
+    """
+    if not user.tenant_id:
+        raise HTTPException(400, "Tenant gerekli.")
+
+    archive_name = file.filename or "arsiv.zip"
+    if not archive_name.lower().endswith(".zip"):
+        raise HTTPException(400, "Toplu yükleme yalnızca .zip dosyası kabul eder.")
+
+    raw = await file.read()
+    if len(raw) > MAX_BATCH_ARCHIVE_SIZE:
+        raise HTTPException(
+            413, f"Arşiv {MAX_BATCH_ARCHIVE_SIZE // (1024*1024)} MB sınırını aşıyor."
+        )
+
+    import zipfile
+    import io
+
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "Geçersiz veya bozuk ZIP arşivi.")
+
+    entries = [
+        zi for zi in zf.infolist()
+        if not zi.is_dir()
+        and "__MACOSX" not in zi.filename
+        and not zi.filename.rsplit("/", 1)[-1].startswith(".")
+    ]
+    if not entries:
+        raise HTTPException(400, "Arşiv içinde dosya bulunamadı.")
+    if len(entries) > MAX_BATCH_FILES:
+        raise HTTPException(
+            413,
+            f"Arşivde {len(entries)} dosya var, tek seferde en fazla "
+            f"{MAX_BATCH_FILES} dosya işlenebilir. Lütfen bölerek yükleyin.",
+        )
+    if sum(zi.file_size for zi in entries) > MAX_BATCH_ARCHIVE_SIZE:
+        raise HTTPException(413, "Arşivin açılmış toplam boyutu sınırı aşıyor.")
+
+    current, max_docs = await _check_quota(user)
+
+    results: list[dict] = []
+    for zi in entries:
+        name = zi.filename.rsplit("/", 1)[-1]
+        ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
+        if ext not in ALLOWED_EXT:
+            results.append({"filename": name, "status": "skipped",
+                             "message": f"Desteklenmeyen format: {ext or '?'}"})
+            continue
+        if max_docs > 0 and current >= max_docs:
+            results.append({"filename": name, "status": "skipped",
+                             "message": "Dosya kotası doldu."})
+            continue
+        try:
+            content = zf.read(zi)
+        except Exception as e:
+            results.append({"filename": name, "status": "error",
+                             "message": f"Arşivden okunamadı: {e}"})
+            continue
+        try:
+            doc = await _ingest_document(
+                request=request, user=user, filename=name, content=content,
+                folder_id=folder_id, title=None, tags=tags,
+            )
+            results.append({
+                "filename": name, "status": doc["status"], "id": doc["id"],
+                "chunk_count": doc.get("chunk_count", 0),
+            })
+            if doc["status"] == "ready":
+                current += 1
+        except ValueError as e:
+            results.append({"filename": name, "status": "error", "message": str(e)})
+        except Exception as e:
+            log.exception("Batch dosya işleme hatası: %s", name)
+            results.append({"filename": name, "status": "error", "message": str(e)[:300]})
+
+    success = sum(1 for r in results if r["status"] == "ready")
+    failed = sum(1 for r in results if r["status"] == "error")
+    skipped = sum(1 for r in results if r["status"] == "skipped")
+
+    await audit(
+        action="document.batch_uploaded",
+        user_id=user.user_id, tenant_id=user.tenant_id,
+        resource=f"batch:{archive_name}",
+        request=request,
+        metadata={"total": len(entries), "success": success, "failed": failed, "skipped": skipped},
+    )
+
+    return APIResponse(ok=True, data={
+        "results": results,
+        "summary": {"total": len(entries), "success": success, "failed": failed, "skipped": skipped},
     })
 
 

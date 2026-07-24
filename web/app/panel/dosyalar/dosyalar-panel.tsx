@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import {
   Upload, FileText, Loader2, Trash2, Search, Lock, AlertTriangle,
-  FolderClosed, FileCheck, Sparkles,
+  FolderClosed, FileCheck, Sparkles, CheckCircle2, XCircle, FileArchive, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,28 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+// Tekli dosyalar 25 MB backend sınırına tabi (bkz. api/routers/uyap.py
+// MAX_FILE_SIZE). ZIP arşivleri ayrı, daha yüksek bir sınıra tabi
+// (MAX_BATCH_ARCHIVE_SIZE) çünkü içinde onlarca dosya olabilir.
+const MAX_UPLOAD_MB = 25;
+const MAX_ZIP_MB = 300;
+const SINGLE_ALLOWED_EXT = ["pdf", "docx", "txt", "md", "udf"];
+
+function extOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
+}
+
+type QueueStatus = "queued" | "uploading" | "done" | "error";
+type QueueItem = {
+  id: string;
+  name: string;
+  size: number;
+  status: QueueStatus;
+  message?: string;
+  subResults?: { filename: string; status: string; message?: string }[];
+};
+
 export function DosyalarPanel() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [total, setTotal] = useState(0);
@@ -55,6 +77,8 @@ export function DosyalarPanel() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [planError, setPlanError] = useState<string | null>(null);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function loadDocs() {
@@ -77,43 +101,124 @@ export function DosyalarPanel() {
 
   useEffect(() => { loadDocs(); }, []);
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function updateQueueItem(id: string, patch: Partial<QueueItem>) {
+    setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
 
-    // Backend 25 MB'da reddediyor; sunucuya hiç gitmeden burada yakala —
-    // aksi halde büyük dosyalar bağlantı seviyesinde (ERR_CONNECTION_RESET)
-    // koptuğu için kullanıcı anlamsız bir hata görüyordu.
-    const MAX_UPLOAD_MB = 25;
-    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-      setError(
-        `Dosya ${MAX_UPLOAD_MB} MB sınırını aşıyor (${(file.size / (1024 * 1024)).toFixed(1)} MB). ` +
-        "Lütfen dosyayı sıkıştırın veya bölerek yükleyin.",
-      );
-      if (fileRef.current) fileRef.current.value = "";
-      return;
-    }
-
-    setUploading(true); setError(null);
+  async function uploadOne(item: QueueItem, file: File) {
+    updateQueueItem(item.id, { status: "uploading" });
+    const isZip = extOf(file.name) === "zip";
     try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("title", file.name);
-      const r = await fetch("/api/proxy/uyap/upload", { method: "POST", body: fd });
+      if (!isZip) fd.append("title", file.name);
+      const url = isZip ? "/api/proxy/uyap/upload/batch" : "/api/proxy/uyap/upload";
+      const r = await fetch(url, { method: "POST", body: fd });
       const j = await r.json().catch(() => null);
       if (!r.ok) throw new Error(j?.message || "Yüklenemedi");
-      await loadDocs();
-      if (fileRef.current) fileRef.current.value = "";
+
+      if (isZip) {
+        const summary = j?.data?.summary;
+        const results = j?.data?.results || [];
+        updateQueueItem(item.id, {
+          status: "done",
+          message: summary
+            ? `${summary.success}/${summary.total} yüklendi` +
+              (summary.failed ? `, ${summary.failed} hata` : "") +
+              (summary.skipped ? `, ${summary.skipped} atlandı` : "")
+            : undefined,
+          subResults: results,
+        });
+      } else {
+        updateQueueItem(item.id, { status: "done" });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Yükleme hatası";
       // Tarayıcı ağ hatası (ör. bağlantı koptu) genelde "Failed to fetch" döner —
       // kullanıcıya daha anlamlı bir mesaj göster.
-      setError(
-        msg === "Failed to fetch"
-          ? "Yükleme sırasında bağlantı koptu. İnternet bağlantınızı kontrol edip tekrar deneyin."
+      updateQueueItem(item.id, {
+        status: "error",
+        message: msg === "Failed to fetch"
+          ? "Bağlantı koptu, tekrar deneyin."
           : msg,
-      );
-    } finally { setUploading(false); }
+      });
+    }
+  }
+
+  // Çoklu dosya / sürükle-bırak: her dosya kuyruğa eklenir, sınırlı eşzamanlılıkla
+  // (aynı anda 3 istek) yüklenir. .zip dosyaları /upload/batch'e, diğerleri
+  // /upload'a gider. Backend sınırını aşan dosyalar sunucuya hiç gitmeden
+  // burada "error" olarak işaretlenir (ERR_CONNECTION_RESET yerine net mesaj).
+  async function handleFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+    setError(null);
+
+    const runnable: { item: QueueItem; file: File }[] = [];
+    const newItems: QueueItem[] = [];
+
+    for (const file of files) {
+      const ext = extOf(file.name);
+      const isZip = ext === "zip";
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      if (!isZip && !SINGLE_ALLOWED_EXT.includes(ext)) {
+        const item: QueueItem = {
+          id, name: file.name, size: file.size, status: "error",
+          message: `Desteklenmeyen format (.${ext || "?"}).`,
+        };
+        newItems.push(item);
+        continue;
+      }
+      const limitMb = isZip ? MAX_ZIP_MB : MAX_UPLOAD_MB;
+      if (file.size > limitMb * 1024 * 1024) {
+        const item: QueueItem = {
+          id, name: file.name, size: file.size, status: "error",
+          message: `Dosya ${limitMb} MB sınırını aşıyor (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
+        };
+        newItems.push(item);
+        continue;
+      }
+      const item: QueueItem = { id, name: file.name, size: file.size, status: "queued" };
+      newItems.push(item);
+      runnable.push({ item, file });
+    }
+
+    setQueue((q) => [...newItems, ...q]);
+    if (runnable.length === 0) return;
+
+    setUploading(true);
+    const CONCURRENCY = 3;
+    let idx = 0;
+    async function worker() {
+      while (idx < runnable.length) {
+        const cur = runnable[idx++];
+        await uploadOne(cur.item, cur.file);
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, runnable.length) }, worker),
+    );
+    setUploading(false);
+    await loadDocs();
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files?.length) handleFiles(e.target.files);
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
+  }
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(true);
+  }
+  function onDragLeave() {
+    setDragOver(false);
   }
 
   async function handleDelete(doc: Doc) {
@@ -151,10 +256,20 @@ export function DosyalarPanel() {
     );
   }
 
+  const activeQueue = queue.filter((q) => q.status === "queued" || q.status === "uploading");
+  const settledCount = queue.length - activeQueue.length;
+
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="p-4 flex flex-wrap gap-3 items-center">
+        <CardContent
+          className={`p-4 flex flex-wrap gap-3 items-center rounded-lg transition-colors ${
+            dragOver ? "bg-primary/5 ring-2 ring-primary/40 ring-inset" : ""
+          }`}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+        >
           <div className="flex-1 min-w-[200px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -170,17 +285,86 @@ export function DosyalarPanel() {
           <input
             ref={fileRef}
             type="file"
-            accept=".pdf,.docx,.txt,.md"
+            multiple
+            accept=".pdf,.docx,.txt,.md,.udf,.zip"
             onChange={handleUpload}
             className="hidden"
-            disabled={uploading}
           />
           <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
             {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-            Dosya Yükle
+            {uploading && activeQueue.length > 0
+              ? `Yükleniyor (${settledCount}/${queue.length})`
+              : "Dosya Yükle"}
           </Button>
+          <p className="w-full text-xs text-muted-foreground">
+            Birden fazla dosyayı buraya sürükleyip bırakabilir veya çok sayıda dosyanız
+            varsa tek bir <strong>.zip</strong> olarak toplu yükleyebilirsiniz. UYAP&apos;ın
+            kendi <strong>.udf</strong> formatı da desteklenir — önce PDF&apos;e çevirmenize gerek yok.
+          </p>
         </CardContent>
       </Card>
+
+      {queue.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Yükleme kuyruğu</span>
+              {activeQueue.length === 0 && (
+                <Button size="sm" variant="ghost" onClick={() => setQueue([])}>
+                  <X className="h-3.5 w-3.5 mr-1" /> Temizle
+                </Button>
+              )}
+            </div>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {queue.map((it) => {
+                const isZip = extOf(it.name) === "zip";
+                return (
+                  <div key={it.id} className="text-xs border rounded p-2">
+                    <div className="flex items-center gap-2">
+                      {it.status === "uploading" || it.status === "queued" ? (
+                        <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted-foreground" />
+                      ) : it.status === "done" ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-600" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+                      )}
+                      {isZip ? (
+                        <FileArchive className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="truncate flex-1">{it.name}</span>
+                      <span className="text-muted-foreground flex-shrink-0">{formatSize(it.size)}</span>
+                    </div>
+                    {it.message && (
+                      <div className={`mt-1 pl-5 ${it.status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                        {it.message}
+                      </div>
+                    )}
+                    {it.subResults && it.subResults.length > 0 && (
+                      <div className="mt-1 pl-5 space-y-0.5">
+                        {it.subResults.map((sr, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-muted-foreground">
+                            {sr.status === "ready" ? (
+                              <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-600" />
+                            ) : sr.status === "skipped" ? (
+                              <AlertTriangle className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                            ) : (
+                              <XCircle className="h-3 w-3 flex-shrink-0 text-destructive" />
+                            )}
+                            <span className="truncate">{sr.filename}</span>
+                            {sr.message && <span className="truncate">— {sr.message}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="rounded border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 flex gap-2">
         <Lock className="h-4 w-4 flex-shrink-0 mt-0.5" />

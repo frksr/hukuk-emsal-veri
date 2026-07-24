@@ -5,8 +5,16 @@ NextAuth.js JWT'sini doğrular, kullanıcıyı + aktif tenant'ı çözer.
 Frontend tarafı:
   Next.js her isteğe `Authorization: Bearer <NEXTAUTH_JWT>` ekliyor.
   JWT, NEXTAUTH_SECRET ile imzalı; backend aynı secret ile verify ediyor.
+
+UYAP tarayıcı eklentisi tarafı:
+  Eklenti, Next.js'in oturum cookie'sine erişemez (httpOnly + farklı origin,
+  chrome-extension://...). Bunun yerine panelden üretilen, `uyapext_` önekli
+  bir kişisel erişim anahtarı kullanır (bkz. api/routers/extension.py). Bu
+  token'lar NEXTAUTH_SECRET ile imzalı DEĞİLDİR — DB'de sha256 hash'i olarak
+  saklanır ve burada prefix'ine bakılarak JWT yolundan ayrıştırılır.
 """
 from __future__ import annotations
+import hashlib
 import os
 from datetime import datetime, timezone
 from typing import Annotated, Optional
@@ -15,6 +23,8 @@ import jwt
 from fastapi import Depends, Header, HTTPException, Request
 
 from api.db import service_session
+
+EXTENSION_TOKEN_PREFIX = "uyapext_"
 
 
 class CurrentUser:
@@ -56,6 +66,40 @@ def _decode_jwt(token: str) -> dict:
         raise HTTPException(401, "Geçersiz oturum.")
 
 
+async def _resolve_extension_token(token: str) -> Optional[CurrentUser]:
+    """`uyapext_...` token'ını doğrular. Geçersiz/iptal edilmişse None döner."""
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    async with service_session() as conn:
+        row = await conn.fetchrow(
+            """SELECT et.id AS token_id, u.id AS user_id, u.email, u.name, u.role,
+                      u.is_active, u.email_verified,
+                      t.id AS tenant_id, t.plan_tier, t.is_active AS tenant_active,
+                      tm.role AS tenant_role
+               FROM extension_tokens et
+               JOIN users u ON u.id = et.user_id
+               JOIN tenants t ON t.id = et.tenant_id
+               LEFT JOIN tenant_members tm ON tm.tenant_id = et.tenant_id AND tm.user_id = et.user_id
+               WHERE et.token_hash = $1 AND et.revoked_at IS NULL""",
+            token_hash,
+        )
+        if not row or not row["is_active"] or not row["tenant_active"]:
+            return None
+        await conn.execute(
+            "UPDATE extension_tokens SET last_used_at = NOW() WHERE id = $1",
+            row["token_id"],
+        )
+    return CurrentUser(
+        user_id=str(row["user_id"]),
+        email=row["email"],
+        name=row["name"],
+        role=row["role"],
+        tenant_id=str(row["tenant_id"]),
+        tenant_plan=row["plan_tier"],
+        tenant_role=row["tenant_role"] or "member",
+        email_verified=bool(row["email_verified"]),
+    )
+
+
 async def get_current_user(
     request: Request,
     authorization: Annotated[Optional[str], Header()] = None,
@@ -66,6 +110,13 @@ async def get_current_user(
         raise HTTPException(401, "Yetkilendirme gerekli.")
 
     token = authorization.split(" ", 1)[1].strip()
+
+    if token.startswith(EXTENSION_TOKEN_PREFIX):
+        ext_user = await _resolve_extension_token(token)
+        if not ext_user:
+            raise HTTPException(401, "Geçersiz veya iptal edilmiş eklenti anahtarı.")
+        return ext_user
+
     payload = _decode_jwt(token)
 
     user_id = payload.get("sub") or payload.get("user_id")

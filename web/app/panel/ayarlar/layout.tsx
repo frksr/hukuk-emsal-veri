@@ -7,6 +7,7 @@ const TABS = [
   { href: "/panel/ayarlar", label: "Profil" },
   { href: "/panel/ayarlar/guvenlik", label: "Güvenlik" },
   { href: "/panel/ayarlar/kvkk", label: "KVKK & Veriler" },
+  { href: "/panel/ayarlar/uyap-eklenti", label: "UYAP Eklentisi" },
 ];
 
 export default function AyarlarLayout({ children }: { children: React.ReactNode }) {

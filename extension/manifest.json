@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Hukukçu Yapay Zekası — UYAP Aktarım",
+  "short_name": "UYAP Aktarım",
+  "version": "0.1.0",
+  "description": "UYAP Avukat Portal'da açtığınız dosyayı tek tıkla Hukukçu Yapay Zekası hesabınızdaki Dosyalarım'a aktarın.",
+  "default_locale": "tr",
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "UYAP Aktarım — bağlantı ayarları"
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://avukat.uyap.gov.tr/*",
+        "https://avukatbeta.uyap.gov.tr/*"
+      ],
+      "js": ["content-script.js"],
+      "css": ["content-style.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+
+  "host_permissions": [
+    "https://api.hukukcuyapayzekasi.com/*",
+    "http://localhost:8010/*"
+  ],
+
+  "permissions": ["storage"]
+}

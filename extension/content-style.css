@@ -1,0 +1,91 @@
+#hyz-ext-panel {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 2147483647;
+  width: 260px;
+  font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+  background: #ffffff;
+  border: 1px solid #d7dbe0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  color: #1a1a1a;
+  overflow: hidden;
+}
+
+.hyz-ext-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #1e3a5f;
+  color: #fff;
+  font-weight: 600;
+}
+
+.hyz-ext-toggle {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.hyz-ext-body {
+  padding: 10px;
+}
+
+.hyz-ext-drop {
+  border: 2px dashed #c3c9d1;
+  border-radius: 8px;
+  padding: 16px 10px;
+  text-align: center;
+  color: #667085;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.hyz-ext-drop:hover,
+.hyz-ext-dragover {
+  border-color: #1e3a5f;
+  background: #f3f6fb;
+}
+
+.hyz-ext-status {
+  margin-top: 8px;
+  font-size: 12px;
+  min-height: 16px;
+  word-break: break-word;
+}
+
+.hyz-ext-success {
+  color: #15803d;
+}
+
+.hyz-ext-error {
+  color: #b91c1c;
+}
+
+.hyz-ext-inline-btn {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 5px;
+  border: 1px solid #1e3a5f;
+  background: #fff;
+  color: #1e3a5f;
+  cursor: pointer;
+}
+
+.hyz-ext-inline-btn:hover {
+  background: #1e3a5f;
+  color: #fff;
+}
+
+.hyz-ext-inline-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

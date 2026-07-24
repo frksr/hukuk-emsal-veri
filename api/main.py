@@ -228,7 +228,7 @@ from api.routers import (
     ihtarname, trend, karsi_argument, kvkk, sozlesme,
     denetim, me, auth_actions, billing, uyap, admin, feedback,
     export, karar, v1, notlar, hatirlatici, waitlist, icerik,
-    kullanim, sablonlar, alarmlar, publisher,
+    kullanim, sablonlar, alarmlar, publisher, extension,
 )
 
 app.include_router(arama.router, prefix="/api/arama", tags=["arama"])
@@ -239,6 +239,7 @@ app.include_router(me.router, prefix="/api/me", tags=["account"])
 app.include_router(auth_actions.router, prefix="/api/auth", tags=["auth"])
 app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
 app.include_router(uyap.router, prefix="/api/uyap", tags=["uyap"])
+app.include_router(extension.router, prefix="/api/extension", tags=["extension"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(faiz.router, prefix="/api/faiz", tags=["hesaplayici"])
