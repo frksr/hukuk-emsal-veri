@@ -86,6 +86,25 @@ def kota(event_type: str, min_tier: str | None = None):
                 },
             )
 
+        # 0b) Kısıtlama kapısı — admin panelden "kısıtla" ile işaretlenmiş hesap
+        # giriş yapabilir, geçmiş verilerini görebilir ama kredi tüketen
+        # modülleri (AI üretim, emsal arama) kullanamaz. Askıya alma
+        # (is_active=FALSE) çok daha sert — o durumda get_current_user zaten
+        # 401 döner ve buraya hiç gelinmez.
+        if not is_admin and user_id and (event_type in AI_MODULES or event_type == "arama") \
+                and getattr(user, "restricted", False):
+            raise HTTPException(
+                403,
+                {
+                    "error": "hesap_kisitli",
+                    "module": event_type,
+                    "message": (
+                        "Hesabınız kısıtlanmıştır, bu özelliği kullanamazsınız. "
+                        "Destek ile iletişime geçin: info@hukukcuyapayzekasi.com"
+                    ),
+                },
+            )
+
         # Kota penceresi: ücretli kullanıcı için abonelik gününe, free için kayıt
         # gününe demirlenmiş AYLIK pencere (takvim ayı değil). reset_at için bitiş.
         donem_bas, donem_bit, _ = await kullanici_donem_penceresi(user_id, tenant_id)

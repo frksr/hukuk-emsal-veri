@@ -615,16 +615,28 @@ async def analytics(admin: CurrentUser = Depends(require_admin)):
 async def list_users(
     admin: CurrentUser = Depends(require_admin),
     search: str | None = None,
+    status: str | None = None,  # None/"all" | "pending" | "suspended" | "restricted" | "active"
     limit: int = 100,
     offset: int = 0,
 ):
-    # NOT: is_active hem users hem tenants'ta var → tablo adıyla nitelendir
-    # (aksi halde "ambiguous column" hatası → endpoint 500 → liste boş görünür).
-    where = "WHERE u.is_active = TRUE"
+    # NOT: önceden burada sabit "WHERE u.is_active = TRUE" vardı — bu, askıya
+    # alınmış kullanıcıların listeden TAMAMEN kaybolmasına yol açıyordu, yani
+    # admin onları bir daha hiç göremiyor / geri açamıyordu. Artık varsayılan
+    # (status verilmezse) TÜM kullanıcılar listelenir; durum filtresi opsiyonel.
+    where_parts = ["1=1"]
     args: list = []
     if search:
         args.append(f"%{search}%")
-        where += f" AND (u.email ILIKE ${len(args)} OR u.name ILIKE ${len(args)})"
+        where_parts.append(f"(u.email ILIKE ${len(args)} OR u.name ILIKE ${len(args)})")
+    if status == "pending":
+        where_parts.append("u.email_verified IS NULL")
+    elif status == "suspended":
+        where_parts.append("u.is_active = FALSE")
+    elif status == "restricted":
+        where_parts.append("u.restricted_at IS NOT NULL")
+    elif status == "active":
+        where_parts.append("u.is_active = TRUE AND u.email_verified IS NOT NULL AND u.restricted_at IS NULL")
+    where = "WHERE " + " AND ".join(where_parts)
     args.extend([limit, offset])
 
     async with service_session() as conn:
@@ -645,7 +657,7 @@ async def list_users(
                     ORDER BY tm.user_id, (tm.role = 'owner') DESC, tm.created_at ASC
                 )
                 SELECT u.id, u.email, u.name, u.role, u.email_verified, u.created_at,
-                       u.last_login_at,
+                       u.last_login_at, u.is_active, u.restricted_at, u.restricted_reason,
                        t.id tid, t.name tname, t.plan_tier, t.beta_program
                 FROM users u
                 LEFT JOIN primary_tenant pt ON pt.user_id = u.id
@@ -664,6 +676,9 @@ async def list_users(
                 "name": r["name"],
                 "role": r["role"],
                 "email_verified": bool(r["email_verified"]),
+                "is_active": bool(r["is_active"]),
+                "restricted": bool(r["restricted_at"]),
+                "restricted_reason": r["restricted_reason"],
                 "created_at": r["created_at"].isoformat(),
                 "last_login_at": r["last_login_at"].isoformat() if r["last_login_at"] else None,
                 "tenant": {
@@ -676,6 +691,98 @@ async def list_users(
             for r in rows
         ],
     })
+
+
+class UserRestrictReq(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/users/{user_id}/verify", response_model=APIResponse)
+async def admin_verify_user(user_id: str, admin: CurrentUser = Depends(require_admin)):
+    """Onay aşamasında takılı kalmış kullanıcıyı admin manuel olarak doğrular
+    (ör. mail hiç ulaşmadıysa / kullanıcı destek talebi açtıysa)."""
+    async with service_session() as conn:
+        row = await conn.fetchrow("SELECT id, email_verified FROM users WHERE id = $1::uuid", user_id)
+        if not row:
+            raise HTTPException(404, "Kullanıcı bulunamadı.")
+        if row["email_verified"]:
+            return APIResponse(ok=True, message="Kullanıcı zaten doğrulanmış.")
+        async with conn.transaction():
+            await conn.execute("UPDATE users SET email_verified = NOW() WHERE id = $1::uuid", user_id)
+            await conn.execute(
+                "UPDATE email_verifications SET consumed_at = NOW() "
+                "WHERE user_id = $1::uuid AND consumed_at IS NULL",
+                user_id,
+            )
+    await audit(action="admin.user_verified", user_id=admin.user_id, resource=f"user:{user_id}",
+                metadata={"target_user_id": user_id})
+    return APIResponse(ok=True, message="Kullanıcı doğrulandı.")
+
+
+@router.post("/users/{user_id}/suspend", response_model=APIResponse)
+async def admin_suspend_user(user_id: str, payload: UserRestrictReq, admin: CurrentUser = Depends(require_admin)):
+    """Hesabı askıya alır — giriş tamamen engellenir (is_active = FALSE).
+
+    get_current_user her istekte is_active kontrol ettiğinden, mevcut oturumu
+    olan bir kullanıcı bir sonraki API çağrısında anında 401 alır."""
+    async with service_session() as conn:
+        row = await conn.fetchrow("SELECT id, role FROM users WHERE id = $1::uuid", user_id)
+        if not row:
+            raise HTTPException(404, "Kullanıcı bulunamadı.")
+        if row["role"] == "admin":
+            raise HTTPException(400, "Admin hesabı askıya alınamaz.")
+        await conn.execute("UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1::uuid", user_id)
+    await audit(action="admin.user_suspended", user_id=admin.user_id, resource=f"user:{user_id}",
+                metadata={"target_user_id": user_id, "reason": payload.reason})
+    return APIResponse(ok=True, message="Hesap askıya alındı.")
+
+
+@router.post("/users/{user_id}/reactivate", response_model=APIResponse)
+async def admin_reactivate_user(user_id: str, admin: CurrentUser = Depends(require_admin)):
+    """Askıya alınmış bir hesabı tekrar aktif eder (is_active = TRUE)."""
+    async with service_session() as conn:
+        row = await conn.fetchrow("SELECT id FROM users WHERE id = $1::uuid", user_id)
+        if not row:
+            raise HTTPException(404, "Kullanıcı bulunamadı.")
+        await conn.execute("UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE id = $1::uuid", user_id)
+    await audit(action="admin.user_reactivated", user_id=admin.user_id, resource=f"user:{user_id}",
+                metadata={"target_user_id": user_id})
+    return APIResponse(ok=True, message="Hesap tekrar aktif edildi.")
+
+
+@router.post("/users/{user_id}/restrict", response_model=APIResponse)
+async def admin_restrict_user(user_id: str, payload: UserRestrictReq, admin: CurrentUser = Depends(require_admin)):
+    """Hesabı kısıtlar — giriş yapabilir ama AI üretimi / emsal arama gibi
+    kredi tüketen modülleri kullanamaz (bkz. api/kota.py)."""
+    async with service_session() as conn:
+        row = await conn.fetchrow("SELECT id, role FROM users WHERE id = $1::uuid", user_id)
+        if not row:
+            raise HTTPException(404, "Kullanıcı bulunamadı.")
+        if row["role"] == "admin":
+            raise HTTPException(400, "Admin hesabı kısıtlanamaz.")
+        await conn.execute(
+            "UPDATE users SET restricted_at = NOW(), restricted_reason = $2, updated_at = NOW() WHERE id = $1::uuid",
+            user_id, payload.reason,
+        )
+    await audit(action="admin.user_restricted", user_id=admin.user_id, resource=f"user:{user_id}",
+                metadata={"target_user_id": user_id, "reason": payload.reason})
+    return APIResponse(ok=True, message="Hesap kısıtlandı.")
+
+
+@router.post("/users/{user_id}/unrestrict", response_model=APIResponse)
+async def admin_unrestrict_user(user_id: str, admin: CurrentUser = Depends(require_admin)):
+    """Kısıtlamayı kaldırır."""
+    async with service_session() as conn:
+        row = await conn.fetchrow("SELECT id FROM users WHERE id = $1::uuid", user_id)
+        if not row:
+            raise HTTPException(404, "Kullanıcı bulunamadı.")
+        await conn.execute(
+            "UPDATE users SET restricted_at = NULL, restricted_reason = NULL, updated_at = NOW() WHERE id = $1::uuid",
+            user_id,
+        )
+    await audit(action="admin.user_unrestricted", user_id=admin.user_id, resource=f"user:{user_id}",
+                metadata={"target_user_id": user_id})
+    return APIResponse(ok=True, message="Kısıtlama kaldırıldı.")
 
 
 class TenantUpgradeReq(BaseModel):

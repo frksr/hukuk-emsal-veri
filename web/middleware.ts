@@ -36,13 +36,19 @@ export function middleware(request: NextRequest) {
     request.cookies.get(ad)
   );
   const tarayiciYenidenAcildi = !oturumPenceresiVar && !!eskiOturumCerezi;
-  const korumaliAlan = request.nextUrl.pathname.startsWith("/panel");
+  // /giris/dogrulama da /panel gibi oturum gerektirir (send-code / verify-code
+  // giriş yapılmış kullanıcıyı ister) — bu sayfa korumalı sayılmazsa aşağıdaki
+  // dal yalnızca çerezi sessizce silip kullanıcıyı kırık/sonsuz-döngü bir
+  // doğrulama ekranında bırakıyordu (kod gönderilemiyor, hata da görünmüyordu).
+  const korumaliAlan =
+    request.nextUrl.pathname.startsWith("/panel") ||
+    request.nextUrl.pathname.startsWith("/giris/dogrulama");
 
   if (tarayiciYenidenAcildi && korumaliAlan) {
     // Korumalı bir sayfaya kalıcı-ama-artık-geçersiz sayılan çerezle
     // gelinmiş → girişe yönlendir ve eski çerez(ler)i temizle.
     const girisUrl = new URL("/giris", request.url);
-    girisUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    girisUrl.searchParams.set("callbackUrl", request.nextUrl.pathname + request.nextUrl.search);
     const yonlendirme = NextResponse.redirect(girisUrl);
     for (const ad of NEXTAUTH_COOKIE_ADAYLARI) {
       yonlendirme.cookies.set(ad, "", { path: "/", maxAge: 0 });

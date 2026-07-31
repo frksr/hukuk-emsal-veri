@@ -156,33 +156,44 @@ async def _kod_olustur_gonder(conn, user_id: str, email: str, name) -> None:
     code = _gen_code()
     link_token = _token()
     expires = now + timedelta(minutes=CODE_EXPIRE_MINUTES)
-    # Önceki bekleyen (kullanılmamış) kodları geçersiz kıl.
-    await conn.execute(
-        "UPDATE email_verifications SET consumed_at = NOW() "
-        "WHERE user_id = $1 AND consumed_at IS NULL",
-        user_id,
-    )
-    await conn.execute(
-        """INSERT INTO email_verifications
-           (user_id, email, code_hash, link_token, expires_at)
-           VALUES ($1, $2, $3, $4, $5)""",
-        user_id, email, _hash_code(code), link_token, expires,
-    )
-    gonderildi = await send_verification_email(
-        email, name, code, token=link_token, expires_minutes=CODE_EXPIRE_MINUTES,
-    )
-    if not gonderildi:
-        # send_verification_email SMTP hatasında sessizce False dönüyordu; bu durumda
-        # kod DB'ye yazılmış olsa bile kullanıcıya "gönderildi" denip yanıltılmamalı —
-        # aksi halde API 200 döner ama mail hiç gitmemiş olur (görünürlüğü olmayan hata).
-        log.error(
-            "Doğrulama e-postası gönderilemedi: user_id=%s email=%s", user_id, email
+
+    # ÖNEMLİ: Satırın DB'ye yazılması (ve önceki kodların geçersiz kılınması),
+    # e-postanın GERÇEKTEN gönderilmiş olmasına bağlı olmalı — aksi halde SMTP
+    # hatası durumunda cooldown/günlük tavan sayaçları boşuna tüketilir ve
+    # "Tekrar Gönder" sürekli 429 döner ama hiçbir mail gitmemiş olur. Bu yüzden
+    # insert + gönderim tek transaction'da: gönderim başarısız olursa transaction
+    # rollback olur, satır DB'ye hiç yazılmamış gibi davranır ve kullanıcı hemen
+    # tekrar deneyebilir.
+    async with conn.transaction():
+        # Önceki bekleyen (kullanılmamış) kodları geçersiz kıl.
+        await conn.execute(
+            "UPDATE email_verifications SET consumed_at = NOW() "
+            "WHERE user_id = $1 AND consumed_at IS NULL",
+            user_id,
         )
-        raise HTTPException(
-            502,
-            "Doğrulama e-postası gönderilemedi. Lütfen birkaç dakika sonra tekrar deneyin "
-            "veya destek ile iletişime geçin.",
+        await conn.execute(
+            """INSERT INTO email_verifications
+               (user_id, email, code_hash, link_token, expires_at)
+               VALUES ($1, $2, $3, $4, $5)""",
+            user_id, email, _hash_code(code), link_token, expires,
         )
+        gonderildi = await send_verification_email(
+            email, name, code, token=link_token, expires_minutes=CODE_EXPIRE_MINUTES,
+        )
+        if not gonderildi:
+            # send_verification_email SMTP hatasında sessizce False dönüyordu; bu durumda
+            # kod DB'ye yazılmış olsa bile kullanıcıya "gönderildi" denip yanıltılmamalı —
+            # aksi halde API 200 döner ama mail hiç gitmemiş olur (görünürlüğü olmayan hata).
+            log.error(
+                "Doğrulama e-postası gönderilemedi: user_id=%s email=%s", user_id, email
+            )
+            # Transaction'ı geri al (satır + önceki kod iptali) — bu deneme hiç
+            # olmamış gibi sayılsın ki kullanıcı hemen tekrar deneyebilsin.
+            raise HTTPException(
+                502,
+                "Doğrulama e-postası gönderilemedi. Lütfen birkaç dakika sonra tekrar deneyin "
+                "veya destek ile iletişime geçin.",
+            )
 
 
 @router.post("/send-code", response_model=APIResponse)

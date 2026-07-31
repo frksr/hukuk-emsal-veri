@@ -44,8 +44,19 @@ function CodeVerifier({ next }: { next?: string }) {
       } else if (r.status === 429) {
         setInfo(j.message || "Çok sık talep edildi, lütfen biraz bekleyin.");
         setCooldown(60);
-      } else if (!initial) {
-        setInfo(j.message || "Kod gönderilemedi.");
+      } else if (r.status === 401) {
+        // Oturum artık geçerli değil (ör. tarayıcı kapatılıp açıldı) — sessizce
+        // takılıp kalmak yerine kullanıcıyı girişe geri gönder, tekrar giriş
+        // yaptıktan sonra doğrulama akışı normal şekilde devam eder.
+        setInfo("Oturumunuzun süresi doldu. Giriş sayfasına yönlendiriliyorsunuz…");
+        setTimeout(() => {
+          router.push(
+            "/giris?callbackUrl=" + encodeURIComponent("/giris/dogrulama" + (hedef !== "/panel" ? `?next=${encodeURIComponent(hedef)}` : "")),
+          );
+        }, 1500);
+      } else {
+        setInfo(j.message || j?.detail?.message || j?.detail || "Kod gönderilemedi. Lütfen tekrar deneyin.");
+        if (!initial) toast("Kod gönderilemedi.", "error");
       }
     } catch {
       setInfo("Bağlantı hatası. Tekrar deneyin.");

@@ -60,6 +60,8 @@ MIGRATIONS = [
     "25_sablonlar_alarmlar.sql",  # dilekce_sablonlari tablosu (Şablonlar sekmesi)
     "26_embedding_usage_log.sql",  # Embedding API kullanım/maliyet logu (admin panel)
     "27_publisher.sql",            # Publisher API v1 — blog otomasyonu (blog_articles genişletme)
+    "28_extension_tokens.sql",     # UYAP eklentisi kişisel erişim anahtarları (daha önce listede eksikti)
+    "29_account_restriction.sql",  # Admin: hesap kısıtlama (restricted_at) + onay-bekleyen index
 ]
 
 # Lokal dev rol parolaları — production'da ASLA uygulanmaz.

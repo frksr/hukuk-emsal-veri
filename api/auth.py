@@ -38,6 +38,7 @@ class CurrentUser:
         tenant_plan: Optional[str] = None,
         tenant_role: Optional[str] = None,
         email_verified: bool = False,
+        restricted: bool = False,
     ):
         self.user_id = user_id
         self.email = email
@@ -47,6 +48,10 @@ class CurrentUser:
         self.tenant_plan = tenant_plan
         self.tenant_role = tenant_role
         self.email_verified = email_verified
+        # Admin panelden "kısıtla" ile işaretlenmiş hesap — askıya alma (is_active)
+        # kadar sert değil: giriş yapabilir, verilerini görebilir ama kredi
+        # tüketen modülleri (AI üretim, emsal arama) kullanamaz (bkz. api/kota.py).
+        self.restricted = restricted
 
 
 def _decode_jwt(token: str) -> dict:
@@ -72,7 +77,7 @@ async def _resolve_extension_token(token: str) -> Optional[CurrentUser]:
     async with service_session() as conn:
         row = await conn.fetchrow(
             """SELECT et.id AS token_id, u.id AS user_id, u.email, u.name, u.role,
-                      u.is_active, u.email_verified,
+                      u.is_active, u.email_verified, u.restricted_at,
                       t.id AS tenant_id, t.plan_tier, t.is_active AS tenant_active,
                       tm.role AS tenant_role
                FROM extension_tokens et
@@ -97,6 +102,7 @@ async def _resolve_extension_token(token: str) -> Optional[CurrentUser]:
         tenant_plan=row["plan_tier"],
         tenant_role=row["tenant_role"] or "member",
         email_verified=bool(row["email_verified"]),
+        restricted=bool(row["restricted_at"]),
     )
 
 
@@ -127,7 +133,8 @@ async def get_current_user(
     # çözmek gerekir (kim olduğunu burada belirliyoruz) → service_session.
     async with service_session() as conn:
         user_row = await conn.fetchrow(
-            "SELECT id, email, name, role, is_active, email_verified FROM users WHERE id = $1",
+            "SELECT id, email, name, role, is_active, email_verified, restricted_at "
+            "FROM users WHERE id = $1",
             user_id,
         )
         if not user_row or not user_row["is_active"]:
@@ -182,6 +189,7 @@ async def get_current_user(
         tenant_plan=tenant_plan,
         tenant_role=tenant_role,
         email_verified=bool(user_row["email_verified"]),
+        restricted=bool(user_row["restricted_at"]),
     )
 
 
