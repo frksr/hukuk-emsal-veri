@@ -131,13 +131,13 @@ export default function KullanimPage() {
           edebilirsiniz; iptal, yalnızca bir sonraki yenileme dönemindeki
           tahsilatı durdurur. <strong>Cari (ödemesi yapılmış) dönem için
           kullanım hakkınız dönem sonuna kadar devam eder</strong>, dönem
-          sonunda erişiminiz otomatik olarak ücretsiz plan koşullarına döner
-          veya kısıtlanır.
+          sonunda abonelik otomatik olarak yenilenmez ve hesabınız ücretsiz
+          plan koşullarına döner veya kısıtlanır.
         </li>
         <li>
-          Kullanılmış veya kısmen kullanılmış dönemler/kredi paketleri için
-          ücret iadesi yapılmaz; istisnalar için Cayma ve İade Politikası
-          sayfasındaki 14 günlük yasal cayma hakkı bölümüne bakınız.
+          Satın alınan dönemler ve ek paket kredileri için, kullanım
+          durumu ne olursa olsun ücret iadesi yapılmaz; ayrıntılar için Cayma
+          ve İade Politikası sayfasına bakınız.
         </li>
         <li>
           Yenileme tahsilatının başarısız olması halinde ücretli özellikleriniz

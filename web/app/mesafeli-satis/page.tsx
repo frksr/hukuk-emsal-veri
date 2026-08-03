@@ -120,39 +120,37 @@ export default function MesafeliSatisPage() {
       </p>
       <p>
         <strong>İstisna:</strong> Mesafeli Sözleşmeler Yönetmeliği&apos;nin 15
-        inci maddesi uyarınca, cayma hakkı süresi sona ermeden önce,
-        tüketicinin onayı ile ifasına başlanan hizmetlere ilişkin sözleşmelerde
-        ve elektronik ortamda anında ifa edilen gayrimaddi mallara ilişkin
-        sözleşmelerde cayma hakkı kullanılamaz. Alıcı, ödeme adımında hizmetin
-        ifasına derhal başlanmasını onayladığını ve ifaya başlanmasıyla birlikte
-        cayma hakkını bu kapsamda kaybedebileceğini bildiğini kabul eder.
-        Hesaba tanımlanan abonelik hakları veya ek paket kredileri{" "}
-        <strong>henüz hiç kullanılmamışsa</strong>, Satıcı 14 günlük süre içinde
-        yapılan cayma taleplerini kabul eder.
+        inci maddesi uyarınca, tüketicinin onayı ile ifasına başlanan
+        hizmetlere ilişkin sözleşmelerde ve elektronik ortamda anında ifa
+        edilen gayrimaddi mallara ilişkin sözleşmelerde cayma hakkı
+        kullanılamaz. Sözleşme konusu hizmet dijitaldir ve ödeme onayıyla
+        birlikte Alıcı&apos;nın hesabına anında tanımlanır; Alıcı, ödeme
+        adımında hizmetin ifasına derhal başlanmasını onayladığını ve bu
+        onayla birlikte cayma hakkını kaybettiğini kabul eder. Bu nedenle
+        satın alma sonrasında cayma hakkı kullanılamaz ve iade yapılmaz.
       </p>
 
-      <h2>7. Cayma Hakkının Kullanılması ve İade Süreci</h2>
+      <h2>7. İptal</h2>
       <ul>
         <li>
-          Cayma bildirimi, süresi içinde{" "}
+          Alıcı, aboneliğini panel üzerinden dilediği an iptal edebilir.
+          İptal, bir sonraki dönemin tahsilatını durdurur; ödemesi yapılmış
+          cari dönem sonuna kadar kullanım hakkı devam eder ve dönem sonunda
+          abonelik <strong>otomatik olarak yenilenmez</strong>.
+        </li>
+        <li>
+          Zaten tahsil edilmiş tutarlar için, kullanım durumu ne olursa olsun
+          iade yapılmaz.
+        </li>
+        <li>
+          Ek paket kredileri de aynı kurala tabidir: krediler hesapta
+          kullanılana kadar geçerliliğini korur, ancak satın alma sonrası
+          iade yapılmaz.
+        </li>
+        <li>
+          İptal ve diğer talepler{" "}
           <Link href="/panel/oneri">Bize Yazın</Link>{" "}
-          sayfasından açık bir beyanla (sipariş bilgileri ile birlikte)
-          gönderilerek yapılır.
-        </li>
-        <li>
-          Cayma hakkının usulüne uygun kullanılması halinde, tahsil edilen
-          bedel, cayma bildiriminin Satıcı&apos;ya ulaştığı tarihten itibaren{" "}
-          <strong>14 gün içinde</strong>, ödemenin yapıldığı yönteme uygun
-          olarak iyzico üzerinden Alıcı&apos;nın kartına iade edilir.
-        </li>
-        <li>
-          Ek paket kredilerinin bir kısmı kullanılmışsa, kısmi iade kuralları ve
-          ayrıntılar için <a href="/iade-politikasi">Cayma ve İade Politikası</a>{" "}
-          sayfasına bakınız.
-        </li>
-        <li>
-          İade tutarının karta yansıma süresi, ilgili banka ve kart kuruluşunun
-          işlem sürelerine bağlı olarak değişebilir.
+          sayfasından iletilebilir.
         </li>
       </ul>
 
