@@ -589,8 +589,17 @@ def analiz_et(
     if sozlesme_turu not in SOZLESME_TURLERI:
         sozlesme_turu = "genel"
 
+    # PII koruması — sözleşme metni taraf isimleri, adresler, TCKN vb.
+    # içerebilir. Madde ayırma/analiz TÜMÜYLE maskeli metin üzerinden yapılır
+    # (madde başlığı regex'i "MADDE N" gibi yapısal kalıplara bakar, PII
+    # maskelemesinden etkilenmez); sonuçtaki TÜM string alanlar en sonda
+    # `unredact_json` ile tek seferde geri yüklenir.
+    from services.pii_redaction import redact, unredact_json
+
+    redacted_metni, redaction_map = redact(sozlesme_metni)
+
     # 1) Maddeleri ayır
-    maddeler = madde_ayir(sozlesme_metni)
+    maddeler = madde_ayir(redacted_metni)
 
     # 2) Madde analizini chunked LLM çağrılarıyla yap
     madde_analizleri: list[dict] = []
@@ -602,12 +611,12 @@ def analiz_et(
             madde_analizleri.extend(_madde_grubu_analiz(grup, sozlesme_turu))
 
     # 3) Genel analiz
-    genel = _genel_analiz(sozlesme_metni, sozlesme_turu)
+    genel = _genel_analiz(redacted_metni, sozlesme_turu)
 
     # 4) Toplam risk skoru
     risk_skoru = _toplam_risk_skoru(madde_analizleri)
 
-    return {
+    sonuc = {
         "genel_ozet": genel["genel_ozet"],
         "taraflar": genel["taraflar"],
         "ana_konu": genel["ana_konu"],
@@ -622,6 +631,7 @@ def analiz_et(
         "karakter_sayisi": len(sozlesme_metni),
         "yasal_uyari": YASAL_UYARI,
     }
+    return unredact_json(sonuc, redaction_map)
 
 
 # ---------------------------------------------------------------------------

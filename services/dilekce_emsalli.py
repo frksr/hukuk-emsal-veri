@@ -385,9 +385,10 @@ def generate_dilekce(
     if dilekce_turu not in DILEKCE_TURU_LABEL:
         dilekce_turu = "genel"
 
-    # 1) RAG araması.
+    # 1) RAG araması — dış embedding API'sine PII gitmesin diye anonimleştirilir.
     try:
-        emsaller = search(durum, k=k)
+        from services.pii_redaction import redact_for_embedding
+        emsaller = search(redact_for_embedding(durum), k=k)
     except Exception as e:
         emsaller = []
         log.warning(f"Dilekçe için RAG araması başarısız: {e}")
@@ -428,15 +429,29 @@ def generate_dilekce(
         )
     emsal_blogu = _emsal_blogu_hazirla(emsaller)
 
+    # PII koruması — somut olay anlatımı (durum) serbest metin olduğundan
+    # isim/adres/TCKN içerebilir; taraf isimleri ise form alanı olduğundan
+    # bağlam aranmadan doğrudan PERSON etiketiyle maskelenir (bkz.
+    # services/pii_redaction.redact_fields). Tek haritada birleştirilip LLM
+    # yanıtı unredact_safe ile geri yüklenir — aynı desen api/routers/uyap.py'de.
+    from services.pii_redaction import redact, redact_fields, unredact_safe
+
+    redacted_durum, redaction_map = redact(durum)
+    redacted_taraflar, redaction_map = redact_fields(
+        {"alacakli": alacakli, "borclu": borclu},
+        labels={"alacakli": "PERSON", "borclu": "PERSON"},
+        mapping=redaction_map,
+    )
+
     user_prompt = f"""DİLEKÇE TÜRÜ: {baslik}{f" ({dilekce_turu})" if not ozel_konu else ""}
 
 TARAFLAR:
-  - Davacı / Alacaklı: {alacakli}
-  - Davalı / Borçlu : {borclu}
+  - Davacı / Alacaklı: {redacted_taraflar["alacakli"]}
+  - Davalı / Borçlu : {redacted_taraflar["borclu"]}
 
 SOMUT OLAY (kullanıcının anlatımı):
 \"\"\"
-{durum}
+{redacted_durum}
 \"\"\"
 
 İLGİLİ EMSAL KARARLAR (RAG ile çekildi — atıflarda METADATA'yı kullan):
@@ -453,12 +468,15 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
 
     # 4) LLM çağrısı.
     try:
-        metin = generate(
+        ham_metin = generate(
             system=SISTEM_PROMPT,
             user=user_prompt,
             max_tokens=2500,
             temperature=0.3,
         )
+        # 5) PII placeholder'ları geri koy — mahkemeye sunulacak dilekçede
+        #    gerçek taraf isimleri/olay detayları olması gerekir.
+        metin = unredact_safe(ham_metin, redaction_map)
         uyari = ""
     except Exception as e:
         # LLM çağrısı patladı — stub'a dön. Gerçek sebep (ki bazen API key/
@@ -501,9 +519,10 @@ def generate_dilekce_stream(
     if dilekce_turu not in DILEKCE_TURU_LABEL:
         dilekce_turu = "genel"
 
-    # 1) RAG araması
+    # 1) RAG araması — dış embedding API'sine PII gitmesin diye anonimleştirilir.
     try:
-        emsaller = search(durum, k=k)
+        from services.pii_redaction import redact_for_embedding
+        emsaller = search(redact_for_embedding(durum), k=k)
     except Exception as e:
         emsaller = []
         log.warning(f"Dilekçe (stream) için RAG araması başarısız: {e}")
@@ -539,15 +558,25 @@ def generate_dilekce_stream(
         )
     emsal_blogu = _emsal_blogu_hazirla(emsaller)
 
+    # PII koruması (bkz. generate_dilekce'deki aynı desen).
+    from services.pii_redaction import redact, redact_fields, StreamRedactionBuffer
+
+    redacted_durum, redaction_map = redact(durum)
+    redacted_taraflar, redaction_map = redact_fields(
+        {"alacakli": alacakli, "borclu": borclu},
+        labels={"alacakli": "PERSON", "borclu": "PERSON"},
+        mapping=redaction_map,
+    )
+
     user_prompt = f"""DİLEKÇE TÜRÜ: {baslik}{f" ({dilekce_turu})" if not ozel_konu else ""}
 
 TARAFLAR:
-  - Davacı / Alacaklı: {alacakli}
-  - Davalı / Borçlu : {borclu}
+  - Davacı / Alacaklı: {redacted_taraflar["alacakli"]}
+  - Davalı / Borçlu : {redacted_taraflar["borclu"]}
 
 SOMUT OLAY (kullanıcının anlatımı):
 \"\"\"
-{durum}
+{redacted_durum}
 \"\"\"
 
 İLGİLİ EMSAL KARARLAR (RAG ile çekildi — atıflarda METADATA'yı kullan):
@@ -566,12 +595,20 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
     yield {"type": "meta", "kullanilan_emsaller": kullanilan,
            "uyari": "", "demo": False}
 
+    # Streaming'de placeholder'lar parça sınırında bölünebileceği için
+    # StreamRedactionBuffer kullanılır (bkz. services/pii_redaction.py).
+    unredact_buf = StreamRedactionBuffer(redaction_map)
     try:
         for piece in generate_stream(
             system=SISTEM_PROMPT, user=user_prompt,
             max_tokens=2500, temperature=0.3,
         ):
-            yield {"type": "delta", "text": piece}
+            safe_piece = unredact_buf.feed(piece)
+            if safe_piece:
+                yield {"type": "delta", "text": safe_piece}
+        son = unredact_buf.flush()
+        if son:
+            yield {"type": "delta", "text": son}
     except Exception as e:
         log.error(f"Dilekçe (stream) LLM akışı kesildi: {e}")
         yield {"type": "error",

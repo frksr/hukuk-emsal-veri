@@ -288,7 +288,30 @@ def ihtarname_olustur(
             tur, profil, "LLM provider yüklenemedi. llm/provider.py kontrol edin."
         )
 
-    user_prompt = _build_user_prompt(tur, profil, taraflar, alacak_detay, ek_talepler)
+    # PII koruması — taraf ad/adres bilgileri form alanı olduğundan (rol
+    # kelimesi/bağlam yok) doğrudan etiketle maskelenir; alacak gerekçesi/dayanak
+    # belge gibi serbest metin alanları bağlamsal `redact()` katmanından geçer.
+    # LLM'den dönen ihtarname metni gerçek isim/adresle sunulmalı (noterde
+    # kullanılacak resmi belge) — bu yüzden yanıt unredact_safe ile geri açılır.
+    from services.pii_redaction import redact, redact_fields, unredact_safe
+
+    redacted_taraflar, redaction_map = redact_fields(
+        taraflar,
+        labels={
+            "alacakli_ad": "PERSON", "borclu_ad": "PERSON",
+            "alacakli_adres": "ADDRESS", "borclu_adres": "ADDRESS",
+            "alacakli_vekil": "PERSON",
+        },
+    )
+    redacted_detay = dict(alacak_detay)
+    for serbest_alan in ("neden", "dayanak_belge"):
+        deger = alacak_detay.get(serbest_alan)
+        if isinstance(deger, str) and deger.strip():
+            masked, field_map = redact(deger)
+            redaction_map.merge(field_map)
+            redacted_detay[serbest_alan] = masked
+
+    user_prompt = _build_user_prompt(tur, profil, redacted_taraflar, redacted_detay, ek_talepler)
 
     try:
         metin = generate(
@@ -313,6 +336,7 @@ def ihtarname_olustur(
     if isinstance(metin, dict):
         metin = metin.get("text") or metin.get("content") or metin.get("output") or ""
     metin = str(metin).strip()
+    metin = unredact_safe(metin, redaction_map)
 
     if not metin:
         return _bos_sonuc(tur, profil, "LLM boş yanıt döndü.")

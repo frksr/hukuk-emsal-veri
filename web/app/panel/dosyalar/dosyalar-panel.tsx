@@ -280,7 +280,7 @@ export function DosyalarPanel() {
             />
           </div>
           <div className="text-sm text-muted-foreground">
-            <strong>{total}</strong> dosya · <strong>{docs.reduce((a, d) => a + d.chunk_count, 0)}</strong> chunk
+            <strong>{total}</strong> dosya
           </div>
           <input
             ref={fileRef}
@@ -372,7 +372,8 @@ export function DosyalarPanel() {
           Dosyalarınız <strong>AES-256 ile şifreli</strong> olarak, KVKK m.9 kapsamında AB (Avrupa Birliği)
           sunucularında saklanır. Her dosya size özel anahtarla şifrelidir, başka kullanıcılar veya biz okuyamayız.
           Yapay Zeka sorgusunda kişisel veriler — <strong>TC kimlik no, IBAN, telefon, taraf/vekil isimleri,
-          hakim ve heyet üyesi isimleri, belge no ve sicil no</strong> dahil — otomatik olarak maskelenerek işlenir.
+          hakim ve heyet üyesi isimleri, belge no ve sicil no</strong> dahil — otomatik olarak maskelenir; bu
+          bilgilerin gerçek hali yapay zekaya <strong>hiçbir zaman gönderilmez</strong>.
         </div>
       </div>
 
@@ -422,7 +423,7 @@ export function DosyalarPanel() {
                       <span>{formatSize(doc.file_size)}</span>
                       {doc.chunk_count > 0 && (
                         <span className="text-primary">
-                          <Sparkles className="h-3 w-3 inline" /> {doc.chunk_count} chunk
+                          <Sparkles className="h-3 w-3 inline" /> AI aramaya hazır
                         </span>
                       )}
                     </div>

@@ -138,6 +138,13 @@ def _llm_denetim(metin: str, tur: BelgeTuru, emsaller: list[dict]) -> dict:
     if not is_available():
         return _stub_denetim(metin, tur, emsaller)
 
+    from services.pii_redaction import redact, unredact_json
+
+    # PII koruması — denetlenen belge (dilekçe/ihtarname/sözleşme) taraf
+    # isimleri, adresler, TCKN vb. içerebilir. LLM'e maskeli gider; JSON
+    # yanıttaki TÜM string alanlar (alıntılar dahil) geri yüklenir.
+    redacted_metin, redaction_map = redact(metin[:8000])
+
     emsal_block = ""
     for i, e in enumerate(emsaller[:5], 1):
         m = e.get("meta", {}) or {}
@@ -151,7 +158,7 @@ def _llm_denetim(metin: str, tur: BelgeTuru, emsaller: list[dict]) -> dict:
     user_prompt = f"""DENETLENECEK BELGE TÜRÜ: {tur}
 
 BELGE METNİ:
-{metin[:8000]}
+{redacted_metin}
 
 İLGİLİ EMSAL KARARLAR (RAG ile bulundu):
 {emsal_block or '(emsal yok)'}
@@ -173,7 +180,7 @@ Yukarıdaki belgeyi sistem talimatındaki kriterlere göre denetle ve JSON forma
             m = re.search(r"(\{.*\})", out, re.DOTALL)
             if m:
                 out = m.group(1)
-        return json.loads(out)
+        return unredact_json(json.loads(out), redaction_map)
     except Exception as e:
         # Ham hata metni (bazen API key/kota bilgisi içerebilir) kullanıcıya
         # gösterilmez, yalnızca loglanır.
@@ -217,10 +224,12 @@ def denetle(metin: str, tur: BelgeTuru = "dilekce", k: int = 5) -> dict:
     kanun_uyarilari = _kanun_referans_check(metin)
     yapi_eksikler = _yapi_check(metin, tur)
 
-    # 2) RAG ile emsal bul
+    # 2) RAG ile emsal bul — dış embedding API'sine PII gitmesin diye anonimleştirilir.
     try:
+        from services.pii_redaction import redact_for_embedding
+
         # Belgeden anahtar cümle çıkar — ilk 500 char arama için
-        query = metin[:500]
+        query = redact_for_embedding(metin[:500])
         emsaller = rag_search(query, k=k)
     except Exception:
         emsaller = []

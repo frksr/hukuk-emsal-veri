@@ -30,7 +30,7 @@ import os
 import re
 import uuid
 import logging
-from typing import Pattern, Optional
+from typing import Any, Pattern, Optional
 
 log = logging.getLogger("services.pii_redaction")
 
@@ -95,6 +95,10 @@ _PERSON_ROLE = (
     r"Davac[ıi](?:lar)?|Daval[ıi](?:lar)?|Vekil(?:i|leri)?|Müvekkil(?:i|im)?|"
     r"San[ıi]k|Müşteki|Mağdur|Borçlu|Alacakl[ıi]|Tan[ıi]k|Bilirkişi|"
     r"Hâkim|Hakim|Yargıç|Başkan|Üye|Kâtip|Katip|"
+    # Sözleşme taraf terimleri (services/sozlesme.py analiz akışında metin bu
+    # kalıplarla gelir; "Davacı/Davalı" yerine bu terimler kullanılır).
+    r"Taraflar(?:dan biri)?|Taraf|Kirac[ıi]|Kiraya Veren|İşveren|İşçi|"
+    r"Sat[ıi]c[ıi]|Al[ıi]c[ıi]|Yüklenici|İş Sahibi|Sigortal[ıi]|Sigortac[ıi]|"
     r"Sayın|Sn\.|Av\.|Avukat|Dr\.|Prof\."
 )
 # "Davacı Ahmet Yılmaz", "vekili Av. Mehmet Demir", "Sayın Ayşe Kaya"
@@ -158,6 +162,17 @@ class RedactionMap:
         self.forward[ph] = original
         self.reverse[original] = ph
         return ph
+
+    def merge(self, other: "RedactionMap") -> None:
+        """Başka bir RedactionMap'in eşlemelerini bu haritaya ekler.
+
+        Birden fazla alan (ör. serbest metin + ayrı taraf isimleri) ayrı ayrı
+        `redact()` ile maskelenip TEK bir haritada birleştirilmek istendiğinde
+        kullanılır — `unredact_safe` çağrısı tek bir map üzerinden yapılabilsin.
+        """
+        self.forward.update(other.forward)
+        self.reverse.update(other.reverse)
+        self.names_redacted = self.names_redacted or other.names_redacted
 
 
 def _redact_heuristic(text: str, mapping: RedactionMap) -> str:
@@ -310,6 +325,63 @@ def redact(text: str) -> tuple[str, RedactionMap]:
     return out, mapping
 
 
+def redact_fields(
+    fields: dict[str, Optional[str]],
+    labels: Optional[dict[str, str]] = None,
+    mapping: Optional[RedactionMap] = None,
+) -> tuple[dict[str, Optional[str]], RedactionMap]:
+    """Düz bir dict'in (ör. taraflar={'alacakli_ad': 'Ahmet Yılmaz', ...})
+    her string değerini maskeler, TEK bir RedactionMap'te toplar.
+
+    `labels`: {alan_adı: "PERSON"|"ADDRESS"|...} — bu formlardaki değerler
+    (ör. "Ahmet Yılmaz") tek başına, rol kelimesi (Davacı/Vekili/...) OLMADAN
+    gelir; `redact()`'in bağlamsal isim yakalayıcısı bunları YAKALAYAMAZ. Bu
+    yüzden hangi alanın ne tür kişisel veri OLDUĞU zaten form şemasından
+    bilindiğinde, doğrudan o etiketle maskelenir (regex/bağlam aranmaz).
+    `labels`'ta olmayan alanlar (serbest metin açıklamaları gibi) normal
+    `redact()` bağlamsal katmanından geçirilir.
+
+    LLM'e ayrı ayrı alanlar halinde geçen isim/adres gibi verileri de aynı
+    prompt/response akışında maskelemek için kullanılır (ör. ihtarname/dilekçe
+    taraflar formu). `mapping` verilirse ona eklenir — böylece aynı çağrı
+    içindeki birden fazla `redact()`/`redact_fields()` sonucu tek haritada
+    birleştirilip tek `unredact_safe()` ile geri yüklenebilir.
+    """
+    labels = labels or {}
+    out_map = mapping if mapping is not None else RedactionMap()
+    out: dict[str, Optional[str]] = {}
+    for key, value in (fields or {}).items():
+        if not isinstance(value, str) or not value.strip():
+            out[key] = value
+            continue
+        label = labels.get(key)
+        if label:
+            out_map.names_redacted = True
+            out[key] = out_map.get_or_create(label, value)
+        else:
+            masked, field_map = redact(value)
+            out_map.merge(field_map)
+            out[key] = masked
+    return out, out_map
+
+
+def unredact_json(obj: Any, mapping: RedactionMap) -> Any:
+    """dict/list/str iç içe bir yapıdaki (LLM'in döndürdüğü JSON gibi) TÜM
+    string yapraklarda placeholder'ları dayanıklı şekilde geri yükler.
+
+    Sözleşme analizi / belge denetimi / karşı argüman gibi araçlar LLM'den
+    yapılandırılmış JSON alır; PII placeholder'ları bu yapının herhangi bir
+    string alanında (özet, öneri, ilgili bölüm alıntısı vb.) çıkabilir.
+    """
+    if isinstance(obj, str):
+        return unredact_safe(obj, mapping)
+    if isinstance(obj, dict):
+        return {k: unredact_json(v, mapping) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [unredact_json(v, mapping) for v in obj]
+    return obj
+
+
 def unredact(text: str, mapping: RedactionMap) -> str:
     """LLM yanıtındaki placeholder'ları orijinal değerlerle değiştir."""
     if not mapping.forward:
@@ -360,6 +432,58 @@ def unredact_safe(text: str, mapping: RedactionMap) -> str:
         log.warning("unredact_safe: %d çözülemeyen placeholder '[gizlenmiş bilgi]' ile değiştirildi.", len(kalan))
         result = _PH_TOLERANSLI.sub("[gizlenmiş bilgi]", result)
     return result
+
+
+# Placeholder'ın olası azami uzunluğu ("<BELGE_NO_1a2b3c4d>" gibi en uzun
+# etiketler dahil) + güvenlik payı. Streaming tamponunda kullanılır.
+_PLACEHOLDER_MAX_LEN = 32
+
+
+class StreamRedactionBuffer:
+    """Streaming LLM yanıtlarında (parça parça gelen metin) placeholder'ların
+    iki parça arasında bölünüp yarım kalmasını önleyen tampon.
+
+    `unredact_safe` tam metin bekler; ama streaming'de bir placeholder'ın
+    (ör. "<PERSON_a1b2c3d4>") ilk yarısı bir chunk'ta, ikinci yarısı
+    sonrakinde gelebilir — bu durumda ne olduğu anlaşılamaz ve kullanıcıya
+    ya kırık placeholder ya da hiç geri yüklenmemiş metin sızar.
+
+    Kullanım:
+        buf = StreamRedactionBuffer(mapping)
+        for parca in llm_stream:
+            safe_piece = buf.feed(parca)
+            if safe_piece:
+                yield safe_piece
+        son_parca = buf.flush()
+        if son_parca:
+            yield son_parca
+    """
+
+    def __init__(self, mapping: RedactionMap):
+        self._buf = ""
+        self._mapping = mapping
+
+    def feed(self, chunk: str) -> str:
+        self._buf += chunk
+        idx = self._buf.rfind("<")
+        if idx == -1:
+            # Yarım kalma ihtimali olan "<" yok — hepsini serbest bırak.
+            out, self._buf = self._buf, ""
+        elif ">" in self._buf[idx:]:
+            # "<...>" zaten kapanmış — placeholder tamamsa unredact_safe çözer.
+            out, self._buf = self._buf, ""
+        elif len(self._buf) - idx > _PLACEHOLDER_MAX_LEN:
+            # "<" var ama makul uzunlukta hiç kapanmadı — placeholder değilmiş.
+            out, self._buf = self._buf, ""
+        else:
+            # Olası yarım placeholder — bir sonraki parçaya kadar beklet.
+            out, self._buf = self._buf[:idx], self._buf[idx:]
+        return unredact_safe(out, self._mapping) if out else ""
+
+    def flush(self) -> str:
+        """Üretim bitince kalan tamponu (varsa) geri yükleyip döndürür."""
+        out, self._buf = self._buf, ""
+        return unredact_safe(out, self._mapping) if out else ""
 
 
 # Embedding'e giden metin için jenerik etiketler — geri yükleme GEREKMEZ,

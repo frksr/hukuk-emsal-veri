@@ -4,6 +4,7 @@ import json
 import logging
 import uuid
 from datetime import date, datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from api.audit import audit
@@ -569,6 +570,12 @@ async def ai_sorgu(
     answer = ""
     llm_provider_used = "none"
     tokens_used = 0
+    # LLM'e fiilen giden (maskelenmiş) prompt ve LLM'den dönen ham yanıt —
+    # şeffaflık/denetim için tenant_queries.metadata'ya kaydedilir (aşağıda).
+    # Prompt zaten maskeli (PII yok); ham yanıt da maskeli prompttan üretildiği
+    # için normalde PII içermez — yine de tenant-izole RLS ile korunur.
+    llm_prompt_sent: Optional[str] = None
+    llm_raw_response: Optional[str] = None
     # Strict KVKK modu: güçlü NER katmanı yoksa yurt dışı LLM çağrısını engelle.
     if _block_without_ner and not ner_available() and is_available():
         log.warning("KVKK strict: NER yok, yurt dışı LLM çağrısı engellendi (tenant=%s).", user.tenant_id)
@@ -602,6 +609,10 @@ async def ai_sorgu(
             answer = unredact_safe(raw_answer, redaction_map)
             llm_provider_used = "anthropic_or_gemini"
             tokens_used = len(user_prompt) // 4 + len(raw_answer) // 4  # yaklaşık
+            # Denetim/şeffaflık için: LLM'e giden maskeli prompt ve LLM'in ham
+            # (unredact öncesi) yanıtı — aşağıda tenant_queries.metadata'ya yazılır.
+            llm_prompt_sent = user_prompt[:12000]
+            llm_raw_response = raw_answer[:8000]
         except Exception as e:
             log.exception("LLM hatası")
             answer = f"LLM yanıt üretemedi: {e}"
@@ -613,18 +624,26 @@ async def ai_sorgu(
 
     duration_ms = int((time.perf_counter() - start) * 1000)
 
-    # Geçmişe kaydet
+    # Geçmişe kaydet — LLM'e giden maskeli prompt + LLM'den dönen ham yanıt da
+    # metadata'ya yazılır (denetim/şeffaflık için; her ikisi de zaten maskeli
+    # veriden türediği için PII riski taşımaz, ayrıca tenant-izole RLS ile korunur).
+    query_metadata = {}
+    if llm_prompt_sent is not None:
+        query_metadata["llm_prompt_sent"] = llm_prompt_sent
+    if llm_raw_response is not None:
+        query_metadata["llm_raw_response"] = llm_raw_response
     try:
         async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
             await conn.execute(
                 """INSERT INTO tenant_queries
                    (tenant_id, user_id, query_text, answer_text, document_ids,
-                    chunk_count, llm_provider, tokens_used, duration_ms)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                    chunk_count, llm_provider, tokens_used, duration_ms, metadata)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)""",
                 user.tenant_id, user.user_id, payload.query, answer,
                 payload.document_ids,
                 len(tenant_results) + len(emsal_results),
                 llm_provider_used, tokens_used, duration_ms,
+                json.dumps(query_metadata, ensure_ascii=False),
             )
     except Exception as e:
         log.warning(f"Sorgu kaydı hatası: {e}")

@@ -316,15 +316,25 @@ def _basit_anti_tez(kendi_tezi: str) -> str:
     return f"{ana} reddi kabul edilmemiştir karşıt görüş"
 
 
-def _anti_tez_query_uret(kendi_tezi: str) -> tuple[str, str]:
-    """LLM ile anti-tez sorgusu üret. (query, hata) döner."""
+def _anti_tez_query_uret(
+    kendi_tezi: str,
+    redacted_tezi: str,
+    redaction_map,
+) -> tuple[str, str]:
+    """LLM ile anti-tez sorgusu üret. (query, hata) döner.
+
+    `redacted_tezi`: PII maskelenmiş tez (LLM'e gönderilir).
+    `kendi_tezi`: orijinal tez (yalnızca LLM yoksa heuristic fallback için).
+    """
+    from services.pii_redaction import unredact_safe
+
     if not is_available():
         return _basit_anti_tez(kendi_tezi), ""
 
     try:
         sorgu = generate(
             system=ANTI_TEZ_SISTEM_PROMPT,
-            user=f"Tez:\n\"\"\"\n{kendi_tezi.strip()}\n\"\"\"\n\nAnti-tez sorgu:",
+            user=f"Tez:\n\"\"\"\n{redacted_tezi.strip()}\n\"\"\"\n\nAnti-tez sorgu:",
             max_tokens=120,
             temperature=0.4,
         )
@@ -337,7 +347,9 @@ def _anti_tez_query_uret(kendi_tezi: str) -> tuple[str, str]:
     sorgu = sorgu.splitlines()[0].strip() if sorgu else ""
     if not sorgu:
         return _basit_anti_tez(kendi_tezi), ""
-    return sorgu, ""
+    # LLM olası placeholder'ları (ör. tezden alıntı yaparken) geri koy — bu
+    # sorgu daha sonra RAG aramasında ve kullanıcıya döndürülen yanıtta kullanılır.
+    return unredact_safe(sorgu, redaction_map), ""
 
 
 # ---------------------------------------------------------------------------
@@ -376,18 +388,26 @@ def _stub_argumanlar(
 
 
 def _llm_argumanlar_uret(
-    kendi_tezi: str,
+    redacted_tezi: str,
     dava_turu_label: str,
     anti_tez_query: str,
     emsaller: list[dict],
+    redaction_map,
 ) -> tuple[dict, str]:
-    """LLM çağrısı + JSON parse. (parsed_dict, hata) döner."""
+    """LLM çağrısı + JSON parse. (parsed_dict, hata) döner.
+
+    `redacted_tezi`: PII maskelenmiş tez metni (LLM'e gönderilen).
+    LLM'in JSON yanıtındaki TÜM string alanlar `unredact_json` ile geri
+    yüklenir (argüman/rebuttal metinleri tezden alıntı içerebilir).
+    """
+    from services.pii_redaction import unredact_json
+
     emsal_blogu = _emsal_blogu_hazirla(emsaller)
     user_prompt = f"""DAVA TÜRÜ: {dava_turu_label}
 
 KULLANICININ TEZİ:
 \"\"\"
-{kendi_tezi.strip()}
+{redacted_tezi.strip()}
 \"\"\"
 
 ANTİ-TEZ ARAMA SORGUSU (karşı tarafın penceresi):
@@ -418,7 +438,7 @@ SADECE belirtilen JSON formatında çıktı ver.
     parsed = _json_extract(ham)
     if not parsed or not isinstance(parsed, dict):
         return {}, "LLM çıktısı JSON olarak parse edilemedi."
-    return parsed, ""
+    return unredact_json(parsed, redaction_map), ""
 
 
 # ---------------------------------------------------------------------------
@@ -475,14 +495,24 @@ def karsi_argument_uret(
 
     uyari_parcalari: list[str] = []
 
+    # PII koruması — tez serbest metin olduğundan isim/adres/TCKN içerebilir.
+    # Tek bir harita, her iki LLM çağrısında (anti-tez + argümanlar) da
+    # kullanılır; yanıtlar unredact_json/unredact_safe ile geri yüklenir.
+    from services.pii_redaction import redact
+
+    redacted_tezi, redaction_map = redact(kendi_tezi)
+
     # 1) Anti-tez sorgusu üret.
-    anti_tez_query, at_hata = _anti_tez_query_uret(kendi_tezi)
+    anti_tez_query, at_hata = _anti_tez_query_uret(kendi_tezi, redacted_tezi, redaction_map)
     if at_hata:
         uyari_parcalari.append(at_hata)
 
-    # 2) RAG araması (anti-tez sorgusuyla).
+    # 2) RAG araması (anti-tez sorgusuyla) — dış embedding API'sine PII
+    # gitmesin diye anonimleştirilir (anti_tez_query zaten LLM üretimi ve
+    # unredact edilmiş olabilir; yine de ihtiyaten anonimleştirilir).
     try:
-        emsaller = search(anti_tez_query, k=k)
+        from services.pii_redaction import redact_for_embedding
+        emsaller = search(redact_for_embedding(anti_tez_query), k=k)
     except Exception as e:
         emsaller = []
         log.warning(f"Karşı argüman için RAG araması başarısız: {e}")
@@ -503,7 +533,7 @@ def karsi_argument_uret(
         uyari_parcalari.append(_KULLANICI_DEMO_MESAJI)
     else:
         parsed, llm_hata = _llm_argumanlar_uret(
-            kendi_tezi, dava_turu_label, anti_tez_query, emsaller,
+            redacted_tezi, dava_turu_label, anti_tez_query, emsaller, redaction_map,
         )
         if llm_hata:
             # LLM çağrısı patladı / parse edilemedi → stub'a dön. Teknik

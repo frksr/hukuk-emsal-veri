@@ -176,6 +176,13 @@ def ozet_uret(karar_metni: str, uzunluk: str = "orta") -> dict:
     kaynak_char_count = len(karar_metni)
     kullanilan_metin = _truncate_karar(karar_metni)
 
+    # PII koruması — kullanıcının yapıştırdığı karar metni (özellikle ilk
+    # derece kararları) taraf isimleri/adres/TCKN içerebilir. LLM'e maskeli
+    # gider; yanıttaki placeholder'lar aşağıda geri yüklenir.
+    from services.pii_redaction import redact, unredact_safe
+
+    redacted_metin, redaction_map = redact(kullanilan_metin)
+
     sistem_prompt = SISTEM_PROMPT_TEMPLATE.format(
         paragraf=profil["paragraf"],
         aciklama=profil["aciklama"],
@@ -185,7 +192,7 @@ def ozet_uret(karar_metni: str, uzunluk: str = "orta") -> dict:
     kullanici_prompt = (
         "Aşağıdaki Türk mahkeme kararını sade Türkçe ile özetle. "
         "Çıktı formatına KESİNLİKLE uy (## ÖZET, ## ANAHTAR NOKTALAR, ## İLGİLİ KANUNLAR).\n\n"
-        f"--- KARAR METNİ BAŞLANGIÇ ---\n{kullanilan_metin}\n--- KARAR METNİ SON ---"
+        f"--- KARAR METNİ BAŞLANGIÇ ---\n{redacted_metin}\n--- KARAR METNİ SON ---"
     )
 
     try:
@@ -231,6 +238,8 @@ def ozet_uret(karar_metni: str, uzunluk: str = "orta") -> dict:
         ham_cikti = str(sonuc)
         model_adi = "llm.provider"
 
+    # PII placeholder'ları geri koy — özet kullanıcıya gerçek isim/olayla gösterilir.
+    ham_cikti = unredact_safe(ham_cikti, redaction_map)
     bolumler = _parse_bolumler(ham_cikti)
 
     return {
