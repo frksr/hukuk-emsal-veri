@@ -10,13 +10,18 @@ export const metadata: Metadata = buildMetadata({
 
 export default function IadePolitikasiPage() {
   return (
-    <div className="container py-10 max-w-3xl prose prose-slate">
+    <div className="container py-10 max-w-3xl">
+      <nav className="text-sm text-muted-foreground mb-4">
+        <a href="/" className="hover:text-foreground">Ana Sayfa</a> / <span>Cayma ve İade Politikası</span>
+      </nav>
+      <h1 className="text-3xl md:text-4xl font-bold mb-8">Cayma ve İade Politikası</h1>
+
+      <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
       {/*
         SİTE SAHİBİ İÇİN NOT: Destek e-posta adresini (destek@hukukcuyapayzekasi.com)
         teyit edin / gerekirse değiştirin. Yayına almadan önce metni bir avukata
         inceletin.
       */}
-      <h1>Cayma ve İade Politikası</h1>
       <p>
         Bu politika, Hukuk Emsal platformu üzerinden satın alınan aylık
         abonelikler ve tek seferlik ek paketler için iptal, cayma hakkı ve
@@ -134,6 +139,7 @@ export default function IadePolitikasiPage() {
         yerinizdeki Tüketici Hakem Heyetlerine, sınırı aşan uyuşmazlıklarda
         Tüketici Mahkemelerine başvurabilirsiniz.
       </p>
+      </div>
     </div>
   );
 }

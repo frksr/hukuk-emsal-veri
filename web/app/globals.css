@@ -168,6 +168,46 @@
   .prose-tr {
     @apply max-w-prose leading-relaxed text-foreground;
   }
+
+  /* Hakkımızda / Editoryal Politika / Yasal Uyarı gibi düz metin sayfaları
+     için tutarlı tipografi. NOT: @tailwindcss/typography paketi kurulu
+     değil, bu yüzden "prose" class'ı hiçbir şey üretmiyordu (sayfalar
+     kartsız/biçimsiz görünüyordu) — bu blok onun yerine geçer ve sitenin
+     kendi CSS değişkenlerini (--card, --border, --primary vb.) kullanır. */
+  .policy-content {
+    @apply max-w-none;
+  }
+  .policy-content > *:first-child {
+    @apply mt-0;
+  }
+  .policy-content h2 {
+    @apply mb-3 mt-10 text-2xl font-bold text-foreground;
+  }
+  .policy-content h3 {
+    @apply mb-2 mt-6 text-lg font-semibold text-foreground;
+  }
+  .policy-content p {
+    @apply mb-4 leading-relaxed text-foreground/90;
+  }
+  .policy-content ul,
+  .policy-content ol {
+    @apply mb-4 space-y-2 pl-5 text-foreground/90;
+  }
+  .policy-content ul {
+    @apply list-disc;
+  }
+  .policy-content ol {
+    @apply list-decimal;
+  }
+  .policy-content li {
+    @apply leading-relaxed;
+  }
+  .policy-content strong {
+    @apply font-semibold text-foreground;
+  }
+  .policy-content a {
+    @apply text-primary underline-offset-2 hover:underline;
+  }
 }
 
 @layer utilities {

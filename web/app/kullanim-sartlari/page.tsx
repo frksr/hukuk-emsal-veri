@@ -11,15 +11,20 @@ export const metadata: Metadata = buildMetadata({
 export default function KullanimPage() {
   const guncelleme = "3 Temmuz 2026";
   return (
-    <div className="container py-10 max-w-3xl prose prose-slate">
+    <div className="container py-10 max-w-3xl">
+      <nav className="text-sm text-muted-foreground mb-4">
+        <a href="/" className="hover:text-foreground">Ana Sayfa</a> / <span>Kullanım Şartları</span>
+      </nav>
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Kullanım Şartları</h1>
+      <p className="text-sm text-muted-foreground mb-8">Son güncelleme: {guncelleme}</p>
+
+      <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
       {/*
         SİTE SAHİBİ İÇİN NOT: Şirket ünvanı/adres bilgilerini Mesafeli Satış
         Sözleşmesi'ndeki ile tutarlı tutun. Yayına almadan önce metnin tamamını
         bir avukata inceletin; özellikle sorumluluk sınırlaması ve fesih
         maddeleri işkolunuza göre uyarlanmalıdır.
       */}
-      <h1>Kullanım Şartları</h1>
-      <p className="text-sm text-muted-foreground">Son güncelleme: {guncelleme}</p>
       <p>
         İşbu Kullanım Şartları (&quot;Şartlar&quot;), hukukcuyapayzekasi.com
         adresinde yayınlanan Hukuk Emsal platformunu (&quot;Platform&quot;,
@@ -243,6 +248,7 @@ export default function KullanimPage() {
         </a>{" "}
         adresine yazabilirsiniz.
       </p>
+      </div>
     </div>
   );
 }

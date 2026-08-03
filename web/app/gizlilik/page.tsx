@@ -11,7 +11,14 @@ export const metadata: Metadata = buildMetadata({
 export default function GizlilikPage() {
   const guncelleme = "3 Temmuz 2026";
   return (
-    <div className="container py-10 max-w-3xl prose prose-slate">
+    <div className="container py-10 max-w-3xl">
+      <nav className="text-sm text-muted-foreground mb-4">
+        <a href="/" className="hover:text-foreground">Ana Sayfa</a> / <span>Gizlilik Politikası</span>
+      </nav>
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Gizlilik Politikası (KVKK Aydınlatma Metni)</h1>
+      <p className="text-sm text-muted-foreground mb-8">Son güncelleme: {guncelleme}</p>
+
+      <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
       {/*
         SİTE SAHİBİ İÇİN NOT: [ŞİRKET ÜNVANI]/[ADRES] alanlarını doldurun (Mesafeli
         Satış Sözleşmesi'ndeki ile aynı olmalı). Yayına almadan önce metni, özellikle
@@ -19,8 +26,6 @@ export default function GizlilikPage() {
         danışmanına inceletin — gerçek saklama sürelerini ve VERBİS kaydınızı buna
         göre netleştirin.
       */}
-      <h1>Gizlilik Politikası (KVKK Aydınlatma Metni)</h1>
-      <p className="text-sm text-muted-foreground">Son güncelleme: {guncelleme}</p>
       <p>
         İşbu Aydınlatma Metni, 6698 sayılı Kişisel Verilerin Korunması Kanunu
         (&quot;KVKK&quot;) madde 10 uyarınca, veri sorumlusu sıfatıyla{" "}
@@ -213,6 +218,7 @@ export default function GizlilikPage() {
         kapsamındaki güncellemeler nedeniyle zaman zaman revize edilebilir;
         güncel sürüm her zaman bu sayfada yayınlanır.
       </p>
+      </div>
     </div>
   );
 }

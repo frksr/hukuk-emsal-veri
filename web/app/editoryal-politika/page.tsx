@@ -14,10 +14,14 @@ export default function EditoryalPolitikaPage() {
   return (
     <>
       <JsonLd data={breadcrumbJsonLd([{ name: "Ana Sayfa", url: "/" }, { name: "Editoryal Politika", url: "/editoryal-politika" }])} />
-      <div className="container py-10 max-w-3xl prose prose-slate">
-        <h1>Editoryal Politika</h1>
-        <p className="text-sm text-muted-foreground">Son güncelleme: 3 Ağustos 2026</p>
+      <div className="container py-10 max-w-3xl">
+        <nav className="text-sm text-muted-foreground mb-4">
+          <Link href="/" className="hover:text-foreground">Ana Sayfa</Link> / <span>Editoryal Politika</span>
+        </nav>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">Editoryal Politika</h1>
+        <p className="text-sm text-muted-foreground mb-8">Son güncelleme: 3 Ağustos 2026</p>
 
+        <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
         <p>
           Bu sayfa, <Link href="/blog">Hukuk Rehberi</Link> altında
           yayınladığımız makalelerin nasıl hazırlandığını, kaynaklandığını ve
@@ -84,6 +88,7 @@ export default function EditoryalPolitikaPage() {
           sorumluluk sınırlamaları <Link href="/yasal-uyari">Yasal Uyarı</Link>{" "}
           sayfasındadır.
         </p>
+        </div>
       </div>
     </>
   );

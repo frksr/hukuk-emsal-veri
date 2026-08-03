@@ -10,14 +10,19 @@ export const metadata: Metadata = buildMetadata({
 
 export default function MesafeliSatisPage() {
   return (
-    <div className="container py-10 max-w-3xl prose prose-slate">
+    <div className="container py-10 max-w-3xl">
+      <nav className="text-sm text-muted-foreground mb-4">
+        <a href="/" className="hover:text-foreground">Ana Sayfa</a> / <span>Mesafeli Satış Sözleşmesi</span>
+      </nav>
+      <h1 className="text-3xl md:text-4xl font-bold mb-8">Mesafeli Satış Sözleşmesi</h1>
+
+      <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
       {/*
         SİTE SAHİBİ İÇİN NOT: Aşağıdaki köşeli parantezli alanları ([ŞİRKET ÜNVANI],
         [ADRES], [MERSİS NO], [VERGİ DAİRESİ / VERGİ NO], [TELEFON]) şirket
         bilgileriyle doldurun ve yayına almadan önce metnin tamamını bir avukata
         inceletin. E-posta adreslerinin aktif olduğunu doğrulayın.
       */}
-      <h1>Mesafeli Satış Sözleşmesi</h1>
       <p>
         İşbu Mesafeli Satış Sözleşmesi (&quot;Sözleşme&quot;), 6502 sayılı
         Tüketicinin Korunması Hakkında Kanun ve Mesafeli Sözleşmeler Yönetmeliği
@@ -179,6 +184,7 @@ export default function MesafeliSatisPage() {
           destek@hukukcuyapayzekasi.com
         </a>
       </p>
+      </div>
     </div>
   );
 }

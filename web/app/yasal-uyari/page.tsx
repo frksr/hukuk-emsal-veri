@@ -11,9 +11,14 @@ export const metadata: Metadata = buildMetadata({
 export default function YasalUyariPage() {
   const guncelleme = "3 Temmuz 2026";
   return (
-    <div className="container py-10 max-w-3xl prose prose-slate">
-      <h1>Yasal Uyarı</h1>
-      <p className="text-sm text-muted-foreground">Son güncelleme: {guncelleme}</p>
+    <div className="container py-10 max-w-3xl">
+      <nav className="text-sm text-muted-foreground mb-4">
+        <a href="/" className="hover:text-foreground">Ana Sayfa</a> / <span>Yasal Uyarı</span>
+      </nav>
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Yasal Uyarı</h1>
+      <p className="text-sm text-muted-foreground mb-8">Son güncelleme: {guncelleme}</p>
+
+      <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
       <p>
         Hukuk Emsal platformu, hukuk profesyonellerine ve genel kullanıcılara
         yardımcı bir <strong>yapay zeka destekli üretkenlik aracıdır</strong>.
@@ -100,6 +105,7 @@ export default function YasalUyariPage() {
         </a>{" "}
         adresine yazabilirsiniz.
       </p>
+      </div>
     </div>
   );
 }

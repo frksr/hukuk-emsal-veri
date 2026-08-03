@@ -30,10 +30,14 @@ export default function VeriKaynaklariPage() {
           datasetJsonLd,
         ]}
       />
-      <div className="container py-10 max-w-3xl prose prose-slate">
-        <h1>Veri Kaynakları ve Güncelleme Politikası</h1>
-        <p className="text-sm text-muted-foreground">Son güncelleme: 3 Ağustos 2026</p>
+      <div className="container py-10 max-w-3xl">
+        <nav className="text-sm text-muted-foreground mb-4">
+          <Link href="/" className="hover:text-foreground">Ana Sayfa</Link> / <span>Veri Kaynakları</span>
+        </nav>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">Veri Kaynakları ve Güncelleme Politikası</h1>
+        <p className="text-sm text-muted-foreground mb-8">Son güncelleme: 3 Ağustos 2026</p>
 
+        <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
         <p>
           Emsal karar veri tabanımız yalnızca resmî ve kamuya açık
           kaynaklardan beslenir; ücretli üçüncü taraf arşivler veya
@@ -95,6 +99,7 @@ export default function VeriKaynaklariPage() {
           <Link href="/editoryal-politika">Editoryal Politika</Link>{" "}
           sayfamıza bakabilirsiniz.
         </p>
+        </div>
       </div>
     </>
   );
