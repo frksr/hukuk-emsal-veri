@@ -324,7 +324,7 @@ export function DenetimForm() {
             </Card>
           )}
 
-          <div className="text-xs text-muted-foreground p-3 rounded border border-amber-200 bg-amber-50">
+          <div className="text-xs p-3 rounded border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200">
             ⚠️ {sonuc.yasal_uyari}
           </div>
         </>

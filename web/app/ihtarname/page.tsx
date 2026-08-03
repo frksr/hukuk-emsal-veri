@@ -28,7 +28,7 @@ export default function IhtarnamePage() {
           Taraf ve alacak bilgilerini girin; sistem TBK 117, İİK 51, TBK 89 referansları ile noter onayına
           hazır ihtarname taslağı üretsin.
         </p>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6 text-sm">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 p-4 mb-6 text-sm text-amber-900 dark:text-amber-200">
           ⚠️ <strong>Yasal uyarı:</strong> Yapay Zeka taslağı, noter onayından önce avukat incelemesi gerekir.
         </div>
         <IhtarnameForm />

@@ -508,11 +508,11 @@ export function IcerikPanel() {
             </div>
           </div>
 
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-            <p className="text-sm font-medium text-amber-900 mb-1">
+          <div className="rounded-md border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 p-3">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200 mb-1">
               Hukuki inceleme (E-E-A-T) — isteğe bağlı
             </p>
-            <p className="text-xs text-amber-800 mb-3">
+            <p className="text-xs text-amber-800 dark:text-amber-300 mb-3">
               İçeriği gerçekten inceleyen bir hukukçu varsa adını ve unvanını girin
               (örn. &quot;Av. Ad Soyad&quot;, &quot;İstanbul Barosu&quot;). Bu alan sahte/uydurma bir
               isimle DOLDURULMAMALI — boş bırakılırsa yalnızca yazar adı gösterilir.
@@ -770,11 +770,11 @@ export function IcerikPanel() {
 
           {/* SEO notları */}
           {current.seo_notes && current.seo_notes.length > 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm font-medium text-amber-900 mb-1">
+            <div className="rounded-md border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 p-3">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200 mb-1">
                 İyileştirme önerileri
               </p>
-              <ul className="list-disc pl-5 text-sm text-amber-800 space-y-0.5">
+              <ul className="list-disc pl-5 text-sm text-amber-800 dark:text-amber-300 space-y-0.5">
                 {current.seo_notes.map((n, i) => (
                   <li key={i}>{n}</li>
                 ))}

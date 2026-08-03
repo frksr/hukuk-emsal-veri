@@ -48,7 +48,7 @@ export default function BelgeDenetimPage() {
           dayanak doğru mu, eksik bölüm var mı, Yargıtay emsallerine aykırı argüman var mı, karşı tarafın
           yakalayabileceği zayıflık ne?
         </p>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6 text-sm">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 p-4 mb-6 text-sm text-amber-900 dark:text-amber-200">
           ⚠️ <strong>Yasal uyarı:</strong> Yapay Zeka denetimi, profesyonel hukuk inceleme servisinin yerine geçmez.
           Mahkemeye sunmadan önce avukat incelemesi şarttır.
         </div>

@@ -116,7 +116,7 @@ export default async function OnizlemePage({
 
   return (
     <article className="container py-10 max-w-3xl">
-      <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <div className="mb-6 rounded-lg border border-amber-300 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
         <strong>Önizleme</strong> — bu yazı henüz yayında değil
         {m.status ? ` (durum: ${m.status})` : ""}. Sayfa arama motorlarına kapalıdır.
       </div>

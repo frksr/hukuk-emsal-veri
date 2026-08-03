@@ -27,7 +27,7 @@ export default function SozlesmePage() {
           Sözleşmenizi yükleyin veya metnini yapıştırın; sistem TBK, TTK ve KVKK çerçevesinde madde
           madde risk skorlasın, eksik maddeleri tespit etsin.
         </p>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6 text-sm">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 p-4 mb-6 text-sm text-amber-900 dark:text-amber-200">
           ⚠️ Yapay Zeka analizi, hukuki danışmanlığın yerine geçmez.
         </div>
         <SozlesmeForm />
