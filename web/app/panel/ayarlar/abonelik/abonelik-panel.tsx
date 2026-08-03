@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SATIS_ACIK } from "@/lib/satis-modu";
 import { CheckCircle2, ArrowRight, Loader2, Crown } from "lucide-react";
@@ -628,7 +629,7 @@ export function AbonelikPanel() {
                   </ul>
                   {p.key === "enterprise" ? (
                     <Button asChild className="w-full">
-                      <a href="mailto:satis@hukukcuyapayzekasi.com?subject=Enterprise%20paket">İletişime Geç</a>
+                      <Link href="/panel/oneri">İletişime Geç</Link>
                     </Button>
                   ) : isCurrent ? (
                     <Button disabled className="w-full" variant="outline">Aktif Plan</Button>

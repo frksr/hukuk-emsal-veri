@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Check, X } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -116,7 +117,7 @@ const FAQS = [
   {
     question: "Enterprise / API erişimi var mı?",
     answer:
-      "Büyük ekipler ve entegrasyonlar (büro yönetim yazılımları, API erişimi) için satis@hukukcuyapayzekasi.com adresinden bize ulaşın.",
+      "Büyük ekipler ve entegrasyonlar (büro yönetim yazılımları, API erişimi) için Bize Yazın sayfasından bize ulaşın.",
   },
 ];
 
@@ -201,9 +202,9 @@ export default function FiyatlandirmaPage() {
 
           <div className="mt-12 text-center text-sm text-muted-foreground">
             Sorunuz mu var?{" "}
-            <a href="mailto:satis@hukukcuyapayzekasi.com" className="text-primary hover:underline">
-              satis@hukukcuyapayzekasi.com
-            </a>
+            <Link href="/panel/oneri" className="text-primary hover:underline">
+              Bize Yazın
+            </Link>
           </div>
         </div>
       </div>
