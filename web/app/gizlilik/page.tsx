@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -205,10 +206,8 @@ export default function GizlilikPage() {
       <p>
         Yukarıdaki haklarınızı kullanmak için kimliğinizi tevsik edici
         belgelerle birlikte{" "}
-        <a href="mailto:kvkk@hukukcuyapayzekasi.com">
-          kvkk@hukukcuyapayzekasi.com
-        </a>{" "}
-        adresine yazılı olarak başvurabilirsiniz. Talebiniz, niteliğine göre
+        <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+        sayfasından yazılı olarak başvurabilirsiniz. Talebiniz, niteliğine göre
         en geç 30 gün içinde ücretsiz olarak sonuçlandırılır.
       </p>
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -100,10 +101,8 @@ export default function YasalUyariPage() {
       <h2>İletişim</h2>
       <p>
         Soru ve geri bildirimleriniz için{" "}
-        <a href="mailto:info@hukukcuyapayzekasi.com">
-          info@hukukcuyapayzekasi.com
-        </a>{" "}
-        adresine yazabilirsiniz.
+        <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+        sayfasından bize ulaşabilirsiniz.
       </p>
       </div>
     </div>

@@ -65,10 +65,8 @@ export default function EditoryalPolitikaPage() {
           Mevzuat değişikliği veya hata bildirimi durumunda ilgili makale
           güncellenir ve sayfa üzerindeki &quot;son güncelleme&quot; tarihi
           otomatik olarak yenilenir. Bir hata fark ederseniz{" "}
-          <a href="mailto:info@hukukcuyapayzekasi.com">
-            info@hukukcuyapayzekasi.com
-          </a>{" "}
-          adresine bildirebilirsiniz; bildirimler makul sürede
+          <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+          sayfasından bildirebilirsiniz; bildirimler makul sürede
           değerlendirilir.
         </p>
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -69,10 +70,8 @@ export default function KullanimPage() {
           Hesap şifrenizin gizliliğinden ve hesabınız üzerinden
           gerçekleştirilen tüm işlemlerden siz sorumlusunuz. Hesabınızın
           yetkisiz kullanıldığını fark ederseniz derhal{" "}
-          <a href="mailto:destek@hukukcuyapayzekasi.com">
-            destek@hukukcuyapayzekasi.com
-          </a>{" "}
-          adresine bildiriniz.
+          <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+          sayfasından bildiriniz.
         </li>
         <li>
           Ekip (Team) planlarında, tenant/çalışma alanı sahibi (owner),
@@ -238,15 +237,9 @@ export default function KullanimPage() {
 
       <h2>12. İletişim</h2>
       <p>
-        Sorularınız için{" "}
-        <a href="mailto:info@hukukcuyapayzekasi.com">
-          info@hukukcuyapayzekasi.com
-        </a>
-        , destek talepleri için{" "}
-        <a href="mailto:destek@hukukcuyapayzekasi.com">
-          destek@hukukcuyapayzekasi.com
-        </a>{" "}
-        adresine yazabilirsiniz.
+        Sorularınız ve destek talepleriniz için{" "}
+        <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+        sayfasından bize ulaşabilirsiniz.
       </p>
       </div>
     </div>

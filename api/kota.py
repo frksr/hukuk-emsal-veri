@@ -100,7 +100,7 @@ def kota(event_type: str, min_tier: str | None = None):
                     "module": event_type,
                     "message": (
                         "Hesabınız kısıtlanmıştır, bu özelliği kullanamazsınız. "
-                        "Destek ile iletişime geçin: info@hukukcuyapayzekasi.com"
+                        "Destek ile iletişime geçin: https://hukukcuyapayzekasi.com/panel/oneri"
                     ),
                 },
             )

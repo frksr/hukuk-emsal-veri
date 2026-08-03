@@ -87,10 +87,8 @@ export default function VeriKaynaklariPage() {
         <p>
           Toplama ve işleme sürecinde nadiren metin bozulması veya
           etiketleme hatası oluşabilir. Böyle bir durumla karşılaşırsanız{" "}
-          <a href="mailto:info@hukukcuyapayzekasi.com">
-            info@hukukcuyapayzekasi.com
-          </a>{" "}
-          adresine bildirmenizi rica ederiz; kararın orijinaline her karar
+          <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+          sayfasından bildirmenizi rica ederiz; kararın orijinaline her karar
           sayfasında yer alan resmî kaynak bağlantısından ulaşılabilir.
         </p>
 

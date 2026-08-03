@@ -318,10 +318,10 @@ export default async function KararPage({
           Bu sayfadaki karar metni kamuya açık kaynaklardan derlenmiş ve kişisel
           veriler otomatik olarak anonimleştirilmiştir. Metin bilgilendirme
           amaçlıdır; hukuki tavsiye değildir. Hatalı anonimleştirme fark ederseniz{" "}
-          <a href="mailto:kvkk@hukukcuyapayzekasi.com" className="text-primary hover:underline">
-            kvkk@hukukcuyapayzekasi.com
-          </a>{" "}
-          adresine bildirin.
+          <Link href="/panel/oneri" className="text-primary hover:underline">
+            Bize Yazın
+          </Link>{" "}
+          sayfasından bildirin.
         </div>
       </div>
     </>

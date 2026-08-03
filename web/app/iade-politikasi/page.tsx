@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -18,9 +19,8 @@ export default function IadePolitikasiPage() {
 
       <div className="policy-content rounded-xl border bg-card p-6 md:p-8 shadow-sm">
       {/*
-        SİTE SAHİBİ İÇİN NOT: Destek e-posta adresini (destek@hukukcuyapayzekasi.com)
-        teyit edin / gerekirse değiştirin. Yayına almadan önce metni bir avukata
-        inceletin.
+        SİTE SAHİBİ İÇİN NOT: İletişim kanalı /panel/oneri (Bize Yazın) sayfasıdır.
+        Yayına almadan önce metni bir avukata inceletin.
       */}
       <p>
         Bu politika, Hukuk Emsal platformu üzerinden satın alınan aylık
@@ -126,10 +126,8 @@ export default function IadePolitikasiPage() {
       <p>
         Cayma ve iade taleplerinizi, hesabınıza kayıtlı e-posta adresinizden,
         sipariş/işlem bilgilerinizi (tarih, plan veya paket adı) belirterek{" "}
-        <a href="mailto:destek@hukukcuyapayzekasi.com">
-          destek@hukukcuyapayzekasi.com
-        </a>{" "}
-        adresine iletebilirsiniz. Talebiniz en geç 3 iş günü içinde
+        <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+        sayfasından iletebilirsiniz. Talebiniz en geç 3 iş günü içinde
         yanıtlanır.
       </p>
 

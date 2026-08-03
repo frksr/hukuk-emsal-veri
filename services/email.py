@@ -121,7 +121,7 @@ def _wrap(title: str, body: str, cta: tuple[str, str] | None = None) -> str:
     <hr style="border:none;border-top:1px solid #eee;margin:32px 0 16px;">
     <p style="color:#888;font-size:12px;text-align:center;margin:0;">
       Bu e-posta {SITE_URL} sistemi tarafından otomatik gönderildi.<br>
-      İletişim: <a href="mailto:info@hukukcuyapayzekasi.com" style="color:#1e3a5f;">info@hukukcuyapayzekasi.com</a>
+      İletişim: <a href="{SITE_URL}/panel/oneri" style="color:#1e3a5f;">Bize Yazın</a>
     </p>
   </div>
 </body></html>"""

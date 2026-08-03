@@ -73,10 +73,8 @@ export default function HakkimizdaPage() {
           <p>
             Sorularınız, düzeltme talepleriniz veya iş birliği önerileriniz
             için{" "}
-            <a href="mailto:info@hukukcuyapayzekasi.com">
-              info@hukukcuyapayzekasi.com
-            </a>{" "}
-            adresinden bize ulaşabilirsiniz.
+            <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+            sayfasından bize ulaşabilirsiniz.
           </p>
         </div>
       </div>

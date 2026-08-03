@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -50,10 +51,8 @@ export default function MesafeliSatisPage() {
           <strong>Telefon:</strong> [TELEFON]
         </li>
         <li>
-          <strong>E-posta:</strong>{" "}
-          <a href="mailto:info@hukukcuyapayzekasi.com">
-            info@hukukcuyapayzekasi.com
-          </a>
+          <strong>İletişim:</strong>{" "}
+          <Link href="/panel/oneri">Bize Yazın</Link> sayfası
         </li>
       </ul>
       <h3>1.2. Alıcı</h3>
@@ -136,10 +135,8 @@ export default function MesafeliSatisPage() {
       <ul>
         <li>
           Cayma bildirimi, süresi içinde{" "}
-          <a href="mailto:destek@hukukcuyapayzekasi.com">
-            destek@hukukcuyapayzekasi.com
-          </a>{" "}
-          adresine açık bir beyanla (sipariş bilgileri ile birlikte)
+          <Link href="/panel/oneri">Bize Yazın</Link>{" "}
+          sayfasından açık bir beyanla (sipariş bilgileri ile birlikte)
           gönderilerek yapılır.
         </li>
         <li>
@@ -180,9 +177,7 @@ export default function MesafeliSatisPage() {
 
       <h2>İletişim</h2>
       <p>
-        <a href="mailto:destek@hukukcuyapayzekasi.com">
-          destek@hukukcuyapayzekasi.com
-        </a>
+        <Link href="/panel/oneri">Bize Yazın</Link>
       </p>
       </div>
     </div>
