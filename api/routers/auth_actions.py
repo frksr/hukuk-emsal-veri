@@ -5,6 +5,7 @@ state management gereken işlemler.
 """
 from __future__ import annotations
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -26,6 +27,84 @@ PASSWORD_RESET_TOKEN_HOURS = 1
 
 def _token() -> str:
     return secrets.token_urlsafe(32)
+
+
+# --- Yeni kayıt → sistem admin'ine bilgilendirme e-postası --------------------
+
+NOTIFY_REGISTRATION_ACTION = "admin.new_user_notified"
+
+
+@router.post("/notify-registration", response_model=APIResponse)
+async def notify_registration(
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Yeni kayıt olan kullanıcı bilgilerini sistem admin mailine bildirir.
+
+    Kayıt akışı Next.js tarafında (web/app/api/auth/register/route.ts) doğrudan
+    DB'ye yazıyor; bu backend'e o route tarafından, yeni kullanıcı için
+    üretilmiş kısa ömürlü bir JWT ile çağrılır (bkz. proxy/route.ts'teki aynı
+    imzalama deseni). audit_log'da bu user_id için daha önce bildirim
+    gönderilmiş mi diye bakılır — aynı çağrının (retry, çift tıklama vb.)
+    admin mailini spam'lememesi için idempotent yapılmıştır.
+    """
+    async with service_session() as conn:
+        already = await conn.fetchval(
+            """SELECT 1 FROM audit_log
+               WHERE user_id = $1 AND action = $2 LIMIT 1""",
+            user.user_id, NOTIFY_REGISTRATION_ACTION,
+        )
+        if already:
+            return APIResponse(ok=True, message="Bildirim zaten gönderilmiş.")
+
+        row = await conn.fetchrow(
+            """SELECT u.email, u.name, u.created_at, u.kvkk_accepted_at,
+                      u.marketing_consent, t.name AS tenant_name, t.plan_tier
+               FROM users u
+               LEFT JOIN tenant_members tm ON tm.user_id = u.id
+               LEFT JOIN tenants t ON t.id = tm.tenant_id
+               WHERE u.id = $1
+               ORDER BY tm.created_at ASC LIMIT 1""",
+            user.user_id,
+        )
+        if not row:
+            raise HTTPException(404, "Kullanıcı bulunamadı.")
+
+    try:
+        from services.email import send_email, _wrap
+
+        admin_to = os.environ.get("ADMIN_EMAIL") or "admin@hukukcuyapayzekasi.com"
+        site = os.environ.get("NEXT_PUBLIC_SITE_URL", "https://hukukcuyapayzekasi.com")
+        kayit_zamani = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else ""
+
+        body = (
+            "<p>Sisteme yeni bir kullanıcı kaydoldu.</p>"
+            f"<p><strong>Ad:</strong> {row['name'] or '(belirtilmedi)'}<br>"
+            f"<strong>E-posta:</strong> {row['email']}<br>"
+            f"<strong>Kayıt zamanı:</strong> {kayit_zamani}<br>"
+            f"<strong>Çalışma alanı:</strong> {row['tenant_name'] or '-'}<br>"
+            f"<strong>Plan:</strong> {row['plan_tier'] or 'free'}<br>"
+            f"<strong>KVKK onayı:</strong> {'evet' if row['kvkk_accepted_at'] else 'hayır'}<br>"
+            f"<strong>Pazarlama izni:</strong> {'evet' if row['marketing_consent'] else 'hayır'}</p>"
+            f"<p><a href='{site}/app/admin/kullanicilar'>Admin panelinde görüntüle →</a></p>"
+        )
+        gonderildi = await send_email(
+            to=admin_to,
+            subject=f"👤 Yeni kayıt — {row['name'] or row['email']}",
+            html=_wrap("Yeni Kullanıcı Kaydı", body),
+        )
+        if gonderildi:
+            await audit(
+                action=NOTIFY_REGISTRATION_ACTION,
+                user_id=user.user_id,
+                request=request,
+                metadata={"email": row["email"]},
+            )
+    except Exception:
+        # Bildirim e-postası kayıt akışını asla bozmamalı.
+        log.exception("Yeni kayıt admin bildirimi gönderilemedi: user_id=%s", user.user_id)
+
+    return APIResponse(ok=True, message="Bildirim işlendi.")
 
 
 class ForgotPasswordReq(BaseModel):

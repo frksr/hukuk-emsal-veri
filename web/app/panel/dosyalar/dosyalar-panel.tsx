@@ -371,7 +371,8 @@ export function DosyalarPanel() {
         <div>
           Dosyalarınız <strong>AES-256 ile şifreli</strong> olarak, KVKK m.9 kapsamında AB (Avrupa Birliği)
           sunucularında saklanır. Her dosya size özel anahtarla şifrelidir, başka kullanıcılar veya biz okuyamayız.
-          Yapay Zeka sorgusunda kişisel veriler (TC, IBAN, telefon) maskelenerek işlenir.
+          Yapay Zeka sorgusunda kişisel veriler — <strong>TC kimlik no, IBAN, telefon, taraf/vekil isimleri,
+          hakim ve heyet üyesi isimleri, belge no ve sicil no</strong> dahil — otomatik olarak maskelenerek işlenir.
         </div>
       </div>
 

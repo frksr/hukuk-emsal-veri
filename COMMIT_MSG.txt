@@ -1,0 +1,9 @@
+Admin panel: hesap kisitlama (restrict/unrestrict) ozelligi
+
+- users tablosuna restricted_at/restricted_reason (29_account_restriction.sql migration)
+- api/auth.py, api/kota.py: CurrentUser.restricted alani + kota kapisinda AI modullerini ve emsal aramayi engelleme (hesaplayicilar serbest)
+- api/routers/admin.py: /users/{id}/restrict, /unrestrict, /verify, /suspend, /reactivate endpoint'leri; list_users artik status filtresi destekliyor, askiya alinmis kullanicilar listeden kaybolmuyor
+- web/app/panel/admin/kullanicilar/users-panel.tsx: durum rozetleri (Askiya alinmis/Onay bekliyor/Kisitli/Aktif), durum filtre cubugu ve ilgili aksiyon butonlari
+- api/routers/auth_actions.py: dogrulama kodu gonderimi artik transaction icinde, SMTP hatasinda rollback
+- web/middleware.ts, web/app/giris/dogrulama/verifier.tsx: /giris/dogrulama korumali alan sayildi, 401'de girise yonlendirme, callbackUrl query string korunuyor
+- scripts/init_db.py: eksik 28/29 migration kayitlari eklendi

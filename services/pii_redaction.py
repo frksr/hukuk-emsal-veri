@@ -7,9 +7,12 @@ geldiğinde geri konur.
     1. Regex (her zaman): TCKN, IBAN, telefon, kredi kartı, e-posta, plaka gibi
        YAPISAL/FORMATLI veriler.
     2. Heuristik (her zaman): kural tabanlı Türkçe kişi adı + adres maskeleme.
-       "Davacı/Davalı/Vekili/Av./Sayın <Ad Soyad>" gibi YÜKSEK GÜVENİLİRLİKLİ
-       bağlamlar ve "<...> Mahallesi/Caddesi/Sokak", "No:12" gibi adres kalıpları.
+       "Davacı/Davalı/Vekili/Hakim/Başkan/Üye/Av./Sayın <Ad Soyad>" gibi YÜKSEK
+       GÜVENİLİRLİKLİ bağlamlar (taraf, vekil VE hakim/heyet üyesi isimleri dahil)
+       ve "<...> Mahallesi/Caddesi/Sokak", "No:12" gibi adres kalıpları.
        Model indirmeden çalışır → isim maskeleme varsayılan olarak AKTİFTİR.
+       Ayrıca UYAP belge no / sicil no gibi etiketli kimlik alanları regex
+       katmanında (aşağıda) her zaman maskelenir.
     3. NER (opsiyonel, en geniş kapsam): PII_NER_MODEL ayarlıysa Türkçe bir NER
        modeli (ör. savasy/bert-base-turkish-ner-cased) ile PERSON/LOCATION/ORG
        varlıkları serbest metinde de yakalanır.
@@ -44,6 +47,16 @@ PATTERNS: list[tuple[str, Pattern]] = [
     ("PLATE", re.compile(r"\b\d{1,2}\s?[A-ZÇĞIİÖŞÜ]{1,3}\s?\d{1,4}\b")),
 ]
 
+# UYAP belge/evrak ve sicil numaraları — "Belge No: 2024/1234567", "Sicil No:
+# 123456" gibi etiketli kimlik alanları. NOT: bunlar heuristik katmanda,
+# _ADDRESS_NO (genel "No:12" kalıbı) çalışmadan ÖNCE uygulanır — aksi halde
+# _ADDRESS_NO "Belge No:"/"Sicil No:" içindeki "No:" kısmını daha spesifik
+# etiketlerimiz çalışmadan yutup yanlışlıkla ADDRESS olarak maskeler.
+LABELED_ID_PATTERNS: list[tuple[str, Pattern]] = [
+    ("BELGE_NO", re.compile(r"\bBelge\s*No(?:su)?\s*[:.]?\s*[\w./-]+", re.IGNORECASE)),
+    ("SICIL_NO", re.compile(r"\bSicil\s*No(?:su)?\s*[:.]?\s*\d+", re.IGNORECASE)),
+]
+
 # PLATE regex'inin mahkeme/daire atıflarıyla ("12 HD 2021", "3 CD 456") çakışmasını
 # önlemek için: harf grubu bilinen bir yargı kısaltmasıysa plaka DEĞİLDİR.
 _PLATE_HARIC = {"HD", "CD", "HGK", "CGK", "İBK", "IBK", "BİM", "BIM", "BAM", "AYM", "D", "E", "K"}
@@ -75,9 +88,13 @@ _ner_load_failed = False
 # ismi MASKESİZ bırakıyordu (sızıntı testiyle yakalandı).
 _TR_NAME = r"[A-ZÇĞİÖŞÜ][a-zçğıöşü]+(?:[ \t]+[A-ZÇĞİÖŞÜ][a-zçğıöşü]+){1,2}"
 # Kişiyi işaret eden roller (yüksek precision bağlam).
+# NOT: Hakim/Hâkim/Yargıç/Başkan/Üye — UYAP karar/tutanak metinlerinde hakim ve
+# heyet üyelerinin ismi bu roller sonrasında geçer (ör. "Başkan: Ahmet Yılmaz",
+# "Üye Hakim Ayşe Kaya") — dosyalarım sayfasındaki KVKK uyarısıyla aynı kapsam.
 _PERSON_ROLE = (
     r"Davac[ıi](?:lar)?|Daval[ıi](?:lar)?|Vekil(?:i|leri)?|Müvekkil(?:i|im)?|"
     r"San[ıi]k|Müşteki|Mağdur|Borçlu|Alacakl[ıi]|Tan[ıi]k|Bilirkişi|"
+    r"Hâkim|Hakim|Yargıç|Başkan|Üye|Kâtip|Katip|"
     r"Sayın|Sn\.|Av\.|Avukat|Dr\.|Prof\."
 )
 # "Davacı Ahmet Yılmaz", "vekili Av. Mehmet Demir", "Sayın Ayşe Kaya"
@@ -164,6 +181,14 @@ def _redact_heuristic(text: str, mapping: RedactionMap) -> str:
         ne = m.end("name") - m.start()
         return full[:ns] + ph + full[ne:]
     out = _PERSON_CTX.sub(_person, out)
+
+    # 1b) Etiketli kimlik no'ları ("Belge No: ...", "Sicil No: ...") — genel
+    # "No:12" adres kalıbından (aşağıda) ÖNCE, kendi özel etiketleriyle maskelenir.
+    for label, pat in LABELED_ID_PATTERNS:
+        def _labeled_id(m: re.Match, _label: str = label) -> str:
+            mapping.names_redacted = True
+            return mapping.get_or_create(_label, m.group(0))
+        out = pat.sub(_labeled_id, out)
 
     # 2) Adres birimleri ("X Caddesi", "Y Mahallesi" ...)
     def _addr(m: re.Match) -> str:
@@ -343,7 +368,7 @@ _EMBED_ETIKET = {
     "PERSON": "[KİŞİ]", "LOCATION": "[YER]", "ORG": "[KURUM]",
     "ADDRESS": "[ADRES]", "TCKN": "[TCKN]", "IBAN": "[IBAN]",
     "PHONE": "[TELEFON]", "CREDIT_CARD": "[KART]", "EMAIL": "[EPOSTA]",
-    "PLATE": "[PLAKA]",
+    "PLATE": "[PLAKA]", "BELGE_NO": "[BELGE NO]", "SICIL_NO": "[SİCİL NO]",
 }
 
 
@@ -374,6 +399,10 @@ def audit_pii(text: str) -> dict:
     """
     findings: dict[str, int] = {}
     for label, pat in PATTERNS:
+        matches = pat.findall(text)
+        if matches:
+            findings[label.lower()] = len(matches)
+    for label, pat in LABELED_ID_PATTERNS:
         matches = pat.findall(text)
         if matches:
             findings[label.lower()] = len(matches)
