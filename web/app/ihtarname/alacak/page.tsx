@@ -5,7 +5,7 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { IhtarnameForm } from "../ihtarname-form";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Alacak İhtarnamesi Örneği | Temerrüt İhtarı Noter Onaylı",
+  title: "Alacak İhtarnamesi Örneği | Temerrüt İhtarı Taslağı",
   description:
     "Alacak ihtarnamesi örneği oluşturun. Borçluyu temerrüde düşürmek için TBK 117 ve faiz başlangıcı referanslı noter onayına hazır temerrüt ihtarnamesi taslağı.",
   path: "/ihtarname/alacak",

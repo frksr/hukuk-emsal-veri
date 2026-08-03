@@ -1,9 +1,5 @@
 {
-  "tablolar": {
-    "yasal": {
-      "2026": 9.0
-    }
-  },
-  "kaynak": "manuel",
-  "son_guncelleme": "2026-06-10T03:05:32.207855+00:00"
+  "tablolar": {},
+  "kaynak": "2026-08-03 düzeltmesi: gün hassasiyetli, kaynak atıflı oranlar artık services/faiz_hesaplayici.py FAIZ_DONEMLERI tablosunda (kod, code review ile değişir). Bu dosyadaki eski '2026: %9' değeri hatalıydı (gerçek: 31 Temmuz 2026'dan itibaren %31, bkz. 7589 sayılı Kanun RG 33326) ve kaldırıldı. Bu dosya yalnızca FAIZ_DONEMLERI'nin kapsamadığı GELECEK yıllar için operasyonel override amaçlıdır — bkz. scripts/update_faiz_oranlari.py.",
+  "son_guncelleme": "2026-08-03T00:00:00+00:00"
 }

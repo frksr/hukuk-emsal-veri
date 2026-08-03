@@ -156,6 +156,9 @@ export function buildArticleJsonLd(input: {
   datePublished: string;
   dateModified?: string;
   authorName?: string;
+  /** İçeriği hukuken inceleyen kişi (E-E-A-T sinyali) — varsa unvanla birlikte. */
+  editorName?: string;
+  editorTitle?: string;
 }) {
   return {
     "@context": "https://schema.org",
@@ -169,6 +172,15 @@ export function buildArticleJsonLd(input: {
       "@type": input.authorName ? "Person" : "Organization",
       name: input.authorName ?? SITE_NAME,
     },
+    ...(input.editorName
+      ? {
+          editor: {
+            "@type": "Person",
+            name: input.editorName,
+            ...(input.editorTitle ? { jobTitle: input.editorTitle } : {}),
+          },
+        }
+      : {}),
     publisher: {
       "@type": "Organization",
       name: SITE_NAME,

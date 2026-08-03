@@ -58,6 +58,10 @@ const STATIC_ROUTES: Array<{
   // sayfa değil, blog_articles tablosundan (aşağıdaki dinamik `blog` listesi)
   // geliyor — burada sabit tekrar tanımlanmıyor (mükerrer + yanlış lastmod
   // tarihi önlenir).
+  // E-E-A-T güven sayfaları (2026-08-03 SEO denetimi — bkz. SEO_ANALIZ_VE_PLAN.md)
+  { path: "/hakkimizda", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/editoryal-politika", changeFrequency: "monthly", priority: 0.4 },
+  { path: "/veri-kaynaklari", changeFrequency: "monthly", priority: 0.5 },
   { path: "/yasal-uyari", changeFrequency: "yearly", priority: 0.3 },
   { path: "/gizlilik", changeFrequency: "yearly", priority: 0.3 },
   { path: "/kullanim-sartlari", changeFrequency: "yearly", priority: 0.3 },
@@ -69,7 +73,7 @@ const STATIC_ROUTES: Array<{
 // "değişti" sinyali verir ve lastmod güvenini düşürür (SEO_ANALIZ B9).
 // İçerik değiştikçe elle güncelleyin. Sık değişen route'lar (/, /emsal-arama,
 // /trend) için changeFrequency zaten taze tarama sinyali veriyor.
-const CONTENT_LAST_UPDATED = new Date("2026-06-26T00:00:00.000Z");
+const CONTENT_LAST_UPDATED = new Date("2026-08-03T00:00:00.000Z");
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const statik: MetadataRoute.Sitemap = STATIC_ROUTES.map((r) => ({

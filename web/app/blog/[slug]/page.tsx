@@ -33,6 +33,10 @@ interface Makale {
   cover_image?: string | null;
   published_at?: string;
   updated_at?: string;
+  editor_name?: string | null;
+  editor_title?: string | null;
+  reviewed_at?: string | null;
+  sources?: string[];
 }
 
 async function getMakale(slug: string): Promise<Makale | null> {
@@ -265,6 +269,8 @@ export default async function BlogMakalePage({
             datePublished: m.published_at || new Date().toISOString(),
             dateModified: m.updated_at,
             authorName: m.author,
+            editorName: m.editor_name || undefined,
+            editorTitle: m.editor_title || undefined,
           }),
           ...(faqList.length
             ? [
@@ -289,19 +295,47 @@ export default async function BlogMakalePage({
 
         <h1 className="text-3xl md:text-4xl font-bold mb-3">{m.title}</h1>
         {m.author && (
-          <p className="text-sm text-muted-foreground mb-6">
-            {m.author}
-            {m.published_at && (
-              <>
-                {" · "}
-                {new Date(m.published_at).toLocaleDateString("tr-TR", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </>
+          <div className="text-sm text-muted-foreground mb-2">
+            <p>
+              {m.author}
+              {m.published_at && (
+                <>
+                  {" · "}
+                  {new Date(m.published_at).toLocaleDateString("tr-TR", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </>
+              )}
+              {m.updated_at && m.published_at && m.updated_at.slice(0, 10) !== m.published_at.slice(0, 10) && (
+                <>
+                  {" · güncelleme: "}
+                  {new Date(m.updated_at).toLocaleDateString("tr-TR", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </>
+              )}
+            </p>
+            {m.editor_name && (
+              <p className="mt-1">
+                İçerik incelemesi: <strong>{m.editor_name}</strong>
+                {m.editor_title ? ` — ${m.editor_title}` : ""}
+                {m.reviewed_at && (
+                  <>
+                    {" · "}
+                    {new Date(m.reviewed_at).toLocaleDateString("tr-TR", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </>
+                )}
+              </p>
             )}
-          </p>
+          </div>
         )}
 
         <div className="mb-8 aspect-[16/9] w-full overflow-hidden rounded-xl border">
@@ -338,6 +372,25 @@ export default async function BlogMakalePage({
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {m.sources && m.sources.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-lg font-semibold mb-2">Kaynakça</h2>
+            <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+              {m.sources.map((s, i) =>
+                /^https?:\/\//.test(s) ? (
+                  <li key={i}>
+                    <a href={s} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">
+                      {s}
+                    </a>
+                  </li>
+                ) : (
+                  <li key={i}>{s}</li>
+                )
+              )}
+            </ul>
           </section>
         )}
 

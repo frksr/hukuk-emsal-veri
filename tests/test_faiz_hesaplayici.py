@@ -156,3 +156,47 @@ def test_hesapla_float_anapara_kabul():
         faiz_turu="yasal",
     )
     assert r["anapara"] == Decimal("12345.67")
+
+
+# --------------------------------------------- dönem bazlı oran (2026 kırılımı)
+# Bkz. services/faiz_hesaplayici.py FAIZ_DONEMLERI kaynak notu — 7589 sayılı
+# Kanun (12. Yargı Paketi, RG 31.07.2026/33326) yasal faizi 31 Temmuz 2026'dan
+# itibaren %24'ten %31'e çıkardı. Bu testler o kırılımın doğru uygulandığını
+# ve regresyona uğramadığını doğrular.
+
+def test_yasal_faiz_2026_temmuz_kirilimi():
+    from services.faiz_hesaplayici import _oran_getir_tarih
+    assert _oran_getir_tarih("yasal", date(2026, 7, 30)) == 24.0
+    assert _oran_getir_tarih("yasal", date(2026, 7, 31)) == 31.0
+
+
+def test_yasal_faiz_2024_haziran_kirilimi():
+    from services.faiz_hesaplayici import _oran_getir_tarih
+    assert _oran_getir_tarih("yasal", date(2024, 5, 31)) == 9.0
+    assert _oran_getir_tarih("yasal", date(2024, 6, 1)) == 24.0
+
+
+def test_hesapla_2026_yil_ici_iki_donem_uretir():
+    """1 Ocak - 31 Aralık 2026 aralığı 31 Temmuz kırılımında ikiye bölünmeli."""
+    r = hesapla(
+        anapara=Decimal("100000"),
+        temerrut_tarihi=date(2026, 1, 1),
+        vade_tarihi=date(2026, 12, 31),
+        faiz_turu="yasal",
+    )
+    assert len(r["yillik_breakdown"]) == 2
+    oranlar = [seg["oran"] for seg in r["yillik_breakdown"]]
+    assert oranlar == [24.0, 31.0]
+    assert r["gun_sayisi"] == sum(seg["gun"] for seg in r["yillik_breakdown"])
+    # Toplam faiz iki segmentin toplamına eşit olmalı
+    assert r["faiz_tutari"] == sum((seg["faiz"] for seg in r["yillik_breakdown"]), Decimal("0"))
+
+
+def test_ttk_1530_faiz_turu_calisir():
+    r = hesapla(
+        anapara=Decimal("50000"),
+        temerrut_tarihi=date(2026, 1, 1),
+        vade_tarihi=date(2026, 3, 1),
+        faiz_turu="ttk_1530",
+    )
+    assert r["yillik_breakdown"][0]["oran"] == 43.0

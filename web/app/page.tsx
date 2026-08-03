@@ -88,35 +88,32 @@ type Feature = {
   badge?: string;
 };
 
+// Sıralama bilinçli: icra/tahsilat çekirdek modülleri önce (rapor madde 2 —
+// site önce "icra ve tahsilat hukukunda uzman araç" olarak konumlanmalı);
+// KVKK/sözleşme analizi gibi genel hukuk modülleri destekleyici araçlar
+// olarak sona alındı.
 const features: Feature[] = [
   {
     icon: Search,
     title: "Emsal Karar Arama",
     description:
-      "Yargıtay, Danıştay ve AİHM kararları arasında doğal dilde arama yapın. İcra, tahsilat ve ihtar konularında uyumlu emsalleri saniyeler içinde bulun.",
+      "Yargıtay, Danıştay ve AİHM kararları arasında doğal dilde arama yapın. İcra takibi, itirazın iptali, menfi tespit ve ihtiyati haciz konularında uyumlu emsalleri saniyeler içinde bulun.",
     href: "/emsal-arama",
     badge: "En çok kullanılan",
-  },
-  {
-    icon: FileText,
-    title: "Emsal-Bağlamlı Dilekçe",
-    description:
-      "Davanızı anlatın, Yapay Zeka ilgili Yargıtay emsallerine atıfla profesyonel dilekçe taslağı hazırlasın. İtirazın iptali, menfi tespit, ihalenin feshi destekli.",
-    href: "/dilekce",
-  },
-  {
-    icon: FileSearch,
-    title: "Karar Özetleyici",
-    description:
-      "Uzun karar metinlerini saniyeler içinde özetleyin. Hüküm fıkrası, gerekçe ve atıflar otomatik çıkarılır.",
-    href: "/karar-ozet",
   },
   {
     icon: Calculator,
     title: "Faiz & Tahsilat Hesaplayıcı",
     description:
-      "Yasal faiz, ticari avans faizi, TCMB reeskont oranları ile icra takibinde tam tahsilat tutarını hesaplayın. İİK harçları ve vekalet ücreti dahildir.",
+      "Yasal faiz, ticari avans faizi, TCMB reeskont ve TTK 1530 oranlarıyla icra takibinde tam tahsilat tutarını hesaplayın. İİK harçları ve vekalet ücreti dahildir.",
     href: "/faiz-hesaplayici",
+  },
+  {
+    icon: Mail,
+    title: "İhtarname Üretici",
+    description:
+      "Noter veya KEP üzerinden gönderime hazırlanabilecek ihtarname taslağını dakikalar içinde hazırlayın. Tahsilat, fesih ve temerrüt ihtarları için hazır şablonlar.",
+    href: "/ihtarname",
   },
   {
     icon: Clock,
@@ -126,11 +123,18 @@ const features: Feature[] = [
     href: "/zamanasimi",
   },
   {
-    icon: Mail,
-    title: "İhtarname Üretici",
+    icon: FileText,
+    title: "Emsal-Bağlamlı Dilekçe",
     description:
-      "Noter onaylı ihtarname taslağını dakikalar içinde hazırlayın. Tahsilat, fesih ve temerrüt ihtarları için hazır şablonlar.",
-    href: "/ihtarname",
+      "Davanızı anlatın; sistem emsal kararlarla desteklenmiş, avukat incelemesine hazır dilekçe taslağı oluştursun. İtirazın iptali, menfi tespit, ihalenin feshi destekli.",
+    href: "/dilekce",
+  },
+  {
+    icon: FileSearch,
+    title: "Karar Özetleyici",
+    description:
+      "Uzun karar metinlerini saniyeler içinde özetleyin. Hüküm fıkrası, gerekçe ve atıflar otomatik çıkarılır.",
+    href: "/karar-ozet",
   },
   {
     icon: TrendingUp,
@@ -150,20 +154,20 @@ const features: Feature[] = [
     icon: ScrollText,
     title: "KVKK Uyum Checklist",
     description:
-      "Sektör ve veri türlerinize göre KVKK uyum maddelerinizi çıkarın; uyum skorunuzu görün.",
+      "Destek modülü: sektör ve veri türlerinize göre KVKK uyum maddelerinizi çıkarın; uyum skorunuzu görün.",
     href: "/kvkk",
   },
   {
     icon: ScrollText,
     title: "Sözleşme Analizi",
     description:
-      "Sözleşmelerinizi madde madde risk analizinden geçirin; eksik ve riskli maddeleri tespit edin.",
+      "Destek modülü: sözleşmelerinizi madde madde risk analizinden geçirin; eksik ve riskli maddeleri tespit edin.",
     href: "/sozlesme-analizi",
   },
 ];
 
 const trustedItems = [
-  { value: "10.000+", label: "Emsal karar" },
+  { value: "10.000+", label: "İcra ve tahsilat odaklı, sınıflandırılmış karar" },
   { value: "Yargıtay", label: "12. Hukuk Dairesi" },
   { value: "Danıştay", label: "İdari yargı kararları" },
   { value: "AİHM", label: "HUDOC veritabanı" },
@@ -174,7 +178,7 @@ const howItWorks = [
     step: "01",
     title: "Sorunuzu yazın",
     description:
-      "Doğal dilde hukuki sorunuzu veya olay özetinizi girin. Hukuk terminolojisi gerekmez.",
+      "Olayı doğal dille anlatın veya hukuki kavramlarla ayrıntılı arama yapın — ikisi de desteklenir.",
     icon: Sparkles,
   },
   {
@@ -229,7 +233,7 @@ const faqs = [
   },
   {
     q: "2026 yılı yasal faiz oranı nedir?",
-    a: "Yasal faiz oranı, 3095 sayılı Kanun çerçevesinde Cumhurbaşkanlığı kararıyla belirlenir ve dönemlere göre değişir. Hesaplayıcımız güncel resmi oranları otomatik olarak uygular; geçmiş dönem hesapları için tarih aralığına göre değişen oranları doğru biçimde dikkate alır.",
+    a: "2026'da tek bir oran değildir: 30 Temmuz 2026'ya kadar yıllık %24, 31 Temmuz 2026'dan itibaren yıllık %31 uygulanır (7589 sayılı Kanun, RG 31.07.2026/33326 — yasal faiz artık TCMB reeskont oranına endeksli, Cumhurbaşkanı'nın oranı belirleme yetkisi kaldırıldı). Faiz & Tahsilat Hesaplayıcı bu kırılımı otomatik uygular; ayrıntı ve kaynaklar için faiz hesaplama sayfamıza bakabilirsiniz.",
   },
   {
     q: "Yapay Zeka ile hazırlanan dilekçe avukat denetimi gerektirir mi?",
@@ -276,11 +280,13 @@ export default function HomePage() {
               id="hero-heading"
               className="max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl"
             >
-              İcra ve Tahsilat Hukukunun En İyisiyle Çalışıyorsunuz
+              İcra ve Tahsilat Hukuku İçin Yapay Zekâ Destekli Emsal Karar Arama
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
-              10.000&apos;i aşkın Yargıtay ve Danıştay kararıyla oluşturduğumuz
-              emsal arşivi ve Yapay Zeka desteğiyle, alanında fark yaratıyoruz.
+              Yargıtay, Danıştay ve AİHM kararları arasında doğal dille arama yapın;
+              icra takibi, itirazın iptali, menfi tespit, ihtiyati haciz ve alacak
+              tahsilatı süreçleri için icra ve tahsilat hukukuna özel sınıflandırılmış
+              10.000&apos;i aşkın odaklı emsal karar bulun.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="text-lg px-8 py-6 font-semibold">
@@ -323,11 +329,12 @@ export default function HomePage() {
               id="features-heading"
               className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
             >
-              Avukatlar için 9 güçlü araç
+              İcra ve tahsilat hukuku için 10 güçlü araç
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              Emsal karar aramadan dilekçe üretimine, faiz hesaplamadan KVKK
-              sözleşme analizine kadar pratik avukatlığa özel modüller.
+              Emsal karar arama, faiz hesaplama ve dilekçe üretimi çekirdek
+              modüllerimiz; KVKK ve sözleşme analizi gibi araçlar bunları
+              tamamlayan destek modülleridir.
             </p>
           </div>
 

@@ -38,7 +38,7 @@ _lock = threading.Lock()
 _cache: dict[str, Any] | None = None
 _cache_mtime: float | None = None
 
-GECERLI_TABLOLAR = {"yasal", "ticari_avans", "tcmb_reeskont"}
+GECERLI_TABLOLAR = {"yasal", "ticari_avans", "tcmb_reeskont", "ttk_1530"}
 
 
 def _load() -> dict[str, Any] | None:

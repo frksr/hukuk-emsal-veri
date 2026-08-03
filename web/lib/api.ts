@@ -69,19 +69,40 @@ export interface OzetParams {
 
 export interface FaizParams {
   anapara: number;
-  baslangic_tarihi: string;
-  bitis_tarihi: string;
-  faiz_tipi: "yasal" | "ticari" | "avans" | "temerrut";
-  faiz_orani?: number;
+  temerrut_tarihi: string;
+  vade_tarihi: string;
+  // Form'daki <select> düz string tuttuğu için burada da geniş tip kullanılır;
+  // backend geçersiz değeri 400 ile reddeder (bkz. api/routers/faiz.py).
+  faiz_turu: "yasal" | "ticari_avans" | "tcmb_reeskont" | "ttk_1530" | (string & {});
+}
+
+/** Yıl içinde oran değiştiyse (örn. 2026: 31 Temmuz kırılımı) aynı yıl için
+ * birden fazla dönem satırı üretilir — bkz. services/faiz_hesaplayici.py. */
+export interface FaizDonemSatiri {
+  yil: number;
+  baslangic: string;
+  bitis: string;
+  gun: number;
+  oran: number;
+  faiz: string;
 }
 
 export interface FaizSonucu {
-  anapara: number;
-  faiz_tutari: number;
-  toplam: number;
+  anapara: string;
+  faiz_baslangic: string;
+  faiz_bitis: string;
   gun_sayisi: number;
-  detay?: Array<{ tarih: string; oran: number; tutar: number }>;
+  faiz_tutari: string;
+  cezaevi_harci: string;
+  tahsil_harci: string;
+  vekalet_ucreti: string;
+  toplam_alacak: string;
+  yillik_breakdown: FaizDonemSatiri[];
+  uyari: string;
 }
+
+/** Geriye dönük uyumluluk için takma ad. */
+export type FaizSonuc = FaizSonucu;
 
 export interface ZamanasimiParams {
   hukuk_alani: string;

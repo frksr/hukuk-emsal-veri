@@ -78,6 +78,11 @@ class MakaleCreate(BaseModel):
     faq: list[dict] | None = None
     author: str | None = None
     cover_image: str | None = None
+    # E-E-A-T: içeriği inceleyen gerçek kişi (varsa) + kaynakça. BOŞ bırakılabilir;
+    # sahte/uydurma isim GİRİLMEMELİDİR (bkz. infra/db/30_blog_articles_editor.sql).
+    editor_name: str | None = None
+    editor_title: str | None = None
+    sources: list[str] | None = None
 
 
 class MakaleUpdate(BaseModel):
@@ -91,6 +96,9 @@ class MakaleUpdate(BaseModel):
     faq: list[dict] | None = None
     author: str | None = None
     cover_image: str | None = None
+    editor_name: str | None = None
+    editor_title: str | None = None
+    sources: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +132,8 @@ async def public_makale(slug: str = Path(..., min_length=1, max_length=120)) -> 
         async with db_session() as conn:
             rec = await conn.fetchrow(
                 """SELECT slug, title, excerpt, body, meta_title, meta_description,
-                          keywords, faq, author, cover_image, published_at, updated_at
+                          keywords, faq, author, cover_image, published_at, updated_at,
+                          editor_name, editor_title, reviewed_at, sources
                    FROM blog_articles
                    WHERE slug = $1 AND status = 'published'""",
                 slug,
@@ -193,14 +202,17 @@ async def admin_olustur(
             rec = await conn.fetchrow(
                 """INSERT INTO blog_articles
                      (slug, title, excerpt, body, meta_title, meta_description,
-                      keywords, faq, seo_score, seo_notes, author, cover_image)
+                      keywords, faq, seo_score, seo_notes, author, cover_image,
+                      editor_name, editor_title, sources)
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::jsonb,
-                           COALESCE($11,'Hukukçu Yapay Zekası Editör Ekibi'),$12)
+                           COALESCE($11,'Hukukçu Yapay Zekası Editör Ekibi'),$12,
+                           $13,$14,$15)
                    RETURNING *""",
                 slug, payload.title, payload.excerpt, payload.body or "",
                 payload.meta_title, payload.meta_description,
                 payload.keywords or [], json.dumps(payload.faq or []),
                 skor, json.dumps(notlar), payload.author, payload.cover_image,
+                payload.editor_name, payload.editor_title, payload.sources or [],
             )
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
@@ -228,13 +240,18 @@ async def admin_guncelle(
         sets.append(f"{col} = ${len(args)}{cast}")
 
     for col in ("title", "body", "excerpt", "meta_title", "meta_description",
-                "author", "cover_image", "slug"):
+                "author", "cover_image", "slug", "editor_name", "editor_title"):
         if col in alanlar:
             add(col, alanlar[col])
     if "keywords" in alanlar:
         add("keywords", alanlar["keywords"] or [])
+    if "sources" in alanlar:
+        add("sources", alanlar["sources"] or [])
     if "faq" in alanlar:
         add("faq", json.dumps(alanlar["faq"] or []), "::jsonb")
+    if "editor_name" in alanlar and alanlar["editor_name"]:
+        # Editör adı girildiyse inceleme tarihini otomatik damgala.
+        sets.append("reviewed_at = NOW()")
 
     sets.append("updated_at = NOW()")
     args.append(makale_id)

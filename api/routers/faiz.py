@@ -18,6 +18,7 @@ _FAIZ_ETIKET = {
     "yasal": "Yasal faiz",
     "ticari_avans": "Ticari avans faizi",
     "tcmb_reeskont": "TCMB reeskont faizi",
+    "ttk_1530": "TTK 1530 geç ödeme faizi",
 }
 
 log = logging.getLogger("api.faiz")
@@ -100,10 +101,13 @@ async def faiz_hesapla(
 @router.get("/options", response_model=APIResponse,
             summary="Desteklenen faiz türleri ve oran tabloları")
 async def faiz_options() -> APIResponse:
-    """Geçerli faiz türleri ve yıl bazlı oranları döndürür."""
+    """Geçerli faiz türleri, gün hassasiyetli dönem tablosu ve kaynak bilgisini döndürür."""
     from services.faiz_oranlari import oran_meta, oran_overrides
+    from services.faiz_hesaplayici import (
+        FAIZ_DONEMLERI, FAIZ_DONEM_KAYNAK, FAIZ_DONEM_SON_KONTROL,
+    )
 
-    # Statik fallback + JSON override'larını birleştirerek dön
+    # Statik fallback + JSON override'larını birleştirerek dön (eski/yıl bazlı görünüm)
     oranlar: dict = {}
     for tur, tablo in FAIZ_TABLOLARI.items():
         birlesik = dict(tablo)
@@ -113,9 +117,20 @@ async def faiz_options() -> APIResponse:
             pass
         oranlar[tur] = birlesik
 
+    # Gün hassasiyetli dönem tablosu (ISO tarih → oran) — UI'da "önceki oranlar
+    # tablosu" ve "yürürlük tarihi" göstermek için
+    donemler = {
+        tur: [{"baslangic": basl.isoformat(), "oran": oran} for basl, oran in liste]
+        for tur, liste in FAIZ_DONEMLERI.items()
+    }
+
     data = {
         "faiz_turleri": list(FAIZ_TABLOLARI.keys()),
+        "faiz_etiketleri": _FAIZ_ETIKET,
         "oranlar": oranlar,
+        "donemler": donemler,
+        "donem_kaynak": FAIZ_DONEM_KAYNAK,
+        "donem_son_kontrol": FAIZ_DONEM_SON_KONTROL,
         "oran_kaynagi": oran_meta(),
         "uyari": UYARI_METNI,
     }

@@ -5,9 +5,12 @@ Kullanım:
   # TCMB EVDS'den çek (EVDS_API_KEY env gerekli; ücretsiz: evds2.tcmb.gov.tr)
   python3 scripts/update_faiz_oranlari.py --evds
 
-  # Elle oran gir (mevzuat değişikliğinde; örn. yasal faiz 2026 → 24)
-  python3 scripts/update_faiz_oranlari.py --set yasal 2026 24.0
-  python3 scripts/update_faiz_oranlari.py --set ticari_avans 2026 48.0
+  # Elle oran gir — YALNIZCA services/faiz_hesaplayici.py FAIZ_DONEMLERI
+  # tablosunun kapsamadığı (henüz koda işlenmemiş) GELECEK yıllar için etkilidir;
+  # 2006-2026 arası "yasal" ve 2025-2026 "ticari_avans"/"tcmb_reeskont"/"ttk_1530"
+  # zaten gün hassasiyetinde kod tablosunda, bkz. o dosyadaki kaynak notu.
+  python3 scripts/update_faiz_oranlari.py --set yasal 2027 33.0
+  python3 scripts/update_faiz_oranlari.py --set ticari_avans 2027 40.0
 
   # Mevcut durumu göster
   python3 scripts/update_faiz_oranlari.py --show
@@ -100,14 +103,16 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--evds", action="store_true", help="TCMB EVDS'den çek")
     ap.add_argument("--set", nargs=3, metavar=("TUR", "YIL", "ORAN"),
-                    help="Elle oran gir: yasal|ticari_avans|tcmb_reeskont YIL ORAN")
+                    help="Elle oran gir: yasal|ticari_avans|tcmb_reeskont|ttk_1530 YIL ORAN "
+                         "(yalnızca faiz_hesaplayici.py FAIZ_DONEMLERI'nin kapsamadığı "
+                         "gelecek yıllar için)")
     ap.add_argument("--show", action="store_true", help="Mevcut durumu göster")
     args = ap.parse_args()
 
     if args.show or (not args.evds and not args.set):
         print("Dosya:", ORANLAR_JSON)
         print("Meta :", json.dumps(oran_meta(), ensure_ascii=False, indent=2))
-        for tur in ("yasal", "ticari_avans", "tcmb_reeskont"):
+        for tur in ("yasal", "ticari_avans", "tcmb_reeskont", "ttk_1530"):
             ov = oran_overrides(tur)
             print(f"{tur}: {json.dumps(ov, ensure_ascii=False) if ov else '(override yok — statik fallback)'}")
         return

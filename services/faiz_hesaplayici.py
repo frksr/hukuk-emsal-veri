@@ -3,9 +3,16 @@
 LLM kullanmaz — saf, deterministik Decimal aritmetiği.
 
 Kapsam:
-- Temerrüt faizi (TBK 88 yasal faiz, TCMB ticari avans, TCMB reeskont)
+- Temerrüt faizi (3095 sayılı Kanun m.1 yasal faiz, TCMB ticari avans,
+  TCMB reeskont, TTK 1530 mal/hizmet tedarikinde geç ödeme faizi)
 - İİK harçları (cezaevi harcı %2, tahsil harcı %4.55)
 - Vekalet ücreti (Avukatlık Asgari Ücret Tarifesi 2024 — yaklaşık kademeli)
+
+Oranlar gün hassasiyetinde, kaynak atıflı FAIZ_DONEMLERI tablosundan gelir
+(bkz. aşağıdaki tablo başındaki not). Yasal faiz artık sabit bir yüzde değil;
+7589 sayılı Kanun (RG 31.07.2026/33326) ile TCMB reeskont oranına endekslendi
+ve yılda bir (gerekirse iki) kez otomatik değişir — bu modül tek bir "güncel
+oran" sabiti YAZMAZ, dönem tarihine göre hesaplar.
 
 UYARI: Bu modül tahmini hesap yapar. Kesin değer mahkeme/icra müdürlüğü
 takdirindedir. Avukat/muhasebeci kontrolü zorunludur.
@@ -21,7 +28,8 @@ from typing import Any
 getcontext().prec = 28
 
 # -----------------------------------------------------------------------------
-# Faiz oranları — yaklaşık, yıl bazlı sabit sözlük (gerçek TCMB verisi)
+# Faiz oranları — yıl bazlı sabit sözlük (yalnızca FAIZ_DONEMLERI'nin
+# kapsamadığı eski tarihler için fallback; bkz. aşağıdaki dönem tablosu).
 # Yıllık % olarak (örn 8.25 = %8.25)
 # -----------------------------------------------------------------------------
 
@@ -31,43 +39,101 @@ TCMB_AVANS_YILLIK: dict[int, float] = {
     2022: 13.75,
     2023: 22.5,
     2024: 45.0,
-    2025: 47.5,
-    2026: 47.5,
+    2025: 44.25,  # 2025 başı — yıl içi kırılımlar için bkz. FAIZ_DONEMLERI
+    2026: 39.75,
 }
 
-YASAL_FAIZ_YILLIK: dict[int, float] = {  # TBK 88 — değişken
+YASAL_FAIZ_YILLIK: dict[int, float] = {  # TBK 88 / 3095 sayılı Kanun m.1
     2020: 9.0,
     2021: 9.0,
     2022: 9.0,
     2023: 9.0,
-    2024: 9.0,
-    2025: 9.0,
-    2026: 9.0,
+    2024: 24.0,  # 1 Haziran 2024'ten itibaren (8485 sayılı CB Kararı)
+    2025: 24.0,
+    2026: 31.0,  # 31 Temmuz 2026'dan itibaren (7589 sayılı Kanun) — bkz. FAIZ_DONEMLERI
 }
 
-# TCMB reeskont oranı (yaklaşık, yıllık %)
+# TCMB reeskont oranı (yıllık %)
 TCMB_REESKONT_YILLIK: dict[int, float] = {
     2020: 9.0,
     2021: 14.75,
     2022: 14.75,
     2023: 23.5,
     2024: 48.0,
-    2025: 50.5,
-    2026: 50.5,
+    2025: 43.25,
+    2026: 38.75,
+}
+
+# Mal/hizmet tedarikinde geç ödeme faizi — TTK 1530 (yalnızca ticari işlerde,
+# tacirler arası mal/hizmet borçlarında; genel ticari temerrütle karıştırılmamalı)
+TTK_1530_YILLIK: dict[int, float] = {
+    2026: 43.0,
 }
 
 FAIZ_TABLOLARI: dict[str, dict[int, float]] = {
     "yasal": YASAL_FAIZ_YILLIK,
     "ticari_avans": TCMB_AVANS_YILLIK,
     "tcmb_reeskont": TCMB_REESKONT_YILLIK,
+    "ttk_1530": TTK_1530_YILLIK,
 }
 
 # Varsayılan oran (tabloda yoksa kullanılır)
 VARSAYILAN_ORAN: dict[str, float] = {
-    "yasal": 9.0,
-    "ticari_avans": 47.5,
-    "tcmb_reeskont": 50.5,
+    "yasal": 31.0,
+    "ticari_avans": 39.75,
+    "tcmb_reeskont": 38.75,
+    "ttk_1530": 43.0,
 }
+
+# -----------------------------------------------------------------------------
+# Dönem bazlı oranlar (gün hassasiyetinde) — bir tarihe uygulanacak oran, o
+# tarihe eşit veya ondan önce başlayan EN SON dönemin oranıdır. Yıl içinde
+# birden fazla oran değişikliği olduğunda (örn. 2024 ve 2026'da yasal faiz)
+# yukarıdaki yıllık tablolar tek bir yıla tek oran sığdıramadığından bu tablo
+# esas alınır; yıllık tablolar yalnızca bu tablonun başlamadığı (daha eski)
+# tarihler için fallback'tir.
+#
+# Kaynak (çapraz doğrulanmış — bkz. SEO_ANALIZ_VE_PLAN.md "Faiz doğruluğu"):
+#  - Yasal faiz: 7589 sayılı Kanun ("12. Yargı Paketi") m.10, RG 31.07.2026/33326
+#    — 3095 sayılı Kanun m.1'i değiştirdi; oran artık TCMB'nin bir önceki yılın
+#    31 Aralık günkü kısa vadeli reeskont oranının %80'i (yıl ortasında reeskont
+#    30 Haziran'da >5 puan sapmışsa ikinci yarı için yeniden hesaplanır).
+#    1 Haziran 2024 – 30 Temmuz 2026 arası: %24 (8485 sayılı CB Kararı,
+#    RG 21.05.2024/32552).
+#  - Ticari avans / TCMB reeskont: TCMB'nin 8 Mart, 17 Eylül ve 20 Aralık 2025
+#    tarihli reeskont-avans ilanları.
+#  - TTK 1530 (mal/hizmet tedarikinde geç ödeme): TCMB'nin 2 Ocak 2026 tarihli,
+#    33125 sayılı RG tebliği — %43, asgari giderim 2.020 TL.
+#
+# Son doğrulama: 2026-08-03. Değişiklikte scripts/update_faiz_oranlari.py
+# --set ile data/faiz_oranlari.json üzerinden de override edilebilir.
+FAIZ_DONEMLERI: dict[str, list[tuple[date, float]]] = {
+    "yasal": [
+        (date(2006, 1, 1), 9.0),
+        (date(2024, 6, 1), 24.0),
+        (date(2026, 7, 31), 31.0),
+    ],
+    "ticari_avans": [
+        (date(2025, 3, 8), 44.25),
+        (date(2025, 9, 17), 42.25),
+        (date(2025, 12, 20), 39.75),
+    ],
+    "tcmb_reeskont": [
+        (date(2025, 3, 8), 43.25),
+        (date(2025, 9, 17), 41.25),
+        (date(2025, 12, 20), 38.75),
+    ],
+    "ttk_1530": [
+        (date(2026, 1, 2), 43.0),
+    ],
+}
+
+FAIZ_DONEM_KAYNAK = (
+    "7589 sayılı Kanun / 12. Yargı Paketi m.10 (RG 31.07.2026/33326); "
+    "8485 sayılı Cumhurbaşkanı Kararı (RG 21.05.2024/32552); "
+    "TCMB reeskont-avans ilanları; TTK 1530 tebliği (RG 02.01.2026/33125)"
+)
+FAIZ_DONEM_SON_KONTROL = "2026-08-03"
 
 # İİK harçları
 CEZAEVI_HARCI_ORAN = Decimal("0.02")        # %2
@@ -139,6 +205,89 @@ def _oran_getir(faiz_turu: str, yil: int) -> float:
     return VARSAYILAN_ORAN[faiz_turu]
 
 
+def _period_max_yil(faiz_turu: str) -> int | None:
+    donemler = FAIZ_DONEMLERI.get(faiz_turu)
+    if not donemler:
+        return None
+    return max(basl.year for basl, _ in donemler)
+
+
+def _oran_getir_tarih(faiz_turu: str, gun: date) -> float:
+    """Belirli bir güne uygulanacak yıllık faiz oranını (%) döndürür.
+
+    Öncelik sırası:
+    1. Dönem tablosunun kapsamadığı (gelecek) yıllar için önce JSON manuel
+       override'a bakılır — operasyonel güncelleme (scripts/update_faiz_oranlari.py
+       --set / --evds) kod deploy'u beklemeden devreye girsin diye.
+    2. Gün hassasiyetli dönem tablosu (FAIZ_DONEMLERI) — kaynak atıflı,
+       2026-08-03 itibarıyla çapraz doğrulanmış.
+    3. Statik yıllık tablo / en yakın yıl / varsayılan (_oran_getir).
+    """
+    if faiz_turu not in FAIZ_TABLOLARI:
+        raise ValueError(
+            f"Bilinmeyen faiz_turu: {faiz_turu!r}. "
+            f"Geçerli: {list(FAIZ_TABLOLARI.keys())}"
+        )
+    max_yil = _period_max_yil(faiz_turu)
+    if max_yil is not None and gun.year > max_yil:
+        try:
+            from services.faiz_oranlari import oran_overrides
+            overrides = oran_overrides(faiz_turu)
+            if gun.year in overrides:
+                return overrides[gun.year]
+        except Exception:
+            pass
+    donemler = FAIZ_DONEMLERI.get(faiz_turu, [])
+    uygun = [(basl, oran) for basl, oran in donemler if basl <= gun]
+    if uygun:
+        _, oran = max(uygun, key=lambda t: t[0])
+        return oran
+    return _oran_getir(faiz_turu, gun.year)
+
+
+def _donemlere_bol(
+    baslangic: date, bitis: date, faiz_turu: str
+) -> list[tuple[date, date, int, float]]:
+    """Tarih aralığını hem takvim yılına hem oran değişikliği tarihlerine göre böler.
+
+    Aynı takvim yılı içinde oran değiştiyse (örn. 2024'te 1 Haziran, 2026'da
+    31 Temmuz) tek bir yıllık oranla hesap yapmak yanlış sonuç verir; bu yüzden
+    yıl sonu VE her dönem başlangıcı birer kesim noktasıdır.
+
+    Returns:
+      [(seg_baslangic, seg_bitis, gun_sayisi, oran_yillik), ...] — baslangic ve
+      bitis dahil, kronolojik sırayla.
+    """
+    if bitis < baslangic:
+        return []
+    kesimler: set[date] = set()
+    yil = baslangic.year
+    while yil <= bitis.year:
+        kesimler.add(date(yil, 12, 31))
+        yil += 1
+    for basl, _oran in FAIZ_DONEMLERI.get(faiz_turu, []):
+        onceki_gun = basl - timedelta(days=1)
+        if baslangic <= onceki_gun < bitis:
+            kesimler.add(onceki_gun)
+    kesim_noktalari = sorted(k for k in kesimler if baslangic <= k < bitis)
+
+    sonuc: list[tuple[date, date, int, float]] = []
+    cur = baslangic
+    for k in kesim_noktalari:
+        if k < cur:
+            continue
+        seg_son = k
+        gun = (seg_son - cur).days + 1
+        oran = _oran_getir_tarih(faiz_turu, cur)
+        sonuc.append((cur, seg_son, gun, oran))
+        cur = seg_son + timedelta(days=1)
+    if cur <= bitis:
+        gun = (bitis - cur).days + 1
+        oran = _oran_getir_tarih(faiz_turu, cur)
+        sonuc.append((cur, bitis, gun, oran))
+    return sonuc
+
+
 # -----------------------------------------------------------------------------
 # Vekalet ücreti — AAÜT 2024 yaklaşık kademeli
 # (Resmi tarifenin basitleştirilmiş yansıması — gerçek hesap için baroya bakın)
@@ -198,7 +347,10 @@ def hesapla(
       anapara: Borç anaparası (TRY varsayılan)
       temerrut_tarihi: Borçlunun temerrüde düştüğü tarih
       vade_tarihi: Hesaplama bitiş tarihi (None → bugün)
-      faiz_turu: "yasal" | "ticari_avans" | "tcmb_reeskont"
+      faiz_turu: "yasal" | "ticari_avans" | "tcmb_reeskont" | "ttk_1530"
+        ("ttk_1530" yalnızca ticari mal/hizmet tedarikinde geç ödeme faizi
+        için; genel ticari temerrütle karıştırılmamalı — bkz. FAIZ_DONEMLERI
+        üstündeki kaynak notu)
       ana_para_para_birimi: Bilgi amaçlı (hesap TRY üzerinden)
 
     Returns:
@@ -212,7 +364,10 @@ def hesapla(
         "tahsil_harci": Decimal,
         "vekalet_ucreti": Decimal,
         "toplam_alacak": Decimal,
-        "yillik_breakdown": [{"yil": int, "gun": int, "oran": float, "faiz": Decimal}],
+        "yillik_breakdown": [
+          {"yil": int, "baslangic": date, "bitis": date, "gun": int,
+           "oran": float, "faiz": Decimal}
+        ],  # aynı yıl içinde oran değiştiyse (2024, 2026 gibi) birden fazla satır olabilir
         "uyari": str,
       }
     """
@@ -248,15 +403,15 @@ def hesapla(
             "uyari": UYARI_METNI,
         }
 
-    # Yıllara böl, her yıl için faiz hesapla
-    segmentler = _yillara_bol(faiz_baslangic, faiz_bitis)
+    # Hem yıl hem de oran değişikliği tarihlerine göre böl (bkz. _donemlere_bol
+    # docstring — aynı yıl içinde oran değişmişse tek oranla hesap yanlış olur)
+    segmentler = _donemlere_bol(faiz_baslangic, faiz_bitis, faiz_turu)
     toplam_faiz = Decimal("0")
     breakdown: list[dict[str, Any]] = []
     toplam_gun = 0
 
-    for yil, gun in segmentler:
-        oran_yillik = _oran_getir(faiz_turu, yil)
-        gun_baz = _yilin_gun_sayisi(yil)
+    for seg_baslangic, seg_bitis, gun, oran_yillik in segmentler:
+        gun_baz = _yilin_gun_sayisi(seg_baslangic.year)
         # Basit (yıllık) faiz: anapara * oran * (gun/gun_baz)
         oran_dec = Decimal(str(oran_yillik)) / Decimal("100")
         faiz_seg = anapara * oran_dec * Decimal(gun) / Decimal(gun_baz)
@@ -264,7 +419,9 @@ def hesapla(
         toplam_faiz += faiz_seg_y
         toplam_gun += gun
         breakdown.append({
-            "yil": yil,
+            "yil": seg_baslangic.year,
+            "baslangic": seg_baslangic,
+            "bitis": seg_bitis,
             "gun": gun,
             "oran": float(oran_yillik),
             "faiz": faiz_seg_y,
@@ -301,5 +458,10 @@ __all__ = [
     "TCMB_AVANS_YILLIK",
     "YASAL_FAIZ_YILLIK",
     "TCMB_REESKONT_YILLIK",
+    "TTK_1530_YILLIK",
+    "FAIZ_TABLOLARI",
+    "FAIZ_DONEMLERI",
+    "FAIZ_DONEM_KAYNAK",
+    "FAIZ_DONEM_SON_KONTROL",
     "UYARI_METNI",
 ]

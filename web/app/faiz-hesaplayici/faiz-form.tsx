@@ -66,9 +66,10 @@ export function FaizForm() {
             <div>
               <label className="text-sm font-medium mb-1.5 block">Faiz Türü</label>
               <select value={tur} onChange={(e) => setTur(e.target.value)} className="w-full h-10 rounded-md border bg-background px-3 text-sm">
-                <option value="yasal">Yasal Faiz (TBK 88)</option>
-                <option value="ticari_avans">Ticari Avans (TCMB)</option>
-                <option value="tcmb_reeskont">TCMB Reeskont</option>
+                <option value="yasal">Yasal Faiz (3095 s. Kanun m.1)</option>
+                <option value="ticari_avans">Ticari Avans / Temerrüt Faizi (TCMB)</option>
+                <option value="tcmb_reeskont">TCMB Reeskont Oranı</option>
+                <option value="ttk_1530">TTK 1530 Geç Ödeme Faizi (mal/hizmet tedariki)</option>
               </select>
             </div>
             <Button type="submit" disabled={loading} className="w-full" size="lg">
@@ -107,18 +108,23 @@ export function FaizForm() {
             </Card>
             {sonuc.yillik_breakdown?.length > 0 && (
               <Card>
-                <CardHeader><CardTitle className="text-base">Yıllık Faiz Dağılımı</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="text-base">Dönem Bazlı Faiz Dağılımı</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Aynı yıl içinde oran değiştiyse (örn. 2026&apos;da 31 Temmuz kırılımı) her dönem ayrı satırda gösterilir.
+                  </p>
+                </CardHeader>
                 <CardContent className="overflow-x-auto">
-                  <table className="w-full min-w-[480px] text-sm">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead className="text-left text-muted-foreground border-b">
-                      <tr><th className="pb-2">Yıl</th><th>Gün</th><th>Oran %</th><th className="text-right">Faiz</th></tr>
+                      <tr><th className="pb-2">Dönem</th><th>Gün</th><th>Oran %</th><th className="text-right">Faiz</th></tr>
                     </thead>
                     <tbody>
                       {sonuc.yillik_breakdown.map((y) => (
-                        <tr key={y.yil} className="border-b last:border-0">
-                          <td className="py-2">{y.yil}</td>
+                        <tr key={`${y.baslangic}-${y.bitis}`} className="border-b last:border-0">
+                          <td className="py-2">{y.baslangic} → {y.bitis}</td>
                           <td>{y.gun}</td>
-                          <td>{y.oran}</td>
+                          <td>%{y.oran}</td>
                           <td className="text-right font-medium">{formatTRY(y.faiz)}</td>
                         </tr>
                       ))}

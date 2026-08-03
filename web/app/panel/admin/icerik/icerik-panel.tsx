@@ -34,6 +34,10 @@ type Makale = {
   cover_image?: string | null;
   published_at?: string | null;
   updated_at?: string | null;
+  editor_name?: string | null;
+  editor_title?: string | null;
+  reviewed_at?: string | null;
+  sources?: string[];
 };
 
 const BOS: Makale = {
@@ -196,6 +200,9 @@ export function IcerikPanel() {
         faq: current.faq,
         author: current.author,
         cover_image: current.cover_image || null,
+        editor_name: current.editor_name || null,
+        editor_title: current.editor_title || null,
+        sources: current.sources || [],
       };
       const url = current.id
         ? `/api/proxy/icerik/admin/makale/${current.id}`
@@ -497,6 +504,53 @@ export function IcerikPanel() {
                 value={current.author || ""}
                 onChange={(e) => setCurrent({ ...current, author: e.target.value })}
                 placeholder="Hukukçu Yapay Zekası Editör Ekibi"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-900 mb-1">
+              Hukuki inceleme (E-E-A-T) — isteğe bağlı
+            </p>
+            <p className="text-xs text-amber-800 mb-3">
+              İçeriği gerçekten inceleyen bir hukukçu varsa adını ve unvanını girin
+              (örn. &quot;Av. Ad Soyad&quot;, &quot;İstanbul Barosu&quot;). Bu alan sahte/uydurma bir
+              isimle DOLDURULMAMALI — boş bırakılırsa yalnızca yazar adı gösterilir.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">İnceleyen (editör) adı</label>
+                <input
+                  className={inputCls}
+                  value={current.editor_name || ""}
+                  onChange={(e) => setCurrent({ ...current, editor_name: e.target.value })}
+                  placeholder="Örn. Av. Ad Soyad"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Unvan / baro sicili</label>
+                <input
+                  className={inputCls}
+                  value={current.editor_title || ""}
+                  onChange={(e) => setCurrent({ ...current, editor_title: e.target.value })}
+                  placeholder="Örn. Av., İstanbul Barosu"
+                />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="text-sm font-medium">
+                Kaynakça (her satıra bir kaynak/mevzuat linki)
+              </label>
+              <textarea
+                className={`${inputCls} min-h-[70px]`}
+                value={(current.sources || []).join("\n")}
+                onChange={(e) =>
+                  setCurrent({
+                    ...current,
+                    sources: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                  })
+                }
+                placeholder="Örn. https://www.resmigazete.gov.tr/... — 7589 sayılı Kanun"
               />
             </div>
           </div>
