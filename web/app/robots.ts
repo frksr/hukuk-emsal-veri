@@ -14,6 +14,7 @@ const DISALLOW = [
   "/kayit",
   "/sifre-sifirla",
   "/hosgeldin",
+  "/bulten/cikis",
 ];
 
 export default function robots(): MetadataRoute.Robots {

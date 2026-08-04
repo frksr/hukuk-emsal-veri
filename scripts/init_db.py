@@ -44,6 +44,8 @@ MIGRATIONS = [
     "09_rls_fix_recursion.sql",  # RLS infinite recursion düzeltmesi
     "10_saved_decisions.sql",
     "11_generated_documents.sql",
+    "11_waitlist.sql",             # NOT: 11_generated_documents.sql ile aynı numara,
+                                    # iki bağımsız migration dosyası — listede eksikti
     "12_user_notes.sql",
     "13_usage_credits.sql",
     "14_reminders.sql",
@@ -62,6 +64,8 @@ MIGRATIONS = [
     "27_publisher.sql",            # Publisher API v1 — blog otomasyonu (blog_articles genişletme)
     "28_extension_tokens.sql",     # UYAP eklentisi kişisel erişim anahtarları (daha önce listede eksikti)
     "29_account_restriction.sql",  # Admin: hesap kısıtlama (restricted_at) + onay-bekleyen index
+    "30_blog_articles_editor.sql", # E-E-A-T: editör/inceleme alanları (daha önce listede eksikti)
+    "31_newsletter_subscribers.sql",  # Haftalık bülten aboneleri (blog yayın bildirimi)
 ]
 
 # Lokal dev rol parolaları — production'da ASLA uygulanmaz.

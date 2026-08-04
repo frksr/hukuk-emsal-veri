@@ -97,7 +97,12 @@ async def send_email(
 
 # ----- Templates -----
 
-def _wrap(title: str, body: str, cta: tuple[str, str] | None = None) -> str:
+def _wrap(
+    title: str,
+    body: str,
+    cta: tuple[str, str] | None = None,
+    footer_extra: str | None = None,
+) -> str:
     cta_html = ""
     if cta:
         url, label = cta
@@ -107,6 +112,7 @@ def _wrap(title: str, body: str, cta: tuple[str, str] | None = None) -> str:
             f'background:#1e3a5f;color:#fff;text-decoration:none;border-radius:6px;'
             f'font-weight:600;">{label}</a></p>'
         )
+    footer_extra_html = f"<br>{footer_extra}" if footer_extra else ""
 
     return f"""<!DOCTYPE html>
 <html lang="tr"><head><meta charset="UTF-8"></head>
@@ -121,7 +127,7 @@ def _wrap(title: str, body: str, cta: tuple[str, str] | None = None) -> str:
     <hr style="border:none;border-top:1px solid #eee;margin:32px 0 16px;">
     <p style="color:#888;font-size:12px;text-align:center;margin:0;">
       Bu e-posta {SITE_URL} sistemi tarafından otomatik gönderildi.<br>
-      İletişim: <a href="{SITE_URL}/panel/oneri" style="color:#1e3a5f;">Bize Yazın</a>
+      İletişim: <a href="{SITE_URL}/panel/oneri" style="color:#1e3a5f;">Bize Yazın</a>{footer_extra_html}
     </p>
   </div>
 </body></html>"""
@@ -334,5 +340,44 @@ async def send_publish_approval_email(
     return await send_email(
         to=to,
         subject=f"[{site_name}] Onay bekliyor: {title[:80]}",
+        html=html,
+    )
+
+
+async def send_new_post_email(
+    to: str,
+    *,
+    title: str,
+    excerpt: str,
+    url: str,
+    unsubscribe_url: str,
+) -> bool:
+    """Haftalık bülten — yeni blog yazısı bildirimi.
+
+    BİLEREK yalnızca başlık + özet + siteye yönlendiren bağlantı gönderir;
+    makalenin tam metni e-postaya GÖMÜLMEZ. Okuyucuyu siteye yönlendirmek
+    (sayfa görüntülenmesi, ilgili araçlara iç link, dönüşüm) tam-metin
+    e-postadan hem trafik hem SEO açısından daha değerlidir.
+    """
+    ozet_html = f"<p style='margin:8px 0 0;color:#444;'>{excerpt}</p>" if excerpt else ""
+    body = (
+        "<p style='margin:0 0 4px;font-size:12px;text-transform:uppercase;"
+        "letter-spacing:.05em;color:#94a3b8;'>Yeni yazı yayınlandı</p>"
+        f"<p style='font-size:18px;font-weight:700;color:#0f172a;margin:0;'>{title}</p>"
+        f"{ozet_html}"
+    )
+    footer_extra = (
+        f"<a href='{unsubscribe_url}' style='color:#888;'>"
+        "Bülten aboneliğinden çık</a>"
+    )
+    html = _wrap(
+        "📰 Hukuk Rehberi'nde yeni bir yazı var",
+        body,
+        cta=(url, "Yazıyı Oku"),
+        footer_extra=footer_extra,
+    )
+    return await send_email(
+        to=to,
+        subject=f"📰 Yeni yazı: {title[:70]}",
         html=html,
     )

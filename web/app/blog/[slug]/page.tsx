@@ -8,6 +8,7 @@ import {
   faqJsonLd,
 } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
+import { BultenForm } from "@/components/bulten-form";
 import { KapakYerTutucu } from "../_kapak";
 
 const API_BASE =
@@ -398,6 +399,8 @@ export default async function BlogMakalePage({
           Bu içerik bilgilendirme amaçlıdır, hukuki danışmanlık değildir. Somut
           durumunuz için bir avukata danışın.
         </p>
+
+        <BultenForm className="mt-10" />
       </article>
     </>
   );

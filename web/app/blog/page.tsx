@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buildMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/json-ld";
+import { BultenForm } from "@/components/bulten-form";
 import { KapakYerTutucu } from "./_kapak";
 
 const API_BASE =
@@ -84,6 +85,8 @@ export default async function BlogIndexPage() {
           Emsal karar, ihtarname, icra ve faiz konularında pratik, kaynak
           gösterimli rehberler. Her rehber, ilgili aracımıza bağlanır.
         </p>
+
+        <BultenForm className="mb-10 max-w-xl" />
 
         {kartlar.length === 0 ? (
           <p className="text-muted-foreground">Henüz yayınlanmış rehber yok.</p>

@@ -315,18 +315,36 @@ async def admin_yayinla(
     admin: CurrentUser = Depends(require_admin),
 ) -> APIResponse:
     async with service_session() as conn:
+        # Bülten bildirimini yalnızca İLK yayında göndermek için, güncellemeden
+        # ÖNCEKİ published_at değerine bakılır (COALESCE sonrasında bu bilgi kaybolur).
+        onceki_published_at = await conn.fetchval(
+            "SELECT published_at FROM blog_articles WHERE id = $1::uuid", makale_id
+        )
         rec = await conn.fetchrow(
             """UPDATE blog_articles
                SET status = 'published',
                    published_at = COALESCE(published_at, NOW()),
                    updated_at = NOW()
                WHERE id = $1::uuid
-               RETURNING slug, status, published_at""",
+               RETURNING id, slug, title, excerpt, status, published_at""",
             makale_id,
         )
     if not rec:
         raise HTTPException(404, "Makale bulunamadı.")
     _liste_cache.clear()
+
+    # İlk kez yayınlanıyorsa (taslak → yayın) bülten abonelerine bildirim
+    # gönder. Taslağa alıp tekrar yayınlamada (published_at zaten doluysa)
+    # tekrar mail atılmaz. Best-effort: bildirim hatası yayını etkilemez.
+    if onceki_published_at is None:
+        try:
+            from services.newsletter import notify_subscribers_of_new_post
+            await notify_subscribers_of_new_post(
+                slug=rec["slug"], title=rec["title"], excerpt=rec["excerpt"] or "",
+            )
+        except Exception:
+            log.exception("Bülten bildirimi gönderilemedi (makale_id=%s)", makale_id)
+
     return APIResponse(ok=True, data=_row(rec), message="Makale yayınlandı.")
 
 
