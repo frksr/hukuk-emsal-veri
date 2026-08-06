@@ -113,7 +113,7 @@ steps:
       - "--cpu=1"
       - "--no-cpu-throttling"        # min-instance sicak dursa da CPU kisiliyordu -> ilk istekte uyanma gecikmesi/QUIC takilmasi. CPU'yu surekli acik tutar.
       - "--min-instances=1"          # 0 iken soguk baslangic/churn "site ac-kapa" hissi veriyordu
-      - "--max-instances=4"
+      - "--max-instances=10"         # 4 -> 10: sadece tavan; gercek trafik olmadan ek maliyet yok (Cloud Run instance-saniyesi bazinda faturalar)
       - "--allow-unauthenticated"
       - "--add-cloudsql-instances=$PROJECT_ID:${_REGION}:${_SQL_INSTANCE_ID}"
       - "--add-volume=name=ts,type=cloud-storage,bucket=${_TS_BUCKET}"
@@ -142,7 +142,7 @@ steps:
       - "--cpu=1"
       - "--no-cpu-throttling"        # kok domaini bu servis karsiliyor -> tarayici ilk istekte throttled instance'i beklemesin (QUIC takilmasini onler)
       - "--min-instances=1"
-      - "--max-instances=4"
+      - "--max-instances=10"
       - "--allow-unauthenticated"
       - "--add-cloudsql-instances=$PROJECT_ID:${_REGION}:${_SQL_INSTANCE_ID}"
       - "--update-env-vars=NODE_ENV=production,NEXT_PUBLIC_SITE_URL=${_SITE_URL},NEXT_PUBLIC_API_URL=${_API_PUBLIC_URL},API_INTERNAL_URL=${_API_PUBLIC_URL},NEXTAUTH_URL=${_SITE_URL}"
