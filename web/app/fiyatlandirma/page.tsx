@@ -43,7 +43,7 @@ const PLANS = [
   {
     name: "Pro Solo",
     tier: "pro_solo",
-    price: "499",
+    price: "699",
     period: "₺/ay",
     tagline: "Tek avukat — sınırsız araştırma",
     cta: { label: "Pro'ya Geç", href: "/kayit?plan=pro_solo" },
@@ -57,7 +57,7 @@ const PLANS = [
   {
     name: "Pro + UYAP",
     tier: "pro_solo_uyap",
-    price: "799",
+    price: "1.099",
     period: "₺/ay",
     tagline: "Tek avukat + dosya asistanı",
     cta: { label: "Pro + UYAP Al", href: "/kayit?plan=pro_solo_uyap" },
@@ -73,7 +73,7 @@ const PLANS = [
   {
     name: "Team",
     tier: "team",
-    price: "1.499",
+    price: "1.999",
     period: "₺/ay",
     tagline: "Hukuk büroları — 5 üyeye kadar",
     cta: { label: "Ekip Planı Al", href: "/kayit?plan=team" },
@@ -82,7 +82,7 @@ const PLANS = [
       "5 kullanıcı (ek üye eklenebilir)",
       "Ortak çalışma alanı",
       "Kullanım raporları",
-      "UYAP seçeneği (+500₺/ay)",
+      "UYAP seçeneği (+600₺/ay)",
     ],
     missing: [],
   },

@@ -11,7 +11,9 @@ from api.audit import audit
 from api.concurrency import run_blocking
 from api.auth import CurrentUser, require_uyap
 from api.db import db_session
-from api.rate_limit import rate_limit_for
+from api.rate_limit import (
+    kullanici_donem_penceresi, atomik_kota_kullan, _client_ip,
+)
 from api.schemas import APIResponse
 
 log = logging.getLogger("api.uyap")
@@ -38,6 +40,46 @@ async def _check_quota(user: CurrentUser) -> tuple[int, int]:
         current = usage["c"] if usage else 0
         max_docs = (usage["max_uyap_documents"] if usage else 0) or 0
         return current, max_docs
+
+
+async def _uyap_sorgu_kota(
+    request: Request,
+    user: CurrentUser = Depends(require_uyap),
+) -> CurrentUser:
+    """UYAP sorgu için tenant'a özel AYLIK kota (tenants.max_monthly_queries).
+
+    BUG DÜZELTMESİ: bu sütun plan değişiminde (checkout/webhook/admin upgrade)
+    doğru şekilde set ediliyordu ama HİÇBİR YERDE fiilen kontrol edilmiyordu —
+    pro_solo_uyap/team_uyap UNLIMITED_TIERS içinde olduğundan eski
+    rate_limit_for("sorgu") bağımlılığı bu modülde sınırsız izin veriyordu.
+    İlan edilen kota (örn. 150/750 sorgu/ay) artık burada gerçekten uygulanır.
+    """
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        limit = await conn.fetchval(
+            "SELECT max_monthly_queries FROM tenants WHERE id = $1", user.tenant_id,
+        )
+    donem_bas, donem_bit, _ = await kullanici_donem_penceresi(user.user_id, user.tenant_id)
+    ip = _client_ip(request)
+    ua = request.headers.get("user-agent", "")
+    izin = await atomik_kota_kullan(
+        "sorgu", user.user_id, user.tenant_id, ip, ua,
+        int(limit) if limit else None, donem_bas, log_et=True,
+    )
+    if not izin:
+        raise HTTPException(
+            429,
+            {
+                "error": "rate_limit_exceeded",
+                "message": (
+                    f"Bu ayki UYAP sorgu hakkınız ({limit}) doldu. "
+                    "Üst pakete geçin veya yenileme tarihinde tekrar deneyin."
+                ),
+                "limit": limit,
+                "tier": user.tenant_plan,
+                "reset_at": donem_bit.isoformat(),
+            },
+        )
+    return user
 
 
 async def _ingest_document(
@@ -475,7 +517,7 @@ class SorguReq(BaseModel):
     include_emsal: bool = True  # public emsallerden de getir
 
 
-@router.post("/sorgu", response_model=APIResponse, dependencies=[Depends(rate_limit_for("sorgu"))])
+@router.post("/sorgu", response_model=APIResponse, dependencies=[Depends(_uyap_sorgu_kota)])
 async def ai_sorgu(
     payload: SorguReq,
     request: Request,

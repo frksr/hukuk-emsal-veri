@@ -37,25 +37,25 @@ IYZICO_WEBHOOK_SECRET = os.environ.get("IYZICO_WEBHOOK_SECRET", "")
 PLAN_PRICING: dict[str, dict] = {
     "pro_solo": {
         "name": "Pro Solo",
-        "amount": Decimal("499.00"),
+        "amount": Decimal("699.00"),
         "currency": "TRY",
         "iyzico_pricing_plan_ref": os.environ.get("IYZICO_PLAN_PRO_SOLO", ""),
     },
     "pro_solo_uyap": {
         "name": "Pro + UYAP",
-        "amount": Decimal("799.00"),
+        "amount": Decimal("1099.00"),
         "currency": "TRY",
         "iyzico_pricing_plan_ref": os.environ.get("IYZICO_PLAN_PRO_UYAP", ""),
     },
     "team": {
         "name": "Team",
-        "amount": Decimal("1499.00"),
+        "amount": Decimal("1999.00"),
         "currency": "TRY",
         "iyzico_pricing_plan_ref": os.environ.get("IYZICO_PLAN_TEAM", ""),
     },
     "team_uyap": {
         "name": "Team + UYAP",
-        "amount": Decimal("1999.00"),
+        "amount": Decimal("2599.00"),
         "currency": "TRY",
         "iyzico_pricing_plan_ref": os.environ.get("IYZICO_PLAN_TEAM_UYAP", ""),
     },

@@ -43,8 +43,8 @@ async def _tenant_plani_uygula(conn, tenant_id, plan_tier: str) -> None:
              WHEN $1 = 'team_uyap' THEN 250
              WHEN $1 = 'enterprise' THEN 100000 ELSE 0 END,
            max_monthly_queries = CASE
-             WHEN $1 = 'pro_solo_uyap' THEN 200
-             WHEN $1 = 'team_uyap' THEN 1000
+             WHEN $1 = 'pro_solo_uyap' THEN 150
+             WHEN $1 = 'team_uyap' THEN 750
              WHEN $1 = 'enterprise' THEN 100000 ELSE 0 END,
            max_users = CASE
              WHEN $1::text LIKE 'team%' THEN 5
@@ -328,8 +328,8 @@ async def callback(
                          ELSE 0
                        END,
                        max_monthly_queries = CASE
-                         WHEN $1 = 'pro_solo_uyap' THEN 200
-                         WHEN $1 = 'team_uyap' THEN 1000
+                         WHEN $1 = 'pro_solo_uyap' THEN 150
+                         WHEN $1 = 'team_uyap' THEN 750
                          WHEN $1 = 'enterprise' THEN 100000
                          ELSE 0
                        END,
@@ -889,8 +889,8 @@ async def webhook(request: Request):
                          WHEN s.plan_tier = 'enterprise' THEN 100000
                          ELSE 0 END,
                        max_monthly_queries = CASE
-                         WHEN s.plan_tier = 'pro_solo_uyap' THEN 200
-                         WHEN s.plan_tier = 'team_uyap' THEN 1000
+                         WHEN s.plan_tier = 'pro_solo_uyap' THEN 150
+                         WHEN s.plan_tier = 'team_uyap' THEN 750
                          WHEN s.plan_tier = 'enterprise' THEN 100000
                          ELSE 0 END,
                        max_users = CASE

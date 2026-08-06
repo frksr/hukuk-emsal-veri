@@ -829,8 +829,8 @@ async def manual_upgrade(
                  ELSE 0
                END,
                max_monthly_queries = CASE
-                 WHEN $1::text = 'pro_solo_uyap' THEN 200
-                 WHEN $1::text = 'team_uyap' THEN 1000
+                 WHEN $1::text = 'pro_solo_uyap' THEN 150
+                 WHEN $1::text = 'team_uyap' THEN 750
                  WHEN $1::text = 'enterprise' THEN 100000
                  ELSE 0
                END,

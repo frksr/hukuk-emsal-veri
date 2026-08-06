@@ -32,7 +32,7 @@ const ADIMLAR = [
     icon: Gem,
     baslik: "Planlar & Limitler",
     metin:
-      "Ücretsiz planda her araç için günlük deneme hakkınız var; Pro'da sınırsız kullanın. Kalan haklarınızı panel ana sayfasındaki kullanım panosundan takip edebilirsiniz.",
+      "Ücretsiz planda her araç için günlük deneme hakkınız var; Pro'da aylık adil kullanım hakkınız çok daha geniş. Kalan haklarınızı panel ana sayfasındaki kullanım panosundan takip edebilirsiniz.",
   },
 ];
 

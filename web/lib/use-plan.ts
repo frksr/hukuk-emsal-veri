@@ -34,7 +34,8 @@ const BOS: PlanState = {
 
 /**
  * Bir aracı KULLANMAYI DENEYEBİLİR mi? Giriş yapan her kullanıcı deneyebilir:
- * ücretsiz planda küçük günlük deneme hakkı vardır, Pro'da sınırsız, ayrıca o modülde
+ * ücretsiz planda küçük günlük deneme hakkı vardır, Pro'da aylık adil kullanım hakkı (bkz.
+ * FAIR_USE_LIMITS backend), ayrıca o modülde
  * ek-paket kredisi olabilir. Günlük hak + kredi biterse backend 402 döner ve form bunu
  * yükseltme daveti olarak gösterir. Giriş yoksa kullanım için kayıt gerekir.
  */

@@ -3,14 +3,14 @@
 PostgreSQL'de usage_events tablosuna her isteği log'lar,
 günlük kotayı kontrol eder.
 
-Tier limitleri (günlük):
-- anonim:        20 emsal, 3 dilekçe, hesaplayıcı sınırsız
-- free:          40 emsal, 6 dilekçe, hesaplayıcı sınırsız, 5 ozet
-- pro_solo:      sınırsız
-- pro_solo_uyap: sınırsız + UYAP kotası
-- team:          sınırsız
-- team_uyap:     sınırsız + UYAP kotası
-- enterprise:    sınırsız
+Tier limitleri:
+- anonim:        20 emsal/gün, 3 dilekçe/gün, hesaplayıcı sınırsız
+- free:          40 emsal/gün, 6 dilekçe/gün, hesaplayıcı sınırsız, 5 ozet/gün
+- pro_solo:      aylık adil kullanım hakkı (bkz. FAIR_USE_LIMITS)
+- pro_solo_uyap: pro_solo hakları + UYAP sorgu kotası (tenants.max_monthly_queries)
+- team:          aylık adil kullanım hakkı (bkz. FAIR_USE_LIMITS)
+- team_uyap:     team hakları + UYAP sorgu kotası (tenants.max_monthly_queries)
+- enterprise:    sınırsız (satışla özelleştirilir)
 """
 from __future__ import annotations
 import calendar
@@ -65,6 +65,31 @@ UNLIMITED_TIERS = {"pro_solo", "pro_solo_uyap", "team", "team_uyap", "enterprise
 # maliyetli — bu yüzden pakete göre farklı günlük hak verilir.)
 PER_PLAN_TOOLS = {"sozlesme"}
 
+# Pro/Team planlarda "sınırsız" reklamı gerçek bir üst sınır olmadan yanıltıcıydı.
+# Burada tanımlı adil kullanım (fair-use) aylık hakları pazarlama sayfasındaki
+# rakamlarla eşleşir; aşımda kullanıcı ek paket/kredi ile devam eder. Enterprise
+# bu sözlükte YOK — UNLIMITED_TIERS üzerinden gerçekten sınırsız kalır (satış
+# görüşmesiyle özelleştirilen paket). NOT: pencere AYLIK'tır (kullanici_donem_
+# penceresi ile abonelik/kayıt gününe demirlenir) — "DAILY_LIMITS" adı tarihsel.
+FAIR_USE_LIMITS: dict[str, dict[str, int]] = {
+    "pro_solo": {
+        "dilekce": 20, "ihtarname": 15, "ozet": 15,
+        "denetim": 10, "karsi_argument": 10, "kvkk": 20,
+    },
+    "pro_solo_uyap": {  # Pro Solo ile aynı Yapay Zeka hakları + UYAP erişimi
+        "dilekce": 20, "ihtarname": 15, "ozet": 15,
+        "denetim": 10, "karsi_argument": 10, "kvkk": 20,
+    },
+    "team": {
+        "dilekce": 80, "ihtarname": 60, "ozet": 60,
+        "denetim": 40, "karsi_argument": 40, "kvkk": 80,
+    },
+    "team_uyap": {  # Team ile aynı Yapay Zeka hakları + UYAP erişimi
+        "dilekce": 80, "ihtarname": 60, "ozet": 60,
+        "denetim": 40, "karsi_argument": 40, "kvkk": 80,
+    },
+}
+
 # Sözleşme analizi — plan bazlı günlük kullanım hakkı.
 SOZLESME_LIMITS: dict[str, int] = {
     "anonim": 0,
@@ -85,7 +110,9 @@ def tool_daily_limit(
     - override verilmiş ve override[event_type][tier] mevcutsa onu kullanır
       (değer None veya -1 ise sınırsız → None döner). DB'den gelen admin ayarı.
     - Pahalı araçlar (PER_PLAN_TOOLS): her planın kendi limiti (Pro'da bile sınırlı).
-    - Diğer araçlar: Pro+ sınırsız (None); ücretsiz/anonim için DAILY_LIMITS.
+    - Pro/Team (enterprise hariç): FAIR_USE_LIMITS'te tanımlıysa aylık adil
+      kullanım hakkı; tanımlı değilse sınırsız (None).
+    - Diğer araçlar: ücretsiz/anonim için DAILY_LIMITS.
     """
     if override:
         tool_map = override.get(event_type)
@@ -102,6 +129,8 @@ def tool_daily_limit(
             return SOZLESME_LIMITS.get(tier, SOZLESME_LIMITS["free"])
         # ileride başka pahalı araçlar eklenirse buraya
         return SOZLESME_LIMITS.get(tier, 1)
+    if tier in FAIR_USE_LIMITS and event_type in FAIR_USE_LIMITS[tier]:
+        return FAIR_USE_LIMITS[tier][event_type]
     if tier in UNLIMITED_TIERS:
         return None
     return DAILY_LIMITS.get(tier, DAILY_LIMITS["anonim"]).get(event_type, 10)
