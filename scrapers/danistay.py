@@ -25,7 +25,7 @@ from selectolax.parser import HTMLParser
 
 from common.normalize import (
     normalize_text, extract_case_no, extract_decision_no,
-    extract_decision_date, detect_keywords,
+    extract_decision_date, detect_keywords, clean_html_to_text,
 )
 from common.anonymize import audit
 from common.job_queue import JobQueue
@@ -275,15 +275,17 @@ class DanistayScraper(BaseScraper):
                                 candidate = v
                                 break
                     if candidate:
-                        text = normalize_text(
-                            HTMLParser(candidate).text(separator="\n")
-                            if "<" in candidate else candidate
-                        )
+                        # clean_html_to_text: kaçışlı HTML'e (&lt;font&gt;) de
+                        # dayanıklı. Eski kod "'<' var mı" diye bakıyordu; API
+                        # HTML'i JSON içinde kaçışlı gönderdiğinde bu kontrol
+                        # False dönüyor, ham HTML metne/embedding'e/indekse
+                        # olduğu gibi giriyordu.
+                        text = clean_html_to_text(candidate)
                 except Exception as e:
                     print(f"[DAN] detay JSON parse {item['id']}: {e}",
                           file=sys.stderr)
             else:
-                text = normalize_text(HTMLParser(raw_response).text(separator="\n"))
+                text = clean_html_to_text(raw_response)
 
             if text:
                 self.write_raw(item["id"], raw_response, ext="html")

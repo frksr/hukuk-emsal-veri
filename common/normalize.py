@@ -1,4 +1,5 @@
 """Türkçe hukuki metin normalizasyonu."""
+import html as _html
 import re
 import unicodedata
 
@@ -22,18 +23,65 @@ def normalize_text(text):
     return text.strip()
 
 
+#: Metinde HTML kalıntısı olduğunu ele veren işaretler.
+_HTML_IZI_RE = re.compile(
+    r"<\s*(?:html|head|body|font|br|p|div|span|table|tr|td|meta|ul|li)\b|"
+    r"&(?:lt|gt|amp|nbsp|quot|#\d+);",
+    re.IGNORECASE,
+)
+
+#: Kaç tur unescape+strip denenecek. Kaynak siteler bazen HTML'i JSON içinde
+#: KAÇIŞLI (&lt;font&gt;) gönderiyor; bir tur unescape sonrası ortaya gerçek
+#: HTML çıkıyor ve ikinci bir temizlik turu gerekiyor.
+_MAX_TEMIZLIK_TURU = 3
+
+
+def html_izi_var_mi(text: str) -> bool:
+    """Metinde temizlenmemiş HTML kalıntısı var mı?"""
+    return bool(text) and bool(_HTML_IZI_RE.search(text))
+
+
 def clean_html_to_text(html: str) -> str:
-    """HTML'den karar metnini ayıkla — script/style atılır, sadece görünür içerik."""
+    """HTML'den karar metnini ayıkla — script/style atılır, sadece görünür içerik.
+
+    KAÇIŞLI HTML'E KARŞI DAYANIKLI
+    ------------------------------
+    Danıştay API'si karar metnini JSON içinde HTML-KAÇIŞLI gönderebiliyor
+    (`&lt;font face=...&gt;`). Eski kod "metinde '<' var mı" diye bakıp
+    kaçışlı hâli düz metin sanıyor, sonra normalize sırasında entity'ler
+    çözülünce ham HTML kullanıcıya, embedding'e ve tam metin indeksine
+    olduğu gibi giriyordu.
+
+    Artık: unescape → strip → hâlâ HTML izi varsa tekrarla (en fazla 3 tur).
+    """
     if not html:
         return ""
     from selectolax.parser import HTMLParser
-    tree = HTMLParser(html)
-    # JavaScript ve CSS bloklarını sil
-    for sel in ("script", "style", "noscript", "iframe", "head"):
-        for node in tree.css(sel):
-            node.decompose()
-    body = tree.body or tree.root
-    text = body.text(separator="\n") if body else ""
+
+    text = html
+    for _ in range(_MAX_TEMIZLIK_TURU):
+        # 1) Entity'leri çöz. Çift kaçışlı içerikte (&amp;lt;) bu tur yalnızca
+        #    bir kat açar; kalan katlar sonraki turlarda çözülür.
+        cozulmus = _html.unescape(text)
+
+        # 2) Gerçek etiket varsa ayıkla. Yoksa (henüz kaçışlıysa) dokunma —
+        #    bir sonraki tur bir kat daha unescape edecek.
+        if "<" in cozulmus:
+            tree = HTMLParser(cozulmus)
+            # JavaScript, CSS ve <head> içeriği (meta/charset) metne girmemeli.
+            for sel in ("script", "style", "noscript", "iframe", "head"):
+                for node in tree.css(sel):
+                    node.decompose()
+            body = tree.body or tree.root
+            cozulmus = body.text(separator="\n") if body else ""
+
+        # İlerleme yoksa döngüde kalma (bozuk/parse edilemeyen içerik).
+        if cozulmus == text:
+            break
+        text = cozulmus
+        if not html_izi_var_mi(text):
+            break
+
     return normalize_text(text)
 
 

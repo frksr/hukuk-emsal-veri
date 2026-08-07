@@ -106,3 +106,28 @@ export function absoluteUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalized}`;
 }
+
+
+/**
+ * Metinde kalmış HTML kalıntısını temizler — GÖRÜNTÜ TARAFI EMNİYET SUPABI.
+ *
+ * Asıl düzeltme veri hattında (common/normalize.py :: clean_html_to_text);
+ * ama halihazırda indekslenmiş kayıtlar yeniden işlenene kadar kullanıcıya
+ * "<font face=..." gibi çöp gösterilmesin diye burada da süzüyoruz.
+ * Yeni veride bu fonksiyon hiçbir şey değiştirmez.
+ */
+export function htmlKalintisiniTemizle(metin: string): string {
+  if (!metin || !/[<&]/.test(metin)) return metin;
+  return metin
+    .replace(/<(?:script|style)[^>]*>[\s\S]*?<\/(?:script|style)>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&lt;[^&]*?&gt;/g, " ")   // kaçışlı etiketler
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}

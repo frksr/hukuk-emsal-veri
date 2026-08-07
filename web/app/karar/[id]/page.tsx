@@ -12,6 +12,7 @@ import {
   generateOgImageUrl,
 } from "@/lib/seo";
 import { AiOzetButton } from "./ai-ozet-button";
+import { formatTarih, htmlKalintisiniTemizle } from "@/lib/utils";
 
 const API_BASE =
   process.env.API_INTERNAL_URL ||
@@ -92,23 +93,19 @@ function topicEtiketler(k: Karar): string[] {
 // için). Tam metni birebir basmak duplicate/thin içerik riski taşıdığından
 // (SEO_ANALIZ B3) sayfa bu özetle başlar; tam metin katlanır bölümde kalır.
 function ozetCikar(metin: string, maxLen = 360): string {
-  const temiz = (metin ?? "").replace(/\s+/g, " ").trim();
+  const temiz = htmlKalintisiniTemizle((metin ?? "").replace(/\s+/g, " ").trim());
   if (temiz.length <= maxLen) return temiz;
   const kesit = temiz.slice(0, maxLen);
   const sonNokta = kesit.lastIndexOf(". ");
   return (sonNokta > 120 ? kesit.slice(0, sonNokta + 1) : kesit).trim() + " …";
 }
 
-function tarihFormat(t?: string): string {
-  if (!t) return "";
-  try {
-    return new Date(t).toLocaleDateString("tr-TR", {
-      year: "numeric", month: "long", day: "numeric",
-    });
-  } catch {
-    return t;
-  }
-}
+// Geçersiz tarihte "Invalid Date" BASMAZ, boş string döner.
+// Eski hâli `new Date(t).toLocaleDateString()` çağırıyordu; JS geçersiz tarihte
+// exception ATMAZ, "Invalid Date" string'i döndürür — try/catch hiç devreye
+// girmiyordu ve sayfada "Invalid Date tarihinde verilen ..." yazıyordu.
+// lib/utils.ts'teki formatTarih zaten NaN kontrolü yapıyor; onu kullanıyoruz.
+const tarihFormat = (t?: string | null): string => formatTarih(t);
 
 export async function generateMetadata({
   params,
@@ -125,7 +122,7 @@ export async function generateMetadata({
   const konuKismi = etiketler.length
     ? `Konular: ${etiketler.slice(0, 4).join(", ")}. `
     : "";
-  const hamOzet = (karar.cleaned_text ?? "").replace(/\s+/g, " ").trim();
+  const hamOzet = htmlKalintisiniTemizle((karar.cleaned_text ?? "").replace(/\s+/g, " ").trim());
   const description = (
     `${baslik}. ${konuKismi}Anonimleştirilmiş emsal karar özeti, ilgili içtihatlar ve dilekçe oluşturma.` +
     (hamOzet ? ` ${hamOzet}` : "")
@@ -174,7 +171,7 @@ export default async function KararPage({
   if (anon === "failed" || anon === "false" || anon === "0") notFound();
 
   const baslik = kararBaslik(karar);
-  const metin = karar.cleaned_text ?? "";
+  const metin = htmlKalintisiniTemizle(karar.cleaned_text ?? "");
   const tarih = tarihFormat(karar.decision_date);
   const path = `/karar/${encodeURIComponent(karar.id)}`;
   const etiketler = topicEtiketler(karar);
