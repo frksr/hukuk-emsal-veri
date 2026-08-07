@@ -18,14 +18,14 @@ yayınlandığında bildirim gönderimi services/newsletter.py üzerinden yapıl
 from __future__ import annotations
 
 import logging
-import os
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from api.audit import audit
-from api.auth import CurrentUser, get_current_user
+from api.auth import CurrentUser, require_admin
+from api.net import client_ip
 from api.db import service_session
 from api.deps import rate_limit
 from api.schemas import APIResponse
@@ -55,7 +55,7 @@ async def abone_ol(payload: AboneReq, request: Request):
     if not payload.consent:
         raise HTTPException(422, "Devam etmek için e-posta izni onayı gereklidir.")
 
-    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else None)
+    ip = client_ip(request)
 
     async with service_session() as conn:
         existing = await conn.fetchrow(
@@ -114,10 +114,6 @@ async def abonelikten_cik(payload: CikisReq):
 # Admin endpoint'ler — sadece role='admin'
 # ---------------------------------------------------------------------------
 
-async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    if user.role != "admin":
-        raise HTTPException(403, "Sadece admin erişebilir.")
-    return user
 
 
 @router.get("/admin", response_model=APIResponse)

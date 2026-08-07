@@ -15,14 +15,13 @@ zaten router'ın kaydet_uretim çağrısıyla (başarıda) yazıldığından kot
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
 
 from api.auth import CurrentUser, get_optional_user
 from api.rate_limit import (
-    UNLIMITED_TIERS, tool_daily_limit, _current_count, _log_event, _client_ip,
+    tool_daily_limit, _log_event, _client_ip,
     kullanici_donem_penceresi, AI_MODULES, atomik_kota_kullan,
 )
 from services import krediler

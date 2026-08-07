@@ -26,15 +26,15 @@ async def audit(
         resource: "document:abc-123" gibi.
     """
     import json
+    from api.net import client_ip, user_agent
+
     ip = None
     ua = None
     if request:
-        fwd = request.headers.get("x-forwarded-for")
-        if fwd:
-            ip = fwd.split(",")[0].strip()
-        elif request.client:
-            ip = request.client.host
-        ua = request.headers.get("user-agent", "")[:500]
+        # Güvenilir proxy doğrulaması (api/net.py) — XFF'in ilk değerine
+        # güvenmek audit_log.ip_address'i sahtelenebilir kılıyordu.
+        ip = client_ip(request)
+        ua = user_agent(request)
 
     try:
         # audit_log RLS'e tabidir ve INSERT için policy yoktur; sistem yazımı

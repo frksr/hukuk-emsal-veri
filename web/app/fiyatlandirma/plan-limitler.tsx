@@ -57,7 +57,8 @@ export function PlanLimitler({ tier }: { tier: string }) {
   return (
     <ul className="space-y-2 text-sm">
       {TOOL_ORDER.map((t) => {
-        const lim = tl[t];
+        // noUncheckedIndexedAccess: tanımsız araç = sınırsız (null) sayılır.
+        const lim = tl[t] ?? null;
         if (lim === 0) return null; // bu plana dahil değil → gösterme
         return (
           <li key={t} className="flex gap-2">

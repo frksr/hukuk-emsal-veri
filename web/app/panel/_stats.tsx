@@ -50,7 +50,7 @@ export function DashboardStats() {
         let krediLabel = "Ek paket kredisi";
         let krediTitle = "Henüz ek paket krediniz yok.";
         if (krediGirdiler.length === 1) {
-          const [m, n] = krediGirdiler[0];
+          const [m, n] = krediGirdiler[0]!;   // length === 1 kontrol edildi
           krediLabel = `${MODUL_ETIKET[m] ?? m} kredisi`;
           krediTitle = `${MODUL_ETIKET[m] ?? m}: ${n} kredi`;
         } else if (krediGirdiler.length > 1) {

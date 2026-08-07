@@ -9,7 +9,7 @@
 #   ./infra/gcp/setup_gcp.sh all          # baştan sona (migration HARİÇ)
 #   ./infra/gcp/setup_gcp.sh <faz>        # tek faz çalıştır
 #
-# Fazlar:  apis  registry  buckets  data  dbusers  secrets  iam  deploy  verify
+# Fazlar:  apis  registry  buckets  data  dbusers  secrets  iam  deploy  cron  verify
 #
 # Migration ayrı: önce bu scriptin "secrets/dbusers" fazları, sonra
 #   ./infra/gcp/migrate_db.sh   (Cloud SQL proxy gerektirir)
@@ -163,6 +163,53 @@ _API_SERVICE="$API_SERVICE",_WEB_SERVICE="$WEB_SERVICE",\
 _SITE_URL="$SITE_URL",_API_PUBLIC_URL="$API_PUBLIC_URL"
 }
 
+ph_cron() {
+  echo "== Cloud Run Job + Cloud Scheduler (günlük bakım) =="
+  # NEDEN: scripts/purge_deleted.py (KVKK m.7 kalıcı silme) hiçbir zamanlayıcıya
+  # bağlı değildi — kullanıcıya "30 günde silinir" deniyor ama betik elle
+  # çalıştırılmadıkça hiçbir şey silinmiyordu. Bu faz o boşluğu kapatır.
+  local IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/api:latest"
+  local JOB="${CRON_JOB_NAME:-hukuk-cron-daily}"
+  local SCHEDULE="${CRON_SCHEDULE:-15 3 * * *}"      # her gece 03:15
+  local TZ_NAME="${CRON_TIMEZONE:-Europe/Istanbul}"
+
+  gcloud services enable cloudscheduler.googleapis.com run.googleapis.com >/dev/null
+
+  # Job — API imajını kullanır, sadece komutu farklıdır.
+  if gcloud run jobs describe "$JOB" --region="$REGION" >/dev/null 2>&1; then
+    echo "   job '$JOB' var → güncelleniyor"
+    gcloud run jobs update "$JOB" --region="$REGION" --image="$IMAGE" \
+      --command=python --args=-m,scripts.cron_daily \
+      --set-cloudsql-instances="$SQL_CONN" --max-retries=2 --task-timeout=30m
+  else
+    gcloud run jobs create "$JOB" --region="$REGION" --image="$IMAGE" \
+      --command=python --args=-m,scripts.cron_daily \
+      --set-cloudsql-instances="$SQL_CONN" --max-retries=2 --task-timeout=30m
+  fi
+  # Secret'lar API servisiyle aynı olmalı (DB, master key, SMTP).
+  gcloud run jobs update "$JOB" --region="$REGION" \
+    --update-secrets=SERVICE_DATABASE_URL=SERVICE_DATABASE_URL:latest,\
+DATABASE_URL=DATABASE_URL:latest,\
+MASTER_ENCRYPTION_KEY=MASTER_ENCRYPTION_KEY:latest \
+    --update-env-vars=ADMIN_EMAIL="${ADMIN_EMAIL:-}",LOG_FORMAT=json || \
+    echo "   UYARI: secret bağlama başarısız — elle kontrol edin."
+
+  local SA="${CRON_SA:-$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')-compute@developer.gserviceaccount.com}"
+  local URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${JOB}:run"
+
+  if gcloud scheduler jobs describe "${JOB}-tetikleyici" --location="$REGION" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http "${JOB}-tetikleyici" --location="$REGION" \
+      --schedule="$SCHEDULE" --time-zone="$TZ_NAME" --uri="$URI" --http-method=POST \
+      --oauth-service-account-email="$SA"
+  else
+    gcloud scheduler jobs create http "${JOB}-tetikleyici" --location="$REGION" \
+      --schedule="$SCHEDULE" --time-zone="$TZ_NAME" --uri="$URI" --http-method=POST \
+      --oauth-service-account-email="$SA"
+  fi
+  echo "   ✓ '$JOB' her gün $SCHEDULE ($TZ_NAME) çalışacak."
+  echo "   Elle test:  gcloud run jobs execute $JOB --region=$REGION"
+}
+
 ph_verify() {
   echo "== Doğrulama =="
   local url
@@ -170,6 +217,8 @@ ph_verify() {
   echo "   API URL: $url"
   echo "   /api/health:"
   curl -s "$url/api/health" || true; echo
+  echo "   /api/ready (DB dahil — 503 dönerse DB erişilemez demektir):"
+  curl -s -o /dev/null -w "   HTTP %{http_code}\n" "$url/api/ready" || true
   url="$(gcloud run services describe "$WEB_SERVICE" --region="$REGION" --format='value(status.url)' 2>/dev/null || true)"
   [ -n "$url" ] && echo "   WEB URL: $url"
 }
@@ -184,12 +233,14 @@ case "${1:-all}" in
   secrets)  ph_secrets ;;
   iam)      ph_iam ;;
   deploy)   ph_deploy ;;
+  cron)     ph_cron ;;
   verify)   ph_verify ;;
   all)
     ph_apis; ph_registry; ph_buckets; ph_data; ph_dbusers; ph_secrets; ph_iam
     echo
     echo ">> Kurulum tamam. ŞİMDİ migration çalıştır:  ./infra/gcp/migrate_db.sh"
     echo ">> Sonra deploy et:                          ./infra/gcp/setup_gcp.sh deploy"
+    echo ">> En son günlük bakım cron'unu kur:         ./infra/gcp/setup_gcp.sh cron"
     ;;
-  *) echo "Bilinmeyen faz: $1"; echo "Fazlar: apis registry buckets data dbusers secrets iam deploy verify all"; exit 1 ;;
+  *) echo "Bilinmeyen faz: $1"; echo "Fazlar: apis registry buckets data dbusers secrets iam deploy cron verify all"; exit 1 ;;
 esac

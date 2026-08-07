@@ -9,18 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.audit import audit
-from api.auth import CurrentUser, get_current_user
+from api.auth import CurrentUser, require_admin
 from api.db import service_session
 from api.schemas import APIResponse
 
 log = logging.getLogger("api.admin")
 router = APIRouter()
 
-
-async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    if user.role != "admin":
-        raise HTTPException(403, "Bu sayfaya sadece admin erişebilir.")
-    return user
 
 
 @router.get("/dashboard", response_model=APIResponse)
@@ -732,8 +727,17 @@ async def admin_suspend_user(user_id: str, payload: UserRestrictReq, admin: Curr
         if row["role"] == "admin":
             raise HTTPException(400, "Admin hesabı askıya alınamaz.")
         await conn.execute("UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1::uuid", user_id)
+        # API anahtarlarını da iptal et. v1.require_api_key artık users JOIN'i
+        # ile is_active kontrol ediyor, ama anahtarı da pasife çekmek durumu
+        # kullanıcıya (panelde) görünür kılar ve savunmayı ikiye katlar.
+        revoked = await conn.fetch(
+            "UPDATE api_keys SET aktif = FALSE "
+            "WHERE user_id = $1::uuid AND aktif = TRUE RETURNING id",
+            user_id,
+        )
     await audit(action="admin.user_suspended", user_id=admin.user_id, resource=f"user:{user_id}",
-                metadata={"target_user_id": user_id, "reason": payload.reason})
+                metadata={"target_user_id": user_id, "reason": payload.reason,
+                          "api_keys_revoked": len(revoked)})
     return APIResponse(ok=True, message="Hesap askıya alındı.")
 
 
@@ -814,6 +818,11 @@ async def manual_upgrade(
         if not row:
             raise HTTPException(404, "Tenant bulunamadı.")
 
+        # Plan limitleri billing.PLAN_LIMITS'ten gelir — burada kopyalanmış
+        # CASE WHEN blokları vardı ve yeni bir plan eklendiğinde admin paneli
+        # ile ödeme webhook'u farklı limitler yazabiliyordu.
+        from api.routers.billing import plan_limitleri
+        lim = plan_limitleri(payload.plan_tier)
         await conn.execute(
             """UPDATE tenants SET
                plan_tier = $1::plan_tier,
@@ -822,25 +831,12 @@ async def manual_upgrade(
                beta_program = $3,
                beta_invited_by = $4,
                beta_signed_at = CASE WHEN $3 THEN NOW() ELSE beta_signed_at END,
-               max_uyap_documents = CASE
-                 WHEN $1::text = 'pro_solo_uyap' THEN 50
-                 WHEN $1::text = 'team_uyap' THEN 250
-                 WHEN $1::text = 'enterprise' THEN 100000
-                 ELSE 0
-               END,
-               max_monthly_queries = CASE
-                 WHEN $1::text = 'pro_solo_uyap' THEN 150
-                 WHEN $1::text = 'team_uyap' THEN 750
-                 WHEN $1::text = 'enterprise' THEN 100000
-                 ELSE 0
-               END,
-               max_users = CASE
-                 WHEN $1::text LIKE 'team%' THEN 5
-                 WHEN $1::text = 'enterprise' THEN 50
-                 ELSE 1
-               END
+               max_uyap_documents = $6,
+               max_monthly_queries = $7,
+               max_users = $8
                WHERE id = $5::uuid""",
             payload.plan_tier, expires_at, is_beta, payload.beta_invited_by, tenant_id,
+            lim["max_uyap_documents"], lim["max_monthly_queries"], lim["max_users"],
         )
 
         # NOT: /billing/current, tenant'ın en son 'active' subscriptions kaydıyla

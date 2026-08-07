@@ -101,7 +101,10 @@ function inline(text: string, keyBase: string): React.ReactNode[] {
   for (const seg of linkParts) {
     const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(seg);
     if (linkMatch) {
-      const [, label, href] = linkMatch;
+      // noUncheckedIndexedAccess: regex grupları tipte opsiyonel görünür.
+      // Desen ikisini de zorunlu kıldığı için burada güvenli varsayılan veriyoruz.
+      const label = linkMatch[1] ?? "";
+      const href = linkMatch[2] ?? "#";
       out.push(
         href.startsWith("/") ? (
           <Link key={`${keyBase}-l${i++}`} href={href} className="text-primary font-medium hover:underline">

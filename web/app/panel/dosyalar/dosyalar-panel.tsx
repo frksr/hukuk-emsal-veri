@@ -193,6 +193,7 @@ export function DosyalarPanel() {
     async function worker() {
       while (idx < runnable.length) {
         const cur = runnable[idx++];
+        if (!cur) break;   // yarışta başka worker aldıysa
         await uploadOne(cur.item, cur.file);
       }
     }
@@ -401,7 +402,8 @@ export function DosyalarPanel() {
       ) : (
         <div className="space-y-2 stagger">
           {filtered.map((doc) => {
-            const st = STATUS_LABEL[doc.status] || STATUS_LABEL.uploaded;
+            const st = STATUS_LABEL[doc.status] ?? STATUS_LABEL.uploaded
+              ?? { tr: doc.status, color: "bg-secondary text-secondary-foreground" };
             return (
               <Card key={doc.id} className="hover-lift hover:border-primary/50">
                 <CardContent className="p-4 flex items-start gap-3">

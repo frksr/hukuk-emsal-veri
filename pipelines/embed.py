@@ -59,8 +59,10 @@ def main():
         sys.exit(1)
 
     input_path = ROOT / args.input
-    print(f"[EMBED] provider={embeddings.PROVIDER} model="
-          f"{embeddings.API_MODEL if embeddings.PROVIDER=='google' else embeddings.LOCAL_MODEL} "
+    aktif_model = (embeddings.API_MODEL if embeddings.PROVIDER == "google"
+                   else embeddings.LOCAL_MODEL)
+    model_imzasi = f"{embeddings.PROVIDER}:{aktif_model}:{embeddings.EMBEDDING_DIM}"
+    print(f"[EMBED] provider={embeddings.PROVIDER} model={aktif_model} "
           f"dim={embeddings.EMBEDDING_DIM}", file=sys.stderr)
 
     print(f"[EMBED] chunk'lar yükleniyor: {input_path}", file=sys.stderr)
@@ -80,6 +82,34 @@ def main():
         conn.commit()
         print("[EMBED] rag_chunks TRUNCATE edildi", file=sys.stderr)
     else:
+        # MODEL KARIŞIKLIĞI KORUMASI
+        # Embedding modeli değiştirilip --recreate unutulursa, tabloda FARKLI
+        # semantik uzaylardan gelen vektörler karışıyor (aynı 768 boyut ama
+        # karşılaştırılamaz) ve benzerlik skorları sessizce anlamsızlaşıyordu.
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT DISTINCT embedding_model FROM rag_chunks "
+                    "WHERE embedding_model IS NOT NULL"
+                )
+                mevcut_modeller = {r[0] for r in cur.fetchall()}
+            except Exception:
+                conn.rollback()
+                mevcut_modeller = set()   # 32_* migration henüz uygulanmamış
+        yabanci = mevcut_modeller - {model_imzasi}
+        if yabanci:
+            print(
+                f"\n[EMBED] DURDURULDU — tabloda BAŞKA modelle üretilmiş vektörler var:\n"
+                f"         mevcut : {', '.join(sorted(yabanci))}\n"
+                f"         şimdiki: {model_imzasi}\n"
+                f"  Farklı modellerin vektörleri karşılaştırılamaz; benzerlik skorları\n"
+                f"  anlamsız olur. Ya eski modele dönün ya da tümünü yeniden üretin:\n"
+                f"      python -m pipelines.embed --recreate\n",
+                file=sys.stderr,
+            )
+            conn.close()
+            sys.exit(2)
+
         # RESUME: zaten gömülü chunk'ları atla (timeout sonrası kaldığı yerden devam).
         with conn.cursor() as cur:
             cur.execute("SELECT chunk_id FROM rag_chunks")
@@ -94,11 +124,12 @@ def main():
     upsert_sql = """
         INSERT INTO rag_chunks
             (chunk_id, decision_id, chunk_index, document, source, court_chamber,
-             case_no, decision_no, decision_date, topic_tags, source_url, embedding)
+             case_no, decision_no, decision_date, topic_tags, source_url, embedding,
+             embedding_model)
         VALUES
             (%(chunk_id)s, %(decision_id)s, %(chunk_index)s, %(document)s, %(source)s,
              %(court_chamber)s, %(case_no)s, %(decision_no)s, %(decision_date)s,
-             %(topic_tags)s, %(source_url)s, %(embedding)s)
+             %(topic_tags)s, %(source_url)s, %(embedding)s, %(embedding_model)s)
         ON CONFLICT (chunk_id) DO UPDATE SET
             document      = EXCLUDED.document,
             decision_id   = EXCLUDED.decision_id,
@@ -110,7 +141,8 @@ def main():
             decision_date = EXCLUDED.decision_date,
             topic_tags    = EXCLUDED.topic_tags,
             source_url    = EXCLUDED.source_url,
-            embedding     = EXCLUDED.embedding
+            embedding     = EXCLUDED.embedding,
+            embedding_model = EXCLUDED.embedding_model
     """
 
     bs = args.batch_size
@@ -137,6 +169,7 @@ def main():
                 "topic_tags": _tags_to_str(r.get("topic_tags")),
                 "source_url": str(r.get("source_url") or ""),
                 "embedding": vec,
+                "embedding_model": model_imzasi,
             })
 
         with conn.cursor() as cur:

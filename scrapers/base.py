@@ -1,7 +1,5 @@
 """Tüm scraper'ların ortak temeli."""
 from __future__ import annotations
-import json
-import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path

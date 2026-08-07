@@ -66,6 +66,8 @@ MIGRATIONS = [
     "29_account_restriction.sql",  # Admin: hesap kısıtlama (restricted_at) + onay-bekleyen index
     "30_blog_articles_editor.sql", # E-E-A-T: editör/inceleme alanları (daha önce listede eksikti)
     "31_newsletter_subscribers.sql",  # Haftalık bülten aboneleri (blog yayın bildirimi)
+    "32_rag_hybrid_search.sql",    # Hibrit arama (tsvector+GIN), embedding_model, HNSW ayarı
+    "33_rag_unaccent.sql",         # Tam metinde Türkçe karakter katlaması (f_unaccent)
 ]
 
 # Lokal dev rol parolaları — production'da ASLA uygulanmaz.
@@ -93,7 +95,7 @@ async def apply_migration(conn: asyncpg.Connection, filename: str) -> bool:
         await conn.execute(sql)
         print(f"  ✓ {filename}")
         return True
-    except asyncpg.exceptions.DuplicateObjectError as e:
+    except asyncpg.exceptions.DuplicateObjectError:
         # Zaten varsa OK
         print(f"  ⊙ {filename} — bazı objeler zaten var (atlandı)")
         return True

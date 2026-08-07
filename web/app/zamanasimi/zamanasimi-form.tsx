@@ -108,7 +108,12 @@ export function ZamanasimiForm() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Kategori</label>
-              <select value={kategori} onChange={(e) => { setKategori(e.target.value); setAltTip(KATEGORILER[e.target.value].altTipler[0].value); }}
+              <select value={kategori} onChange={(e) => {
+                const yeni = e.target.value;
+                setKategori(yeni);
+                const ilk = KATEGORILER[yeni]?.altTipler?.[0]?.value;
+                if (ilk) setAltTip(ilk);
+              }}
                 className="w-full h-10 rounded-md border bg-background px-3 text-sm">
                 {Object.entries(KATEGORILER).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>

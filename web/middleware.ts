@@ -90,6 +90,8 @@ export function middleware(request: NextRequest) {
   // ölçüm istekleri google-analytics.com / analytics.google.com'a gidiyor.
   const gtag = "https://www.googletagmanager.com";
   const gaConnect = "https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com";
+  // Yalnızca gömülebilir widget sayfaları
+  const embedSayfasi = request.nextUrl.pathname.startsWith("/embed");
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${iyzico} ${gtag}`,
@@ -99,7 +101,12 @@ export function middleware(request: NextRequest) {
     // https: prod domainleri, localhost:* lokalde hangi portta backend olursa olsun kapsar
     `connect-src 'self' https: ${apiOrigin} ${gaConnect} http://localhost:* http://127.0.0.1:*`,
     `frame-src 'self' ${iyzico}`,
-    "frame-ancestors 'self'",
+    // /embed/* — faiz hesaplayıcı widget'ı üçüncü taraf hukuk bürosu sitelerine
+    // gömülmek ÜZERE tasarlandı (components/embed-kodu.tsx kullanıcıya iframe
+    // kodu kopyalatıyor). Global `frame-ancestors 'self'` bu sayfayı da
+    // kapsadığından widget hiçbir sitede açılmıyordu — pazarlanan özellik
+    // fiilen çalışmıyordu. Yalnızca /embed altında çerçevelemeye izin verilir.
+    embedSayfasi ? "frame-ancestors *" : "frame-ancestors 'self'",
     "base-uri 'self'",
     `form-action 'self' ${iyzico}`,
   ].join("; ");

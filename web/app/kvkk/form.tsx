@@ -15,7 +15,9 @@ const SEKTORLER = [
   ["hukuk_burosu", "Hukuk Bürosu"], ["diger", "Diğer"],
 ];
 
-const VERI_TURLERI = [
+// `as const` olmadan eleman tipi (string|undefined)[] çıkarılıyor ve
+// destructuring `[v, l]` undefined üretiyordu.
+const VERI_TURLERI: ReadonlyArray<readonly [string, string]> = [
   ["kisisel", "Kişisel"], ["ozel_nitelikli", "Özel Nitelikli"],
   ["finansal", "Finansal"], ["saglik", "Sağlık"], ["cocuk", "Çocuk"],
   ["calisan", "Çalışan"], ["musteri", "Müşteri"], ["konum", "Konum"],

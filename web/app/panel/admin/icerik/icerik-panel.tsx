@@ -286,7 +286,8 @@ export function IcerikPanel() {
   }
   function faqGuncelle(i: number, alan: keyof Faq, val: string) {
     const faq = [...(current.faq || [])];
-    faq[i] = { ...faq[i], [alan]: val };
+    const mevcut = faq[i] ?? { soru: "", cevap: "" };
+    faq[i] = { ...mevcut, [alan]: val };
     setCurrent({ ...current, faq });
   }
   function faqSil(i: number) {

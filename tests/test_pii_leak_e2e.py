@@ -7,10 +7,8 @@ hiçbirinde bulunmadığını doğrular. Test kırmızıysa KVKK taahhüdü ihla
 merge ETMEYİN.
 """
 from __future__ import annotations
-import json
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from services.pii_redaction import (
     redact, unredact, unredact_safe, redact_for_embedding, RedactionMap,

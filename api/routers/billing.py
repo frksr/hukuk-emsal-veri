@@ -1,27 +1,26 @@
 """Billing endpoints — iyzico subscription checkout + webhook."""
 from __future__ import annotations
+import hashlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.audit import audit
 from api.auth import CurrentUser, get_current_user
 from api.db import db_session, service_session
+from api.net import client_ip
 from api.schemas import APIResponse
 from services.billing import (
     create_subscription_checkout,
     retrieve_checkout_result,
     cancel_subscription,
-    retrieve_subscription,
     create_addon_checkout,
     retrieve_addon_result,
     get_plan_info,
     PLAN_PRICING,
     verify_webhook_signature,
-    webhook_verification_enabled,
     get_authoritative_subscription,
     is_configured as iyzico_is_configured,
 )
@@ -31,27 +30,113 @@ log = logging.getLogger("api.billing")
 router = APIRouter()
 
 
-async def _tenant_plani_uygula(conn, tenant_id, plan_tier: str) -> None:
+#: Plana bağlı tenant limitleri — TEK KAYNAK.
+#: Bu tablo eskiden üç ayrı yerde (callback içinde inline, _tenant_plani_uygula
+#: ve admin.py/manual_upgrade) SQL CASE WHEN olarak kopyalanmıştı; yeni bir plan
+#: eklendiğinde üçünden biri unutulursa admin panelinden yapılan değişiklik ile
+#: webhook'tan gelen aktivasyon farklı limitler yazıyordu.
+PLAN_LIMITS: dict[str, dict[str, int]] = {
+    "free":          {"max_uyap_documents": 0,      "max_monthly_queries": 0,      "max_users": 1},
+    "pro_solo":      {"max_uyap_documents": 0,      "max_monthly_queries": 0,      "max_users": 1},
+    "pro_solo_uyap": {"max_uyap_documents": 50,     "max_monthly_queries": 150,    "max_users": 1},
+    "team":          {"max_uyap_documents": 0,      "max_monthly_queries": 0,      "max_users": 5},
+    "team_uyap":     {"max_uyap_documents": 250,    "max_monthly_queries": 750,    "max_users": 5},
+    "enterprise":    {"max_uyap_documents": 100000, "max_monthly_queries": 100000, "max_users": 50},
+}
+
+#: Bilinmeyen bir plan gelirse (şema değişikliği vb.) en kısıtlı limitlere düş.
+_VARSAYILAN_LIMIT = PLAN_LIMITS["free"]
+
+
+def plan_limitleri(plan_tier: str) -> dict[str, int]:
+    """Bir planın tenant limitleri. Bilinmeyen plan → free limitleri."""
+    return PLAN_LIMITS.get(plan_tier, _VARSAYILAN_LIMIT)
+
+
+async def _tenant_plani_uygula(
+    conn,
+    tenant_id,
+    plan_tier: str,
+    iyzico_customer_ref: str | None = None,
+    iyzico_subscription_ref: str | None = None,
+    plan_started_at_yenile: bool = False,
+) -> None:
     """Tenant'ın plan_tier'ını ve plana bağlı limit kolonlarını ayarlar.
-    Callback/webhook/reconcile aynı mantığı kullansın diye merkezi."""
+
+    Callback / webhook / admin manuel yükseltme / reconcile — hepsi buradan
+    geçer, böylece limitler tek yerden yönetilir (bkz. PLAN_LIMITS).
+
+    Args:
+        plan_started_at_yenile: True ise plan_started_at NOW() yapılır (yeni
+            ödeme alındı). False ise yalnızca ilk kez set edilir (COALESCE).
+        iyzico_*_ref: verilirse tenant üzerindeki iyzico referansları güncellenir.
+    """
+    lim = plan_limitleri(plan_tier)
     await conn.execute(
         """UPDATE tenants SET
            plan_tier = $1::plan_tier,
-           plan_started_at = COALESCE(plan_started_at, NOW()),
-           max_uyap_documents = CASE
-             WHEN $1 = 'pro_solo_uyap' THEN 50
-             WHEN $1 = 'team_uyap' THEN 250
-             WHEN $1 = 'enterprise' THEN 100000 ELSE 0 END,
-           max_monthly_queries = CASE
-             WHEN $1 = 'pro_solo_uyap' THEN 150
-             WHEN $1 = 'team_uyap' THEN 750
-             WHEN $1 = 'enterprise' THEN 100000 ELSE 0 END,
-           max_users = CASE
-             WHEN $1::text LIKE 'team%' THEN 5
-             WHEN $1 = 'enterprise' THEN 50 ELSE 1 END
-           WHERE id = $2""",
-        plan_tier, tenant_id,
+           plan_started_at = CASE WHEN $6 THEN NOW() ELSE COALESCE(plan_started_at, NOW()) END,
+           iyzico_customer_id     = COALESCE($2, iyzico_customer_id),
+           iyzico_subscription_id = COALESCE($3, iyzico_subscription_id),
+           max_uyap_documents = $4,
+           max_monthly_queries = $5,
+           max_users = $7
+           WHERE id = $8""",
+        plan_tier,
+        iyzico_customer_ref,
+        iyzico_subscription_ref,
+        lim["max_uyap_documents"],
+        lim["max_monthly_queries"],
+        plan_started_at_yenile,
+        lim["max_users"],
+        tenant_id,
     )
+
+
+async def _onceki_abonelikleri_devret(conn, tenant_id, yeni_sub_id) -> list[str]:
+    """Yeni abonelik aktifleşince tenant'ın ESKİ aktif aboneliklerini kapat.
+
+    NEDEN: `checkout()` eskiden mevcut aboneliği hiç sorgulamıyordu. Pro Solo'dan
+    Team'e geçen kullanıcı için iyzico'da İKİNCİ bir abonelik açılıyor, birincisi
+    iptal edilmediği için ertesi ay İKİ KEZ tahsilat yapılıyordu.
+
+    Sıralama bilinçli: eski abonelik, YENİSİ AKTİFLEŞTİKTEN SONRA iptal edilir.
+    Tersi olsaydı yeni ödeme başarısız olduğunda kullanıcı plansız kalırdı.
+
+    Returns: iptal edilen aboneliklerin id listesi.
+    """
+    eskiler = await conn.fetch(
+        """SELECT id, iyzico_subscription_ref FROM subscriptions
+           WHERE tenant_id = $1 AND status = 'active' AND id <> $2""",
+        tenant_id, yeni_sub_id,
+    )
+    kapatilan: list[str] = []
+    for eski in eskiler:
+        ref = eski["iyzico_subscription_ref"]
+        if ref:
+            try:
+                await cancel_subscription(ref)
+            except Exception as e:
+                # iyzico iptali başarısızsa YİNE DE lokal kaydı kapatırız ama
+                # yüksek seviyede logla — çift tahsilat riski burada doğar.
+                log.error(
+                    "Plan değişiminde eski iyzico aboneliği iptal EDİLEMEDİ "
+                    "(çift tahsilat riski) ref=%s tenant=%s: %s", ref, tenant_id, e,
+                )
+        await conn.execute(
+            """UPDATE subscriptions SET
+               status = 'canceled', canceled_at = NOW(), cancel_at_period_end = FALSE,
+               metadata = COALESCE(metadata, '{}'::jsonb)
+                          || jsonb_build_object('superseded_by', $2::text),
+               updated_at = NOW()
+               WHERE id = $1""",
+            eski["id"], str(yeni_sub_id),
+        )
+        kapatilan.append(str(eski["id"]))
+    if kapatilan:
+        log.info("Plan değişimi: %d eski abonelik kapatıldı (tenant=%s)",
+                 len(kapatilan), tenant_id)
+    return kapatilan
 
 
 def _require_verified(user: CurrentUser) -> None:
@@ -120,15 +205,54 @@ class CheckoutReq(BaseModel):
     zip_code: str | None = None
 
 
-def _valid_tckn(value: str | None) -> bool:
-    """TC Kimlik No format kontrolü (11 hane, ilk hane 0 olamaz).
+#: iyzico'nun kendi dokümanlarında geçen örnek kimlik numarası. Gerçek TCKN
+#: checksum'ını sağlamaz; YALNIZCA sandbox'ta kabul edilir.
+#: Not: "11111111111" bilerek listede DEĞİL — sahte varsayılan olarak çok sık
+#: girildiği için sandbox'ta bile fatura profiline yazılmasını istemiyoruz.
+_SANDBOX_TEST_TCKN = frozenset({"74300864791"})
 
-    Checksum algoritması uygulanmaz — iyzico kendi tarafında doğrulama yapar;
-    biz yalnızca format girdisi kontrol ederiz (sandbox test TC'leri de çalışsın).
+
+def _iyzico_sandbox_mi() -> bool:
+    """Ödeme sağlayıcısı sandbox modunda mı? (env her istekte okunur — testler
+    monkeypatch ile bu davranışı değiştirebilsin diye modül seviyesinde sabit
+    tutulmuyor.)"""
+    import os as _os
+    base = _os.environ.get("IYZICO_BASE_URL", "https://sandbox-api.iyzipay.com")
+    return "sandbox" in base.lower()
+
+
+def _valid_tckn(value: str | None) -> bool:
+    """TC Kimlik No doğrulaması — format + resmi checksum algoritması.
+
+    Kurallar (NVİ algoritması):
+      1. 11 hane, tamamı rakam, ilk hane 0 olamaz.
+      2. 10. hane = ((tek konumların toplamı × 7) − çift konumların toplamı) mod 10
+      3. 11. hane = (ilk 10 hanenin toplamı) mod 10
+
+    Not: Eskiden yalnızca format kontrol ediliyor, checksum "iyzico zaten
+    doğruluyor" gerekçesiyle atlanıyordu. Bunun iki sakıncası vardı:
+    "11111111111" gibi sahte varsayılan değerler fatura profiline yazılıyor
+    (2. kural geçiyor ama 3. kural geçmiyor), ve hatalı girişte kullanıcı
+    hatayı bizim formumuzda değil iyzico ödeme ekranında görüyordu.
+    iyzico sandbox test TC'leri geçerli checksum'a sahiptir, etkilenmez.
     """
     if not value or not value.isdigit() or len(value) != 11:
         return False
     if value[0] == "0":
+        return False
+
+    # iyzico dokümantasyonundaki örnek TC'ler geçerli checksum taşımıyor.
+    # SADECE sandbox ortamında kabul edilir; prod'da (canlı IYZICO_BASE_URL)
+    # bu liste hiç devreye girmez.
+    if value in _SANDBOX_TEST_TCKN and _iyzico_sandbox_mi():
+        return True
+
+    d = [int(c) for c in value]
+    tek = d[0] + d[2] + d[4] + d[6] + d[8]      # 1., 3., 5., 7., 9. haneler
+    cift = d[1] + d[3] + d[5] + d[7]            # 2., 4., 6., 8. haneler
+    if (tek * 7 - cift) % 10 != d[9]:
+        return False
+    if sum(d[:10]) % 10 != d[10]:
         return False
     return True
 
@@ -161,6 +285,25 @@ async def checkout(
     plan = get_plan_info(payload.plan_tier)
     if not plan:
         raise HTTPException(400, "Geçersiz plan.")
+
+    # ÇİFT ABONELİK KORUMASI
+    # Eskiden mevcut abonelik hiç sorgulanmıyordu; aynı plana ikinci kez
+    # checkout açan veya plan değiştiren kullanıcı için iyzico'da iki paralel
+    # abonelik oluşup ertesi ay iki kez tahsilat yapılabiliyordu.
+    async with db_session(user_id=user.user_id, tenant_id=user.tenant_id) as conn:
+        mevcut = await conn.fetchrow(
+            """SELECT id, plan_tier, cancel_at_period_end FROM subscriptions
+               WHERE tenant_id = $1 AND status = 'active'
+               ORDER BY created_at DESC LIMIT 1""",
+            user.tenant_id,
+        )
+    onceki_plan = mevcut["plan_tier"] if mevcut else None
+    if mevcut and onceki_plan == payload.plan_tier and not mevcut["cancel_at_period_end"]:
+        raise HTTPException(400, {
+            "error": "zaten_abone",
+            "message": "Bu planda zaten aktif bir aboneliğiniz var. "
+                       "Farklı bir plana geçmek için başka bir plan seçin.",
+        })
 
     # TR faturalama: iyzico TC/telefon/adres/şehir ZORUNLU.
     # Dev/mock modda (iyzico yapılandırılmamış) doğrulama esnetilir.
@@ -213,7 +356,14 @@ async def checkout(
             user.tenant_id,
             payload.plan_tier,
             float(plan["amount"]),
-            json.dumps({"checkout_token": result.get("token"), "conversation_id": result.get("conversationId")}),
+            json.dumps({
+                "checkout_token": result.get("token"),
+                "conversation_id": result.get("conversationId"),
+                # Plan değişimiyse hangi abonelikten geçildiğini kaydet;
+                # aktivasyon anında eskisi bu bilgiyle kapatılır.
+                "supersedes": str(mevcut["id"]) if mevcut else None,
+                "previous_plan": onceki_plan,
+            }),
         )
 
     await audit(
@@ -221,7 +371,8 @@ async def checkout(
         user_id=user.user_id,
         tenant_id=user.tenant_id,
         request=request,
-        metadata={"plan": payload.plan_tier, "subscription_id": str(sub_id)},
+        metadata={"plan": payload.plan_tier, "subscription_id": str(sub_id),
+                  "plan_degisimi": bool(mevcut), "previous_plan": onceki_plan},
     )
 
     return APIResponse(ok=True, data={
@@ -315,32 +466,17 @@ async def callback(
                     f"sub-{payload.token}",
                     float(sub["amount_try"] or 0),
                 )
-                await conn.execute(
-                    """UPDATE tenants SET
-                       plan_tier = $1::plan_tier,
-                       plan_started_at = NOW(),
-                       iyzico_customer_id = $2,
-                       iyzico_subscription_id = $3,
-                       max_uyap_documents = CASE
-                         WHEN $1 = 'pro_solo_uyap' THEN 50
-                         WHEN $1 = 'team_uyap' THEN 250
-                         WHEN $1 = 'enterprise' THEN 100000
-                         ELSE 0
-                       END,
-                       max_monthly_queries = CASE
-                         WHEN $1 = 'pro_solo_uyap' THEN 150
-                         WHEN $1 = 'team_uyap' THEN 750
-                         WHEN $1 = 'enterprise' THEN 100000
-                         ELSE 0
-                       END,
-                       max_users = CASE
-                         WHEN $1::text LIKE 'team%' THEN 5
-                         WHEN $1 = 'enterprise' THEN 50
-                         ELSE 1
-                       END
-                       WHERE id = $4""",
-                    sub["plan_tier"], iyzico_cust_ref, iyzico_sub_ref, sub["tenant_id"],
+                # Plan limitleri tek kaynaktan (PLAN_LIMITS) uygulanır —
+                # burada kopyalanmış CASE WHEN bloğu vardı.
+                await _tenant_plani_uygula(
+                    conn, sub["tenant_id"], sub["plan_tier"],
+                    iyzico_customer_ref=iyzico_cust_ref,
+                    iyzico_subscription_ref=iyzico_sub_ref,
+                    plan_started_at_yenile=True,
                 )
+                # Plan değişimiyse eski aboneliği iyzico'da iptal et
+                # (çift tahsilat koruması).
+                await _onceki_abonelikleri_devret(conn, sub["tenant_id"], sub["id"])
         else:
             # Zaten aktifleşmiş bir aboneliği, tüketilmiş token'la gelen ikinci
             # (bayat) sorgu 'failed'e ÇEVİRMESİN — yalnızca aktif değilse işaretle.
@@ -815,7 +951,20 @@ async def webhook(request: Request):
     iyzico_token = payload.get("iyziEventToken") or payload.get("token")
     event_type = payload.get("iyziEventType") or payload.get("eventType") or "unknown"
     sub_ref = payload.get("subscriptionReferenceCode")
-    source_ip = request.client.host if request.client else None
+    source_ip = client_ip(request)
+
+    # IDEMPOTENCY ANAHTARI
+    # Eskiden yalnızca iyzico_token'a bakılıyordu. Token gelmediğinde (dokümante
+    # edilmemiş kenar durum veya iyzico'nun retry'ı) SQL'de NULL = NULL asla
+    # TRUE olmadığından tekilleştirme sessizce devre dışı kalıyor, aynı olay
+    # tekrar tekrar işlenebiliyordu. Token yoksa ham gövdenin hash'ine düşeriz.
+    if not iyzico_token:
+        govde_hash = hashlib.sha256(raw_body or b"").hexdigest()
+        iyzico_token = f"sha256:{govde_hash}"
+        log.warning(
+            "iyzico webhook: token alanı yok, idempotency anahtarı gövde "
+            "hash'inden üretildi (event=%s)", event_type,
+        )
 
     async with service_session() as conn:
         # Idempotency + olay kaydı
@@ -880,27 +1029,16 @@ async def webhook(request: Request):
                 # Ödeme yeniden alındı → tenant planını abonelikteki tier'a GERİ YÜKLE.
                 # (Önceki bir başarısız ödeme tenant'ı 'free'e düşürmüş olabilir;
                 # yenileme başarılı olunca paket hakları geri açılır.)
-                await conn.execute(
-                    """UPDATE tenants t SET
-                       plan_tier = s.plan_tier,
-                       max_uyap_documents = CASE
-                         WHEN s.plan_tier = 'pro_solo_uyap' THEN 50
-                         WHEN s.plan_tier = 'team_uyap' THEN 250
-                         WHEN s.plan_tier = 'enterprise' THEN 100000
-                         ELSE 0 END,
-                       max_monthly_queries = CASE
-                         WHEN s.plan_tier = 'pro_solo_uyap' THEN 150
-                         WHEN s.plan_tier = 'team_uyap' THEN 750
-                         WHEN s.plan_tier = 'enterprise' THEN 100000
-                         ELSE 0 END,
-                       max_users = CASE
-                         WHEN s.plan_tier::text LIKE 'team%' THEN 5
-                         WHEN s.plan_tier = 'enterprise' THEN 50
-                         ELSE 1 END
-                       FROM subscriptions s
-                       WHERE s.iyzico_subscription_ref = $1 AND t.id = s.tenant_id""",
-                    sub_ref,
+                geri_yukle = await conn.fetchrow(
+                    "SELECT tenant_id, plan_tier FROM subscriptions "
+                    "WHERE iyzico_subscription_ref = $1", sub_ref,
                 )
+                if geri_yukle:
+                    # Limitler tek kaynaktan (PLAN_LIMITS) — burada da
+                    # kopyalanmış CASE WHEN bloğu vardı.
+                    await _tenant_plani_uygula(
+                        conn, geri_yukle["tenant_id"], geri_yukle["plan_tier"],
+                    )
                 # Payment kaydı — tutar payload'tan DEĞİL, kayıtlı amount_try'dan.
                 sub_row = await conn.fetchrow(
                     "SELECT id, tenant_id, amount_try FROM subscriptions WHERE iyzico_subscription_ref = $1",

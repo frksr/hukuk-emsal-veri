@@ -125,20 +125,34 @@ export const breadcrumbJsonLd = buildBreadcrumbJsonLd;
 /**
  * FAQ JSON-LD üreticisi.
  */
-export function buildFaqJsonLd(
-  faqs: Array<{ question: string; answer: string }>
-) {
+/** FAQ girdisi — hem İngilizce (question/answer) hem Türkçe (q/a) anahtar
+ *  kabul edilir. Sayfaların çoğu {q, a} ile yazılmıştı ve tip hatası veriyordu;
+ *  isimleri tek tek değiştirmek yerine üretici her iki biçimi de anlıyor. */
+export type FaqGirdisi =
+  | { question: string; answer: string }
+  | { q: string; a: string };
+
+function _faqNormalize(f: FaqGirdisi): { soru: string; cevap: string } {
+  return "question" in f
+    ? { soru: f.question, cevap: f.answer }
+    : { soru: f.q, cevap: f.a };
+}
+
+export function buildFaqJsonLd(faqs: ReadonlyArray<FaqGirdisi>) {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: faqs.map((f) => ({
-      "@type": "Question",
-      name: f.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: f.answer,
-      },
-    })),
+    mainEntity: faqs.map((f) => {
+      const { soru, cevap } = _faqNormalize(f);
+      return {
+        "@type": "Question",
+        name: soru,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: cevap,
+        },
+      };
+    }),
   };
 }
 

@@ -10,7 +10,6 @@ koşulu olmadan tek kredi düşülür.
 """
 from __future__ import annotations
 
-import json
 import logging
 from decimal import Decimal
 from typing import Optional

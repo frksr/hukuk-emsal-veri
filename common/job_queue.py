@@ -3,12 +3,16 @@ import sqlite3
 import json
 import time
 from pathlib import Path
-from typing import Iterator
+
+
+#: Bir iş kaç kez denendikten sonra kalıcı olarak 'failed' sayılır.
+DEFAULT_MAX_ATTEMPTS = 5
 
 
 class JobQueue:
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
         self.db_path = Path(db_path)
+        self.max_attempts = max(1, int(max_attempts))
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
@@ -64,20 +68,42 @@ class JobQueue:
                 (time.time(), job_id),
             )
 
-    def mark_failed(self, job_id: str, error: str, retry: bool = True):
+    def mark_failed(self, job_id: str, error: str, retry: bool = True) -> str:
+        """İşi başarısız işaretle. `retry=True` ise MAX_ATTEMPTS'e kadar
+        yeniden kuyruğa alır, sonra kalıcı olarak 'failed' yapar.
+
+        Üst sınır olmadan: kaynak site bir kayıt için kalıcı olarak boş/hatalı
+        yanıt döndürdüğünde (içerik kaldırılmış olabilir) o iş sonsuza dek
+        pending ↔ in_progress arasında dönüyor, kuyruk hiç boşalmıyordu.
+
+        Returns: işin yeni durumu ("pending" | "failed").
+        """
         with self._conn() as c:
-            new_status = "pending" if retry else "failed"
+            row = c.execute(
+                "SELECT attempts FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            attempts = (row["attempts"] if row else 0) + 1
+            exhausted = attempts >= self.max_attempts
+            new_status = "pending" if (retry and not exhausted) else "failed"
+            if retry and exhausted:
+                error = f"[max_attempts={self.max_attempts} aşıldı] {error}"
             c.execute(
-                "UPDATE jobs SET status=?, attempts=attempts+1, last_error=?, updated_at=? "
+                "UPDATE jobs SET status=?, attempts=?, last_error=?, updated_at=? "
                 "WHERE id=?",
-                (new_status, error[:500], time.time(), job_id),
+                (new_status, attempts, error[:500], time.time(), job_id),
             )
+            return new_status
 
     def reset_source(self, source: str):
-        """Bir kaynağın tüm in_progress/failed job'larını pending'e döndür."""
+        """Bir kaynağın tüm in_progress/failed job'larını pending'e döndür.
+
+        Elle yapılan bir kurtarma işlemidir (ör. scraper düzeltildikten sonra):
+        deneme sayacı da sıfırlanır, aksi halde max_attempts'i tüketmiş işler
+        tek denemede tekrar 'failed' olurdu.
+        """
         with self._conn() as c:
             c.execute(
-                "UPDATE jobs SET status='pending', updated_at=? "
+                "UPDATE jobs SET status='pending', attempts=0, updated_at=? "
                 "WHERE source=? AND status IN ('in_progress', 'failed')",
                 (time.time(), source),
             )

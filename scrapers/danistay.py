@@ -25,10 +25,9 @@ from selectolax.parser import HTMLParser
 
 from common.normalize import (
     normalize_text, extract_case_no, extract_decision_no,
-    extract_decision_date, detect_keywords, tr_fold,
+    extract_decision_date, detect_keywords,
 )
 from common.anonymize import audit
-from common.http_client import RespectfulClient
 from common.job_queue import JobQueue
 from scrapers.base import BaseScraper
 
@@ -160,8 +159,8 @@ class DanistayScraper(BaseScraper):
                         print(f"[DAN] '{keyword}' p{page_number} API err: {err}",
                               file=sys.stderr)
                         if "Captcha" in err or "captcha" in err:
-                            print(f"[DAN] CAPTCHA TETİKLENDİ — search durduruldu. "
-                                  f"Detail fetch'e geçilecek.", file=sys.stderr)
+                            print("[DAN] CAPTCHA TETİKLENDİ — search durduruldu. "
+                                  "Detail fetch'e geçilecek.", file=sys.stderr)
                             return
                         break
 

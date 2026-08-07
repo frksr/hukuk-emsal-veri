@@ -14,7 +14,7 @@ Tier limitleri:
 """
 from __future__ import annotations
 import calendar
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -137,11 +137,14 @@ def tool_daily_limit(
 
 
 def _client_ip(request: Request) -> str:
-    # Vercel/Cloudflare X-Forwarded-For
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "0.0.0.0"
+    """İstemci IP'si — güvenilir proxy doğrulamasıyla (bkz. api/net.py).
+
+    Eskiden XFF'in İLK değeri okunuyordu; istemci bunu uydurabildiği için
+    IP bazlı anonim kota her istekte sıfırlanabiliyordu. Artık zincirin
+    sağından TRUSTED_PROXY_HOPS kadar sayılıyor.
+    """
+    from api.net import client_ip as _resolve
+    return _resolve(request)
 
 
 def donem_baslangici() -> datetime:

@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from services.rag import search
+from services.rag import search, search_for_context
 from llm.provider import generate, is_available
 
 log = logging.getLogger(__name__)
@@ -388,7 +388,8 @@ def generate_dilekce(
     # 1) RAG araması — dış embedding API'sine PII gitmesin diye anonimleştirilir.
     try:
         from services.pii_redaction import redact_for_embedding
-        emsaller = search(redact_for_embedding(durum), k=k)
+        # Katı eşik: LLM'e bağlam olarak giden emsaller
+        emsaller = search_for_context(redact_for_embedding(durum), k=k)
     except Exception as e:
         emsaller = []
         log.warning(f"Dilekçe için RAG araması başarısız: {e}")
@@ -485,10 +486,19 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
         metin = _stub_dilekce(durum, dilekce_turu, taraflar, emsaller, ozel_konu)
         uyari = _KULLANICI_DEMO_MESAJI
 
+    # 6) GROUNDING — LLM metindeki esas/karar numaralarını uydurmuş olabilir.
+    # Prompt'ta "uydurma" talimatı var ama programatik kontrol yoktu; uydurma
+    # bir emsalin mahkemeye sunulması bu üründeki en ağır hata türü.
+    from services.grounding import dogrula as _grounding_dogrula
+    kontrol = _grounding_dogrula(metin, emsaller)
+    if kontrol["uyari"]:
+        uyari = (uyari + " " if uyari else "") + kontrol["uyari"]
+
     return {
         "dilekce_metni": metin,
         "kullanilan_emsaller": kullanilan,
         "uyari": uyari,
+        "dogrulanmamis_atiflar": kontrol["dogrulanmamis"],
     }
 
 
@@ -522,7 +532,8 @@ def generate_dilekce_stream(
     # 1) RAG araması — dış embedding API'sine PII gitmesin diye anonimleştirilir.
     try:
         from services.pii_redaction import redact_for_embedding
-        emsaller = search(redact_for_embedding(durum), k=k)
+        # Katı eşik: LLM'e bağlam olarak giden emsaller
+        emsaller = search_for_context(redact_for_embedding(durum), k=k)
     except Exception as e:
         emsaller = []
         log.warning(f"Dilekçe (stream) için RAG araması başarısız: {e}")
@@ -598,6 +609,9 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
     # Streaming'de placeholder'lar parça sınırında bölünebileceği için
     # StreamRedactionBuffer kullanılır (bkz. services/pii_redaction.py).
     unredact_buf = StreamRedactionBuffer(redaction_map)
+    # Grounding kontrolü akış bittikten sonra TAM metin üzerinde yapılır;
+    # parça parça bakmak bölünmüş numaraları yanlış işaretlerdi.
+    tam_metin: list[str] = []
     try:
         for piece in generate_stream(
             system=SISTEM_PROMPT, user=user_prompt,
@@ -605,13 +619,22 @@ bölümünde mutlaka esas/karar no ile atıfla. Çıktıyı düz metin olarak ve
         ):
             safe_piece = unredact_buf.feed(piece)
             if safe_piece:
+                tam_metin.append(safe_piece)
                 yield {"type": "delta", "text": safe_piece}
         son = unredact_buf.flush()
         if son:
+            tam_metin.append(son)
             yield {"type": "delta", "text": son}
     except Exception as e:
         log.error(f"Dilekçe (stream) LLM akışı kesildi: {e}")
         yield {"type": "error",
                "message": "Üretim sırasında bir sorun oluştu. Lütfen tekrar deneyin."}
         return
+
+    # GROUNDING — uydurma esas/karar no kontrolü (bkz. services/grounding.py).
+    from services.grounding import dogrula as _grounding_dogrula
+    kontrol = _grounding_dogrula("".join(tam_metin), emsaller)
+    if kontrol["uyari"]:
+        yield {"type": "uyari", "message": kontrol["uyari"],
+               "dogrulanmamis_atiflar": kontrol["dogrulanmamis"]}
     yield {"type": "done"}

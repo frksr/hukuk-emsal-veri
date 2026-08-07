@@ -1,44 +1,82 @@
 # =============================================================================
-# Production backend image (Cloud Run) — FastAPI + gömülü ChromaDB/parquet.
+# Production backend image (Cloud Run) — FastAPI + gömülü karar parquet'i.
 #
 # Vektör verisi git'te DEĞİL; Cloud Build build'den önce GCS'ten `seed_data/`
 # içine indirir (bkz. cloudbuild.yaml fetch-data adımı), bu image'a gömülür.
 # tenant_storage prod'da GCS volume olarak /app/data/tenant_storage'a mount edilir.
+#
+# İKİ AŞAMALI BUILD:
+#   builder → derleme araçlarıyla (build-essential, libpq-dev) wheel'leri kurar
+#   runtime → yalnızca çalışma zamanı kütüphaneleri; derleyici final imajda YOK.
+# Bu hem imaj boyutunu hem saldırı yüzeyini küçültür (eskiden tek aşamalıydı ve
+# build-essential prod imajında kalıyordu).
 # =============================================================================
-FROM python:3.11-slim
 
-WORKDIR /app
-ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+# ---------- 1) builder -------------------------------------------------------
+FROM python:3.11-slim AS builder
 
-# psycopg/pypdf/chromadb için sistem bağımlılıkları
+ENV PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev curl \
+    build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Bağımlılıkları izole bir prefix'e kur; runtime aşamasına bu klasör kopyalanır.
+RUN pip install --prefix=/install -r requirements.txt
+
+
+# ---------- 2) runtime -------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # Yapısal log — Cloud Logging'de jsonPayload.request_id ile filtrelenir.
+    LOG_FORMAT=json
+
+# Yalnızca çalışma zamanı gereksinimleri (derleyici YOK).
+# curl: HEALTHCHECK için. libpq5: psycopg runtime kütüphanesi.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+
+# Root olmayan kullanıcı — konteyner içinde bir açık istismar edilse bile
+# saldırgan root yetkisiyle başlamasın.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 
 # Kaynak kod
-COPY api/ ./api/
-COPY services/ ./services/
-COPY llm/ ./llm/
-COPY common/ ./common/
-COPY queries/ ./queries/
-COPY scripts/ ./scripts/
+COPY --chown=appuser:appuser api/ ./api/
+COPY --chown=appuser:appuser services/ ./services/
+COPY --chown=appuser:appuser llm/ ./llm/
+COPY --chown=appuser:appuser common/ ./common/
+COPY --chown=appuser:appuser queries/ ./queries/
+COPY --chown=appuser:appuser scripts/ ./scripts/
 # pipelines/ — embed (re-index) job'u python -m pipelines.embed ile bunu çağırır.
-COPY pipelines/ ./pipelines/
+COPY --chown=appuser:appuser pipelines/ ./pipelines/
 
-# Vektörler artık Cloud SQL/pgvector'da — ChromaDB image'a GÖMÜLMEZ.
+# Vektörler Cloud SQL/pgvector'da — ChromaDB image'a GÖMÜLMEZ.
 # Yalnızca tam karar metni + listeleme için kullanılan parquet gömülür
 # (DuckDB ile streaming okunur, düşük bellek).
-COPY seed_data/all_decisions.parquet ./data/final/all_decisions.parquet
+COPY --chown=appuser:appuser seed_data/all_decisions.parquet ./data/final/all_decisions.parquet
 
 # UYAP belgeleri için yazılabilir dizin (prod'da GCS volume mount edilir).
-RUN mkdir -p data/tenant_storage
+RUN mkdir -p data/tenant_storage && chown -R appuser:appuser /app/data
 
 ENV DECISIONS_PARQUET=/app/data/final/all_decisions.parquet \
     TENANT_STORAGE_ROOT=/app/data/tenant_storage
 
+USER appuser
+
 # Cloud Run $PORT enjekte eder (varsayılan 8080). Shell formu ile genişlet.
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers ${WEB_CONCURRENCY:-2}"]
+
+# /api/ready DB'yi de kontrol eder (/api/health yalnızca liveness'tır).
+# Cloud Run kendi probe'unu kullanır; bu HEALTHCHECK docker/compose içindir.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -fs "http://localhost:${PORT:-8080}/api/ready" || exit 1
+
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers ${WEB_CONCURRENCY:-2} --proxy-headers --forwarded-allow-ips='*'"]

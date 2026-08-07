@@ -3,7 +3,10 @@ __pycache__/
 *.pyo
 .git/
 .env
-.env.local
+.env.*
+!.env.example
+infra/gcp/deploy.env
+infra/gcp/secrets.env
 data/raw/
 data/cleaned/
 data/enriched/

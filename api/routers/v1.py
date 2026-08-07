@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 
 from api.concurrency import run_blocking
 from api.db import service_session
-from api.schemas import APIResponse, AramaIstegi, EmsalKarar
+from api.schemas import APIResponse, AramaIstegi
 from services.rag import search
 
 log = logging.getLogger("api.v1")
@@ -38,9 +38,19 @@ async def require_api_key(
 
     key_hash = hashlib.sha256(x_api_key.encode("utf-8")).hexdigest()
     async with service_session() as conn:
+        # Anahtarın kendisi aktif olsa bile SAHİBİ askıya alınmış/kısıtlanmışsa
+        # erişim verilmez. Bu JOIN olmadan, admin panelinden suspend edilen bir
+        # kullanıcı eski API anahtarıyla çalışmaya devam ediyordu (yetkilendirme
+        # deliği). JWT ve eklenti token yolları zaten is_active kontrol ediyor;
+        # burası tek istisnaydı.
         row = await conn.fetchrow(
-            """SELECT id, user_id, daily_quota FROM api_keys
-               WHERE key_hash = $1 AND aktif = TRUE""",
+            """SELECT ak.id, ak.user_id, ak.daily_quota
+               FROM api_keys ak
+               JOIN users u ON u.id = ak.user_id
+               WHERE ak.key_hash = $1
+                 AND ak.aktif = TRUE
+                 AND u.is_active = TRUE
+                 AND u.restricted_at IS NULL""",
             key_hash,
         )
         if not row:

@@ -21,35 +21,45 @@ export interface ApiError extends Error {
 
 export type Mahkeme = "yargitay" | "danistay" | "aym" | "aihm" | "bam";
 
+/**
+ * Backend `POST /api/arama` yanıtındaki tek sonuç.
+ *
+ * DİKKAT — bu arayüz `api/schemas.py :: EmsalKarar` ile BİREBİR eşleşmelidir.
+ * Daha önce burada tamamen farklı alanlar (id/mahkeme/esas_no/baslik/ozet…)
+ * tanımlıydı; tüketen bileşen ise gerçek alanları (chunk_id/court_chamber/
+ * case_no/text/similarity) kullanıyordu. Ortak tek bir alan bile yoktu.
+ * `next.config.mjs`'de `typescript.ignoreBuildErrors: true` olduğu için bu
+ * uyuşmazlık prod build'inde sessizce geçiyordu — yani tip güvenliği fiilen
+ * yoktu. Tipi gerçek sözleşmeye hizaladık; CI'daki `tsc --noEmit` artık
+ * gerçek bir kapıdır.
+ */
 export interface EmsalKarar {
-  id: string;
-  mahkeme: Mahkeme;
-  daire?: string;
-  esas_no?: string;
-  karar_no?: string;
-  karar_tarihi?: string;
-  baslik?: string;
-  ozet?: string;
-  metin?: string;
-  konular?: string[];
-  url?: string;
-  benzerlik_skoru?: number;
+  /** Benzersiz parça kimliği — liste anahtarı olarak kullanılır. */
+  chunk_id: string;
+  /** Kararın ilgili parçasının metni. */
+  text: string;
+  /** Kosinüs benzerliği (0-1). */
+  similarity: number;
+  /** Kararın tamamına giden kimlik (/karar/[id]). */
+  decision_id?: string | null;
+  source?: string | null;
+  court_chamber?: string | null;
+  case_no?: string | null;
+  decision_no?: string | null;
+  decision_date?: string | null;
+  /** Backend virgülle ayrılmış tek string döner (dizi DEĞİL). */
+  topic_tags?: string | null;
+  source_url?: string | null;
+  /** Sonucun hangi arama yolundan geldiği: vektör / tam metin / ikisi. */
+  rank_kaynak?: "vektor" | "tam_metin" | "hibrit";
 }
 
+/** `POST /api/arama` istek gövdesi — `api/schemas.py :: AramaIstegi`. */
 export interface AramaParams {
-  q: string;
-  mahkeme?: Mahkeme | Mahkeme[];
-  tarih_baslangic?: string;
-  tarih_bitis?: string;
-  konu?: string;
-  limit?: number;
-  offset?: number;
-}
-
-export interface AramaSonucu {
-  toplam: number;
-  sonuclar: EmsalKarar[];
-  arama_suresi_ms?: number;
+  query: string;
+  k?: number;
+  source?: string | null;
+  court_chamber?: string | null;
 }
 
 export interface DilekceParams {
@@ -62,9 +72,22 @@ export interface DilekceParams {
   ozel_konu?: string;
 }
 
+/** `POST /api/ozet/text` — `api/schemas.py :: OzetIstegi`. */
 export interface OzetParams {
-  metin: string;
-  uzunluk?: "kisa" | "orta" | "uzun";
+  karar_metni: string;
+  uzunluk?: "kisa" | "orta" | "detayli";
+}
+
+/** `services/karar_ozet.py :: ozet_uret()` dönüş şeması. */
+export interface OzetSonuc {
+  /** Markdown biçiminde özet. */
+  ozet: string;
+  anahtar_noktalar: string[];
+  ilgili_kanunlar: string[];
+  model: string;
+  kaynak_char_count: number;
+  uzunluk?: string;
+  yasal_not?: string;
 }
 
 export interface FaizParams {
@@ -104,10 +127,13 @@ export interface FaizSonucu {
 /** Geriye dönük uyumluluk için takma ad. */
 export type FaizSonuc = FaizSonucu;
 
+/** `POST /api/zamanasimi` — `api/schemas.py :: ZamanasimiIstegi` ile eşleşir. */
 export interface ZamanasimiParams {
-  hukuk_alani: string;
+  kategori: string;
+  alt_tip: string;
+  /** ISO tarih (YYYY-MM-DD) */
   olay_tarihi: string;
-  ek_bilgiler?: Record<string, unknown>;
+  kesilme_tarihleri?: string[];
 }
 
 export interface ZamanasimiSonucu {
@@ -118,12 +144,14 @@ export interface ZamanasimiSonucu {
   ilgili_madde?: string;
 }
 
+/** `POST /api/ihtarname` — `api/schemas.py :: IhtarnameIstegi` ile eşleşir. */
 export interface IhtarnameParams {
-  borclu: { ad_soyad: string; adres?: string; tc_kimlik?: string };
-  alacakli: { ad_soyad: string; adres?: string };
-  borc_tutari: number;
-  borc_aciklama: string;
-  son_odeme_tarihi: string;
+  tur: string;
+  /** alacakli_ad / alacakli_adres / borclu_ad / borclu_adres */
+  taraflar: Record<string, string>;
+  /** anapara, vade_tarihi, neden, faiz_orani, dayanak_belge */
+  alacak_detay: Record<string, unknown>;
+  ek_talepler?: string[];
 }
 
 export interface TrendData {
@@ -132,21 +160,27 @@ export interface TrendData {
   konu_dagilimi?: Record<string, number>;
 }
 
+/** `POST /api/karsi-argument` — `api/schemas.py :: KarsiArgumentIstegi`. */
 export interface KarsiArgumentParams {
-  iddia: string;
-  baglam?: string;
-  hukuk_alani?: string;
+  kendi_tezi: string;
+  dava_turu?: string | null;
+  /** Kaç emsal getirilsin (3-10). */
+  k?: number;
 }
 
+/** `POST /api/kvkk/checklist` — `api/schemas.py :: KVKKIstegi`. */
 export interface KvkkChecklistParams {
   sektor: string;
-  veri_isleme_tipi: string[];
-  calisan_sayisi?: number;
+  veri_turleri: string[];
+  sirket_buyuklugu?: string;
+  /** Yapay zeka ile sektöre özel ek maddeler (ücretli plan). */
+  llm_ek?: boolean;
 }
 
+/** `POST /api/sozlesme/analyze-text` — `api/routers/sozlesme.py :: AnalyzeTextIstegi`. */
 export interface SozlesmeAnalizParams {
   metin: string;
-  sozlesme_tipi?: string;
+  sozlesme_turu?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -244,7 +278,7 @@ function sleep(ms: number) {
 // -----------------------------------------------------------------------------
 
 export async function aramaCagir(
-  params: { query: string; k?: number; source?: string | null; court_chamber?: string | null },
+  params: AramaParams,
   init?: { signal?: AbortSignal }
 ): Promise<EmsalKarar[]> {
   // Proxy üzerinden: NextAuth JWT eklenir → backend aramayı KULLANICIYA bağlı loglar

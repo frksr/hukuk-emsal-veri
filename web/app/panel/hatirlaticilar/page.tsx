@@ -250,7 +250,10 @@ export default function HatirlaticilarPage() {
       setForm((f) => ({ ...f, kaynak_tip: "serbest", kaynak_id: "", kaynak_ozet: "" }));
       return;
     }
-    const [tip, id] = value.split("::");
+    // split() sonucu tipte opsiyonel; boş string'e düşerek state tipini koru.
+    const [tipRaw, idRaw] = value.split("::");
+    const tip = tipRaw ?? "";
+    const id = idRaw ?? "";
     let ozet = "";
     if (tip === "not") ozet = kaynaklar?.notlar.find((x) => x.id === id)?.baslik ?? "";
     else if (tip === "uretim") ozet = kaynaklar?.uretimler.find((x) => x.id === id)?.baslik ?? "";
@@ -438,10 +441,10 @@ export default function HatirlaticilarPage() {
                 <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
                   <p className="text-sm flex items-start gap-2">
                     <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <span>{aiSorular[aiAdim].soru}</span>
+                    <span>{aiSorular[aiAdim]?.soru}</span>
                   </p>
                 </div>
-                {aiSorular[aiAdim].alan === "remind_at" ? (
+                {aiSorular[aiAdim]?.alan === "remind_at" ? (
                   <Input
                     type="datetime-local"
                     value={aiAdimCevap}

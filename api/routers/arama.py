@@ -11,7 +11,7 @@ import json
 import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Request
 
-from api.auth import CurrentUser, get_optional_user
+from api.auth import CurrentUser
 from api.cache import arama_cache, stats_cache
 from api.concurrency import run_blocking
 from api.db import db_session

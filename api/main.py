@@ -7,6 +7,7 @@ Production:
   uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 """
 from __future__ import annotations
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -17,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+from api.logging_setup import configure_logging
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -25,10 +28,9 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# Yapısal log + request_id (bkz. api/logging_setup.py).
+# LOG_FORMAT=json ile Cloud Logging'de jsonPayload.request_id filtrelenebilir.
+configure_logging()
 log = logging.getLogger("api")
 
 # Sentry — SENTRY_DSN set ise hata/performans izleme aktif olur.
@@ -176,8 +178,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    # API PATCH/PUT/DELETE uçları içeriyor (me.py, admin.py, notlar.py,
+    # alarmlar.py, extension.py). Liste GET/POST/OPTIONS ile sınırlıyken bu
+    # uçlar tarayıcıdan doğrudan çağrılamıyordu; şu an Next.js server-side
+    # proxy deseni bunu maskeliyor ama backend'e doğrudan erişecek herhangi
+    # bir istemci (widget, mobil webview, 3. taraf) sessizce engellenirdi.
+    # Origin kısıtlaması zaten allow_origins ile yapılıyor.
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Request-Id", "X-Response-Time-ms"],
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -185,32 +194,71 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def add_timing(request: Request, call_next):
+    """Korelasyon kimliği + süre ölçümü.
+
+    request_id contextvar'a yazıldığı için bu isteğin TÜM log satırları
+    (servis katmanı dahil) otomatik olarak aynı kimliği taşır.
+    """
+    from api.logging_setup import new_request_id, request_id_ctx
+
+    rid = new_request_id(request)
+    token = request_id_ctx.set(rid)
+    # Router/servis katmanı da erişebilsin (ör. hata yanıtına koymak için)
+    request.state.request_id = rid
+    if _SENTRY_DSN:
+        try:
+            import sentry_sdk
+            sentry_sdk.set_tag("request_id", rid)
+        except Exception:
+            pass
+
     start = time.perf_counter()
-    response = await call_next(request)
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    response.headers["X-Response-Time-ms"] = f"{elapsed_ms:.0f}"
-    if elapsed_ms > 500:
-        log.warning(f"Slow: {request.method} {request.url.path} {elapsed_ms:.0f}ms")
-    return response
+    try:
+        response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Response-Time-ms"] = f"{elapsed_ms:.0f}"
+        response.headers["X-Request-Id"] = rid
+        if elapsed_ms > 500:
+            # Log satırı contextvar reset'ten ÖNCE yazılmalı, aksi halde
+            # yavaş istek uyarısı request_id taşımaz.
+            log.warning(
+                "Slow: %s %s %.0fms", request.method, request.url.path, elapsed_ms,
+                extra={"http_method": request.method, "http_path": request.url.path,
+                       "duration_ms": round(elapsed_ms)},
+            )
+        return response
+    finally:
+        request_id_ctx.reset(token)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    log.exception(f"Unhandled error on {request.url.path}")
+    rid = getattr(request.state, "request_id", "-")
+    log.exception("Unhandled error on %s", request.url.path)
     return JSONResponse(
         status_code=500,
         content={
             "ok": False,
             "error": "internal_error",
-            "message": "Bir hata oluştu. Birkaç dakika sonra tekrar deneyin.",
+            # Kullanıcı destek talebinde bu kimliği paylaşabilir; logda
+            # request_id ile aynı isteği tek grepte buluruz.
+            "request_id": rid,
+            "message": "Bir hata oluştu. Birkaç dakika sonra tekrar deneyin. "
+                       f"(Referans: {rid})",
             "detail": str(exc) if os.environ.get("DEBUG") else None,
         },
+        headers={"X-Request-Id": rid},
     )
 
 
 @app.get("/api/health")
 async def health():
-    """Health check — load balancer / uptime monitoring için."""
+    """Liveness — process ayakta mı? Bağımlılıklara BAKMAZ.
+
+    Load balancer'ın "bu instance'ı yeniden başlat" kararı için. DB geçici
+    olarak erişilemez olduğunda tüm instance'ların birden restart edilmesini
+    istemeyiz; o durum readiness'in işidir (aşağıya bakınız).
+    """
     from services.rag import get_collection_stats
     from llm.provider import status as llm_status
     return {
@@ -220,6 +268,34 @@ async def health():
         "rag": get_collection_stats(),
         "llm": llm_status(),
     }
+
+
+@app.get("/api/ready")
+async def ready():
+    """Readiness — bu instance gerçekten trafik alabilir mi?
+
+    Eskiden yalnızca /api/health vardı ve DB'ye hiç dokunmuyordu: Postgres
+    erişilemez olduğunda tüm istekler 500 dönerken load balancer hâlâ 200 OK
+    görüyor, instance sağlıksız işaretlenmiyordu. Uptime izleme ve LB
+    readiness probe'u bu ucu kullanmalıdır.
+    """
+    from api.db import get_pool
+
+    detail: dict = {"service": "hukuk-emsal-api", "version": "1.0.0"}
+    try:
+        pool = await get_pool()
+        t0 = time.perf_counter()
+        async with pool.acquire() as conn:
+            await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=3.0)
+        detail["db"] = {"ok": True, "latency_ms": round((time.perf_counter() - t0) * 1000)}
+    except Exception as e:
+        log.error("Readiness DB kontrolü başarısız: %s", e)
+        detail["db"] = {"ok": False, "error": type(e).__name__}
+        detail["ok"] = False
+        return JSONResponse(status_code=503, content=detail)
+
+    detail["ok"] = True
+    return detail
 
 
 # Router'ları kaydet

@@ -11,7 +11,7 @@ mutlaka bir avukata danışın.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 

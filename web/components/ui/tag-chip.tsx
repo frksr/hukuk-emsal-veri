@@ -28,7 +28,8 @@ function etiketRengi(etiket: string): string {
   for (let i = 0; i < etiket.length; i++) {
     h = (h * 31 + etiket.charCodeAt(i)) >>> 0;
   }
-  return PALET[h % PALET.length];
+  // PALET boş olamaz ama tip sistemi bunu bilemez; ilk renge düş.
+  return PALET[h % PALET.length] ?? PALET[0]!;
 }
 
 export function TagChip({

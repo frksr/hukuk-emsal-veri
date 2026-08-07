@@ -31,7 +31,7 @@ import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Path
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -208,7 +208,7 @@ async def create_draft(payload: DraftIn) -> dict:
             url = await run_blocking(
                 upload_blog_image, raw, im.filename, _guess_content_type(im.filename)
             )
-        except Exception as e:
+        except Exception:
             log.exception("Publisher görsel yükleme hatası")
             raise HTTPException(500, f"Görsel yüklenemedi: {im.filename}")
         if kind == "cover":

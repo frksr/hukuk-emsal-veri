@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from api.audit import audit
-from api.auth import CurrentUser, get_current_user
+from api.auth import CurrentUser, require_admin
+from api.net import client_ip
 from api.db import service_session
 from api.schemas import APIResponse
 
@@ -39,7 +40,7 @@ class WaitlistReq(BaseModel):
 @router.post("/", response_model=APIResponse)
 async def join_waitlist(payload: WaitlistReq, request: Request):
     """Bekleme listesine kayıt. Duplicate e-posta sessizce kabul edilir."""
-    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else None)
+    ip = client_ip(request)
 
     async with service_session() as conn:
         # Upsert: aynı e-posta tekrar gelirse güncelleme yapma, sadece geç
@@ -91,10 +92,6 @@ async def join_waitlist(payload: WaitlistReq, request: Request):
 # Admin endpoint — sadece role='admin'
 # ---------------------------------------------------------------------------
 
-async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    if user.role != "admin":
-        raise HTTPException(403, "Sadece admin erişebilir.")
-    return user
 
 
 @router.get("/admin", response_model=APIResponse)

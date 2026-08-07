@@ -19,12 +19,10 @@ import sys
 from pathlib import Path
 from typing import AsyncIterator
 
-import httpx
 from selectolax.parser import HTMLParser
 
 from common.normalize import (
-    normalize_text, extract_case_no, extract_decision_no,
-    extract_decision_date, detect_keywords, tr_fold,
+    normalize_text, detect_keywords, tr_fold,
 )
 from common.anonymize import audit
 from common.http_client import RespectfulClient

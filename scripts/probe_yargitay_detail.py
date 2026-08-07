@@ -85,7 +85,7 @@ async def main():
         print(f"[detail] kaydedildi: {out}")
 
         # Ham yanıt — ilk 2000 karakter
-        print(f"\n[detail] body (ilk 2000):")
+        print("\n[detail] body (ilk 2000):")
         print("-" * 60)
         print(r.text[:2000])
         print("-" * 60)

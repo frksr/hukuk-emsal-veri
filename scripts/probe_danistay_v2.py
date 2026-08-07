@@ -136,7 +136,7 @@ async def probe():
                 fmte = m.get("FMTE", "")
                 print(f"  metadata.FMTY: {fmty}")
                 if fmty != "ERROR":
-                    print(f"  >>> BAŞARI! data preview:")
+                    print("  >>> BAŞARI! data preview:")
                     print(f"  {json.dumps(d, ensure_ascii=False)[:600]}")
                 else:
                     print(f"  metadata.FMTE: {fmte[:150]}")

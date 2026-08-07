@@ -89,6 +89,10 @@ export async function createUser(opts: {
       [opts.email.toLowerCase(), opts.name ?? null, hash, !!opts.marketingConsent],
     );
     const user = res.rows[0];
+    // noUncheckedIndexedAccess: RETURNING'li INSERT her zaman bir satır döner,
+    // ama tip sistemi bunu bilemez. Sessizce undefined ile devam etmek yerine
+    // açıkça patlıyoruz — buraya düşmek şema bozulması demektir.
+    if (!user) throw new Error("Kullanıcı oluşturulamadı (INSERT satır döndürmedi).");
 
     // RLS context'i (transaction-local). tenant_members INSERT politikası bunu ister.
     await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [user.id]);
@@ -104,10 +108,13 @@ export async function createUser(opts: {
       ],
     );
 
+    const tenantId = tenant.rows[0]?.id;
+    if (!tenantId) throw new Error("Çalışma alanı oluşturulamadı.");
+
     await client.query(
       `INSERT INTO tenant_members (tenant_id, user_id, role, accepted_at)
        VALUES ($1, $2, 'owner', NOW())`,
-      [tenant.rows[0].id, user.id],
+      [tenantId, user.id],
     );
 
     await client.query("COMMIT");

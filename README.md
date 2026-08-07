@@ -1,154 +1,218 @@
 # hukuk-emsal-veri
 
-Türk hukukunda **tahsilat / ihtar / icra** konulu emsal kararları toplamak için scraper kümesi.
+**Hukukçu Yapay Zekası** — Türk hukukunda emsal karar arama ve belge üretimi için
+çok kiracılı (multi-tenant), abonelik tabanlı SaaS.
 
-Kaynaklar: HUDOC (AİHM) · Anayasa Mahkemesi · Yargıtay · Danıştay
-Hedef format: ML/RAG için JSONL → Parquet
-Detaylı plan: [`IMPLEMENTASYON_PLANI.md`](IMPLEMENTASYON_PLANI.md)
+> **Not:** Bu depo bir "scraper kümesi" olarak başladı; bugün üretim SaaS'ının
+> tamamını (backend + web + altyapı) barındırıyor. Scraper'lar hâlâ burada ve
+> veri hattının ilk adımı.
 
 ---
 
-## Kurulum
+## Ne yapıyor?
+
+| Modül | Açıklama |
+|---|---|
+| **Emsal arama** | pgvector + tam metin hibrit arama, benzerlik eşikli, karar bazında çeşitlendirilmiş |
+| **Dilekçe üretimi** | Emsallere atıflı dilekçe taslağı (LLM), atıflar programatik doğrulanır |
+| **Karşı argüman** | Kendi tezine karşı argüman analizi |
+| **İhtarname** | Alacak / kira-tahliye ihtarnamesi |
+| **Karar özeti** | Uzun kararın sade Türkçe özeti |
+| **Faiz hesaplayıcı** | Yasal / ticari avans / TCMB reeskont, dönem kırılımlı |
+| **Zamanaşımı** | Kategori + kesilme tarihleriyle hesaplama |
+| **Sözleşme analizi** | Risk maddesi tespiti |
+| **KVKK uyum** | Sektöre göre checklist + uyum skoru |
+| **UYAP dosya analizi** | Kullanıcının dosyalarını yükleyip kendi verisi üzerinde arama (tenant izolasyonlu, şifreli) |
+| **Hatırlatıcılar** | Duruşma/süre takibi, e-posta bildirimi, .ics dışa aktarma |
+| **Blog / SEO** | İçerik CMS'i + publisher API + otomatik SEO üretimi |
+
+---
+
+## Mimari
+
+```
+                 ┌─────────────────────────────┐
+  Tarayıcı  ───► │  Next.js (App Router)       │   Vercel / Cloud Run
+                 │  web/ — SSR + server proxy  │
+                 └──────────────┬──────────────┘
+                                │  /api/proxy/* (NextAuth JWT eklenir)
+                 ┌──────────────▼──────────────┐
+                 │  FastAPI                    │   Cloud Run
+                 │  api/ + services/           │
+                 └──────┬───────────────┬──────┘
+                        │               │
+        ┌───────────────▼──┐    ┌───────▼────────────┐
+        │ Postgres+pgvector│    │ LLM / Embedding API│
+        │ RLS ile izolasyon│    │ Anthropic / Google │
+        └──────────────────┘    └────────────────────┘
+```
+
+| Katman | Teknoloji |
+|---|---|
+| Backend | Python 3.11, FastAPI, asyncpg, psycopg |
+| Frontend | Next.js 14 (App Router), TypeScript (strict), Tailwind |
+| Veri | Postgres + pgvector (HNSW), karar metni için Parquet/DuckDB |
+| Kimlik | NextAuth (JWT) · API anahtarı (public v1) · eklenti token'ı |
+| Ödeme | iyzico v2 (abonelik + tek seferlik ek paket) |
+| Dağıtım | GCP Cloud Build → Cloud Run; alternatif Railway/Vercel |
+
+**Güvenlik temelleri**
+
+- **Tenant izolasyonu**: Postgres RLS + ayrı `app_user` (NOBYPASSRLS) havuzu.
+  Doğrulama: `python -m scripts.verify_rls`
+- **Şifreleme**: tenant başına DEK, master key ile sarmalanır (envelope).
+  Tenant silinince DEK silinir → veri **kriptografik olarak** kurtarılamaz.
+- **PII**: LLM/embedding API'sine giden her metin 3 katmanlı maskelemeden geçer
+  (`services/pii_redaction.py`); regresyonu `tests/test_pii_leak_e2e.py` korur.
+- **İstemci IP**: `X-Forwarded-For` güvenilir proxy zincirinden çözülür
+  (`api/net.py`, `TRUSTED_PROXY_HOPS`).
+
+---
+
+## Kurulum (lokal)
 
 ```bash
-pip install -r requirements.txt
-# veya
-pip install "httpx[socks]" selectolax tenacity pyyaml duckdb pyarrow python-dateutil tqdm orjson
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+
+cp .env.example .env        # değerleri doldurun
+docker compose up -d db     # Postgres + pgvector
+
+python -m scripts.init_db --local-roles   # şema + RLS rolleri
+python -m scripts.create_admin            # ilk admin
+
+uvicorn api.main:app --reload --port 8000
 ```
 
-Python 3.10+ gerekli (PEP 604 union type'ları kullanılıyor).
-
-## Hızlı Başlangıç
+Frontend:
 
 ```bash
-# Birim testler — kurulumu doğrula
-python3 tests/test_normalize.py
-python3 tests/test_anonymize.py
-python3 tests/test_job_queue.py
-
-# HUDOC ile başla (en kolay, açık API)
-python3 scripts/run_scraper.py --source hudoc --max 200
-
-# Diğer kaynaklar
-python3 scripts/run_scraper.py --source aym       --max 500
-python3 scripts/run_scraper.py --source danistay  --max 500
-python3 scripts/run_scraper.py --source yargitay  --max 500
-
-# Final parquet üret (cleaned/*.jsonl -> final/all_decisions.parquet)
-python3 pipelines/export_final.py
+cd web
+cp .env.local.example .env.local
+npm ci
+npm run dev        # http://localhost:3000
 ```
 
-## Yargıtay/Danıştay endpoint doğrulaması
+Ayrıntılı rehber: [`SETUP_LOCAL.md`](SETUP_LOCAL.md) ·
+[`LOKAL_TEST_VE_PRODUCTION_REHBERI.md`](LOKAL_TEST_VE_PRODUCTION_REHBERI.md)
 
-Bu siteler zaman zaman endpoint payload yapısını değiştirir. İlk çalıştırmadan önce:
+---
 
-1. `https://karararama.yargitay.gov.tr` aç
-2. Tarayıcı F12 → Network sekmesi
-3. Bir arama yap (örn. "icra" + 12. HD)
-4. `aramalist` POST isteğinin payload'ını incele
-5. `scrapers/yargitay.py` içindeki `payload` yapısını uyarla
-6. `python3 scripts/probe_yargitay.py` ile doğrula
-
-## Dizin Yapısı
-
-```
-hukuk-emsal-veri/
-├── IMPLEMENTASYON_PLANI.md   ← Detaylı 6 aylık plan
-├── README.md
-├── requirements.txt
-├── queries/keywords.yaml      ← tahsilat/ihtar/icra sorgu matrisi
-├── common/                    ← Ortak yardımcılar
-│   ├── normalize.py           ← Türkçe-aware metin normalize
-│   ├── anonymize.py           ← KVKK PII tespit/maskele
-│   ├── http_client.py         ← Saygılı async HTTP (retry + throttle)
-│   └── job_queue.py           ← SQLite resumable kuyruk
-├── scrapers/
-│   ├── base.py                ← Soyut taban sınıf
-│   ├── hudoc.py               ← AİHM (resmi REST API)
-│   ├── aym.py                 ← Anayasa Mahkemesi
-│   ├── danistay.py            ← Vergi/idari icra
-│   └── yargitay.py            ← İcra (en kritik)
-├── pipelines/
-│   └── export_final.py        ← Parquet + dedup
-├── scripts/
-│   ├── run_scraper.py         ← CLI runner
-│   ├── inventory_existing.py  ← HF/GitHub envanter
-│   └── probe_yargitay.py      ← Endpoint doğrulama
-├── tests/                     ← 20 birim test, hepsi geçiyor
-└── data/                      ← raw/, cleaned/, enriched/, final/
-```
-
-## Aşamalı Çalıştırma Önerisi
-
-İlk hafta hangi sırayla?
-
-1. **HUDOC** (gün 1) — açık API, anti-bot yok, hemen çalışır
-2. **AYM** (gün 2-3) — orta zorlukta, HTML scraping
-3. **Danıştay** (gün 4-7) — AJAX endpoint analizi gerekli
-4. **Yargıtay** (hafta 2-6) — en yoğun veri, daire bazlı tam crawl
-5. **UYAP Emsal** (sonraya bırakıldı, ayrı modül gerekli — ileri seviye anti-bot)
-
-Her aşama sonunda `pipelines/export_final.py` ile birleştirilmiş parquet üretilir.
-
-## Anti-Bot Stratejisi
-
-`common/http_client.py` her domain için:
-- 4-8 saniye rastgele bekleme arası
-- 4 kez retry, exponential backoff
-- User-Agent rotasyonu (4 gerçek tarayıcı imzası)
-- `Accept-Language: tr-TR` header'ı
-- HTTP 429/403'te otomatik geri çekilme
-
-İleri seviye için (Yargıtay/UYAP) Playwright + stealth + Tor `stem` rotasyonu önerilir; bunlar `IMPLEMENTASYON_PLANI.md` Bölüm 5'te detaylı.
-
-## Veri Şeması
-
-```jsonc
-{
-  "id": "yargitay_12hd_2024_e2023-1234_k2024-5678",
-  "source": "yargitay",
-  "court_chamber": "12. Hukuk Dairesi",
-  "case_no": "2023/1234",
-  "decision_no": "2024/5678",
-  "decision_date": "2024-03-15",
-  "subject_keywords_query": ["icra"],
-  "topic_tags": ["icra", "haciz", "ihtar"],
-  "raw_text": "...",
-  "cleaned_text": "...",
-  "anonymization_check": {"contains_pii": false, "types": []},
-  "char_count": 4523,
-  "scraped_at": "2026-05-09T...",
-  "source_url": "..."
-}
-```
-
-## KVKK Uyumluluğu
-
-`common/anonymize.py` her karar metnini şu PII pattern'leri için tarar:
-TC kimlik no, telefon, IBAN, e-posta, kredi kartı.
-
-Her kayıt `anonymization_check` alanı taşır. Yayım öncesi:
-
-```python
-from common.anonymize import anonymize
-clean_text, counts = anonymize(raw_text)
-```
-
-İleri seviye için BERTurk NER (kişi adı tespiti) ek bir aşama olarak eklenmeli.
-
-## Yasal Çerçeve
-
-Bu kararlar kamuya açıktır. Toplu indirme TOS açısından gri alandır.
-Veriyi yayımlayacaksanız: KVKK avukat görüşü + lisans seçimi gereklidir.
-Detay: `IMPLEMENTASYON_PLANI.md` Bölüm 13.
-
-## Test Durumu
+## Test
 
 ```bash
-pip install -r requirements-dev.txt
-python3 -m pytest tests/ -q
+# Backend — DB gerektirmeyenler
+PYTHONPATH=. pytest --ignore=tests/test_db_integration.py
+
+# Kapsam raporu
+PYTHONPATH=. pytest --ignore=tests/test_db_integration.py \
+       --cov=api --cov=services --cov=common --cov-report=term-missing
+
+# RLS + kriptografik silme (canlı Postgres gerekir)
+RUN_DB_TESTS=1 PYTHONPATH=. pytest tests/test_db_integration.py
+PYTHONPATH=. python -m scripts.verify_rls
+
+# Frontend — tip kontrolü GERÇEK kapıdır (ignoreBuildErrors kapalı)
+cd web && npx tsc --noEmit
 ```
 
-Kapsam: normalize, anonymize, job_queue, encryption, pii_redaction,
-billing (TCKN/telefon validasyonu), db entegrasyon, faiz_hesaplayici, zamanasimi.
+CI (`.github/workflows/ci.yml`) her PR'da: tüm pytest paketi + coverage,
+kritik ruff kuralları, Postgres'li RLS entegrasyon işi, `tsc --noEmit`,
+`next build`, pip-audit / npm audit / gitleaks.
 
+### RAG kalitesi
+
+Emsal aramanın doğruluğu ölçülebilir olmalıdır — yanlış emsal bu üründeki en
+ağır hata türüdür.
+
+```bash
+python -m scripts.rag_eval                    # recall@k, precision@k, MRR
+python -m scripts.rag_eval --esik-tara        # en uygun benzerlik eşiğini bul
+python -m scripts.rag_eval --min-recall 0.70  # regresyon kapısı (exit 1)
+```
+
+Altın standart set ve küratörleme rehberi: [`evals/README.md`](evals/README.md)
+
+---
+
+## Veri hattı (scraper → arama)
+
+```bash
+# 1) Kaynaklardan topla (HUDOC · AYM · Danıştay · Yargıtay)
+python scripts/run_scraper.py --source hudoc --max 200
+
+# 2) Birleştir + tekilleştir → parquet
+python -m pipelines.export_final
+
+# 3) Parçala
+python -m pipelines.chunk
+
+# 4) Embed et → pgvector
+python -m pipelines.embed          # model değiştiyse: --recreate
+```
+
+`pipelines/embed.py`, tabloda **farklı bir modelle** üretilmiş vektör bulursa
+çalışmayı durdurur — karışık semantik uzaylar benzerlik skorlarını sessizce
+anlamsızlaştırdığı için.
+
+Kapsam raporu: `python -m analytics.coverage`
+
+**Bilinen kapsam sınırı:** Mevcut veri ağırlıklı olarak **icra / tahsilat /
+ihtar** hukukudur (`queries/keywords.yaml`). UYAP Emsal Karar Bankası ve ilk
+derece/istinaf kararları henüz taranmıyor. `scripts/rag_eval.py` çıktısındaki
+kategori kırılımı bu boşluğu gösterir.
+
+---
+
+## Operasyon
+
+```bash
+# Günlük bakım (KVKK kalıcı silme + faiz oranları + emsal alarmları)
+python -m scripts.cron_daily            # --dry-run ile önce prova
+```
+
+Prod'da bu iş Cloud Scheduler + Cloud Run Job ile her gece koşar:
+`./infra/gcp/setup_gcp.sh cron`
+
+| Uç | Amaç |
+|---|---|
+| `GET /api/health` | **Liveness** — process ayakta mı? Bağımlılıklara bakmaz. |
+| `GET /api/ready` | **Readiness** — DB dahil sağlıklı mı? Erişilemezse **503**. LB ve uptime izleme bunu kullanmalı. |
+
+Loglar `LOG_FORMAT=json` ile yapısaldır ve her satır `request_id` taşır;
+yanıtlardaki `X-Request-Id` header'ı ile eşleşir.
+
+Dağıtım: [`DEPLOY.md`](DEPLOY.md) · [`infra/gcp/DEPLOY_GCP.md`](infra/gcp/DEPLOY_GCP.md)
+Felaket kurtarma: [`DR_RUNBOOK.md`](DR_RUNBOOK.md)
+
+---
+
+## Dizin yapısı
+
+```
+api/            FastAPI uygulaması
+  routers/      30 router (arama, dilekçe, billing, uyap, admin, v1 …)
+  auth.py       JWT / API key / eklenti token doğrulama, require_admin
+  db.py         RLS'e tabi havuz + servis (BYPASSRLS) havuzu
+  kota.py       plan/kredi kotası — advisory lock ile atomik
+  net.py        güvenilir proxy ile istemci IP çözümü
+  logging_setup.py  yapısal log + korelasyon kimliği
+services/       iş mantığı (rag, grounding, billing, encryption, pii_redaction …)
+common/         scraper yardımcıları (normalize, anonymize, http, job_queue)
+scrapers/       HUDOC · AYM · Danıştay · Yargıtay
+pipelines/      export_final → chunk → embed
+scripts/        CLI: init_db, cron_daily, rag_eval, verify_rls, purge_deleted …
+evals/          RAG altın standart seti
+infra/db/       numaralı SQL migration'lar
+infra/gcp/      kurulum + dağıtım betikleri
+web/            Next.js uygulaması
+tests/          pytest paketi
+```
+
+---
+
+## Yasal
+
+Toplanan kararlar kamuya açıktır; toplu indirme TOS açısından gri alandır.
+Yayımlamadan önce KVKK görüşü + lisans seçimi gerekir. Üretilen hiçbir çıktı
+hukuki tavsiye değildir — avukat kontrolü zorunludur.

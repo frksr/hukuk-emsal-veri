@@ -23,7 +23,7 @@ import logging
 import re
 from typing import Any
 
-from services.rag import search
+from services.rag import search, search_for_context
 from llm.provider import generate, is_available
 
 log = logging.getLogger(__name__)
@@ -512,7 +512,8 @@ def karsi_argument_uret(
     # unredact edilmiş olabilir; yine de ihtiyaten anonimleştirilir).
     try:
         from services.pii_redaction import redact_for_embedding
-        emsaller = search(redact_for_embedding(anti_tez_query), k=k)
+        # Katı eşik: LLM'e bağlam olarak giden emsaller
+        emsaller = search_for_context(redact_for_embedding(anti_tez_query), k=k)
     except Exception as e:
         emsaller = []
         log.warning(f"Karşı argüman için RAG araması başarısız: {e}")

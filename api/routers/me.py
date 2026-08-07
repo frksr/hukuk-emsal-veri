@@ -1,7 +1,7 @@
 """Kullanıcı kendi profili + kullanım + tenant + hesap silme."""
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 from api.audit import audit
 from api.auth import CurrentUser, get_current_user

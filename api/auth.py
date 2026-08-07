@@ -16,7 +16,6 @@ UYAP tarayıcı eklentisi tarafı:
 from __future__ import annotations
 import hashlib
 import os
-from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 import jwt
@@ -243,4 +242,31 @@ def require_uyap(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
             "UYAP entegrasyonu sadece UYAP eklentili pakette mevcut. "
             "Yükseltme: /panel/ayarlar/abonelik",
         )
+    return user
+
+
+def require_role(*roles: str):
+    """Belirtilen rollerden birine sahip olmayı zorunlu kılan dependency üretir.
+
+    Örn: `Depends(require_role("admin", "editor"))`
+    """
+    allowed = set(roles)
+
+    def check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if user.role not in allowed:
+            raise HTTPException(
+                403, "Bu işlem için yetkiniz yok."
+            )
+        return user
+
+    return check
+
+
+async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Yalnızca admin. Eskiden bu fonksiyon admin.py, icerik.py, newsletter.py ve
+    waitlist.py'de birebir kopyalanmıştı; ileride ek bir koruma katmanı (MFA,
+    IP allowlist, ek audit) gerektiğinde dört dosyanın senkron güncellenmesi
+    gerekiyordu. Tek kaynağa taşındı."""
+    if user.role != "admin":
+        raise HTTPException(403, "Bu işlem yalnızca admin kullanıcılara açık.")
     return user

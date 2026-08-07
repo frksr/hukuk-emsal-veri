@@ -10,20 +10,18 @@ clean_html_to_text ile yeniden parse eder ve jsonl'i overwrite eder.
 from __future__ import annotations
 import argparse
 import json
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import orjson
-from selectolax.parser import HTMLParser
 from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from common.normalize import (
-    normalize_text, clean_html_to_text,
+    clean_html_to_text,
     extract_case_no, extract_decision_no, extract_decision_date,
     detect_keywords,
 )

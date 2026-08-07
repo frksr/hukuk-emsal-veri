@@ -55,10 +55,11 @@ export function PaketlerPanel() {
       // Limit grid'i: etkin limitlerle başlat (override yoksa koddan gelen efektif değer).
       const lim: Record<string, Record<string, string>> = {};
       for (const tool of d.tools) {
-        lim[tool.key] = {};
+        const satir: Record<string, string> = {};
         for (const tier of d.tiers) {
-          lim[tool.key][tier.key] = limitToStr(d.etkin_limitler?.[tool.key]?.[tier.key]);
+          satir[tier.key] = limitToStr(d.etkin_limitler?.[tool.key]?.[tier.key]);
         }
+        lim[tool.key] = satir;
       }
       setLimits(lim);
       // Paketleri diziye çevir.
@@ -89,16 +90,17 @@ export function PaketlerPanel() {
     try {
       const body: LimitMap = {};
       for (const tool of cfg.tools) {
-        body[tool.key] = {};
+        const satir: Record<string, number | null> = {};
         for (const tier of cfg.tiers) {
           const raw = (limits[tool.key]?.[tier.key] ?? "").trim();
           if (raw === "" || raw === "-") {
-            body[tool.key][tier.key] = null; // sınırsız
+            satir[tier.key] = null; // sınırsız
           } else {
             const n = Number(raw);
-            body[tool.key][tier.key] = Number.isFinite(n) ? Math.trunc(n) : null;
+            satir[tier.key] = Number.isFinite(n) ? Math.trunc(n) : null;
           }
         }
+        body[tool.key] = satir;
       }
       const r = await fetch("/api/proxy/admin/config/plan-limits", {
         method: "PUT",

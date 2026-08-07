@@ -26,7 +26,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile
 from pydantic import BaseModel
 
-from api.auth import CurrentUser, get_current_user
+from api.auth import CurrentUser, require_admin
 from api.cache import TTLCache
 from api.concurrency import run_blocking
 from api.db import db_session, service_session
@@ -42,11 +42,6 @@ _liste_cache = TTLCache(maxsize=8, ttl=300)
 
 _JSON_FIELDS = {"faq", "seo_notes"}
 
-
-async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    if user.role != "admin":
-        raise HTTPException(403, "Bu işlem yalnızca admin kullanıcılara açık.")
-    return user
 
 
 def _row(rec) -> dict:

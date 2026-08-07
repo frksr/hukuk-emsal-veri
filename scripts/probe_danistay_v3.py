@@ -135,9 +135,9 @@ async def probe():
                 print(f"  FMTY: {fmty}")
                 print(f"  FMTE: {fmte[:200]}")
                 if fmty != "ERROR" or d:
-                    print(f"  >>> data preview:")
+                    print("  >>> data preview:")
                     print(f"  {json.dumps(d, ensure_ascii=False)[:800]}")
-                    print(f"\n  *** BU VARYANT BAŞARILI GİBİ! ***")
+                    print("\n  *** BU VARYANT BAŞARILI GİBİ! ***")
             except Exception as e:
                 print(f"  JSON parse: {e}")
                 print(f"  Body: {r.text[:300]}")

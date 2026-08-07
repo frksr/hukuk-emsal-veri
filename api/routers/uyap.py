@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
@@ -535,7 +535,7 @@ async def ai_sorgu(
     from services.tenant_rag import search_tenant
     from services.rag import search as public_search
     from services.pii_redaction import (
-        redact, unredact_safe, audit_pii, ner_available, name_layer,
+        redact, unredact_safe, ner_available, name_layer,
         redact_for_embedding,
     )
     from llm.provider import generate, is_available

@@ -10,10 +10,15 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Tip kontrolu build'i bloklamasin (NextAuth overload'lari gibi tip gurultu).
-  // Tipleri lokalde `npm run type-check` ile ayrica denetle.
+  // TİP KONTROLÜ ARTIK BUILD'İ BLOKLAR.
+  // Eskiden `ignoreBuildErrors: true` idi ve 41 gerçek tip hatası (lib/api.ts
+  // sözleşmeleriyle bileşenler arasında tam uyuşmazlık dahil) prod build'inde
+  // sessizce geçiyordu — TypeScript fiilen devre dışıydı. Hatalar giderildi;
+  // bayrak kapatıldı ki tip güvenliği gerçek bir garanti olsun.
+  // ACİL DURUMDA (üretim düzeltmesi tip hatasıyla bloklanırsa) geçici olarak
+  // `ignoreBuildErrors: true` yapılabilir — ama aynı gün geri alınmalıdır.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   experimental: {
     serverActions: {
@@ -42,7 +47,24 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        // /embed/* — faiz hesaplayıcı widget'ı BİLEREK üçüncü taraf sitelere
+        // gömülebilir olmalı (backlink/marka stratejisi). Global
+        // X-Frame-Options: SAMEORIGIN bu sayfayı da kapsadığı için widget
+        // fiilen çalışmıyordu. Bu kural önce geldiğinden /embed/* için
+        // X-Frame-Options HİÇ gönderilmez; çerçeveleme izni CSP
+        // frame-ancestors ile middleware.ts'te yönetilir.
+        source: "/embed/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+        ],
+      },
+      {
+        source: "/((?!embed).*)",
         headers: [
           { key: "X-DNS-Prefetch-Control", value: "on" },
           { key: "X-Content-Type-Options", value: "nosniff" },

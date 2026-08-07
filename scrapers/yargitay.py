@@ -32,7 +32,7 @@ from selectolax.parser import HTMLParser
 
 from common.normalize import (
     normalize_text, extract_case_no, extract_decision_no,
-    extract_decision_date, detect_keywords, tr_fold,
+    extract_decision_date, detect_keywords,
 )
 from common.anonymize import audit
 from common.job_queue import JobQueue
@@ -171,7 +171,7 @@ class YargitayScraper(BaseScraper):
 
                     # Çok fazla art arda rate-limit varsa run'ı durdur
                     if consecutive_rate_limits >= 5:
-                        print(f"[YRG] 5 ardışık rate-limit — durduruluyor",
+                        print("[YRG] 5 ardışık rate-limit — durduruluyor",
                               file=sys.stderr)
                         return
 

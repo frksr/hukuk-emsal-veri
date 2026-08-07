@@ -77,7 +77,10 @@ export function OnboardingTur() {
 
   if (!acik) return null;
 
+  // noUncheckedIndexedAccess: adim her zaman sınırlar içinde ama tip sistemi
+  // bunu bilemez; taşarsa turu kapat.
   const A = ADIMLAR[adim];
+  if (!A) return null;
   const son = adim === ADIMLAR.length - 1;
 
   return (
