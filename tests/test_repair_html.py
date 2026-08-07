@@ -53,10 +53,12 @@ class _SahteCursor:
         if s.startswith("SELECT count(*)"):
             self._sonuc = [(sum(1 for v in self.store.values() if self._kirli(v)),)]
         elif s.startswith("SELECT chunk_id, document"):
-            # Sunucu tarafı imleç: snapshot alınır, sonraki UPDATE'ler
-            # bu akışı etkilemez (gerçek Postgres davranışı).
-            self._sonuc = sorted(
-                (k, v) for k, v in self.store.items() if self._kirli(v))
+            son = (params or {}).get("son", "")
+            lim = (params or {}).get("lim", 500)
+            uygun = sorted(
+                (k, v) for k, v in self.store.items()
+                if k > son and self._kirli(v))
+            self._sonuc = uygun[:lim]
         elif s.startswith("UPDATE rag_chunks SET document"):
             pass  # executemany üzerinden gelir
         else:
@@ -214,14 +216,33 @@ def test_sorgu_offset_kullanmiyor():
     """Regresyon kilidi: OFFSET sayfalaması geri gelmesin (O(n²) tarama)."""
     sql = R._kirli_sorgusu().upper()
     assert "OFFSET" not in sql, "OFFSET sayfalaması geri gelmiş — O(n²) tarama."
-    assert "LIMIT" not in sql, "LIMIT sayfalaması geri gelmiş — tek geçiş bekleniyor."
+    assert "CHUNK_ID > %(SON)S" in " ".join(sql.split()), "keyset imleci yok."
+    assert "ORDER BY CHUNK_ID" in " ".join(sql.split()), "sıralama yok — imleç bozulur."
 
 
-def test_tablo_tek_kez_taranir(sahte_pg):
-    """71138 satırda saatler süren asıl sorun: tur başına tam tarama.
+def test_sunucu_tarafi_imlec_kullanilmiyor():
+    """services/pg.py havuzu autocommit; named cursor DECLARE bir transaction
+    ister, autocommit'te anında yok olur ve ilk FETCH patlar. Cloud Run job'u
+    tam olarak bu yüzden anında düştü — geri gelmesin."""
+    import inspect
+    kaynak = inspect.getsource(R.onar_chunks)
+    assert "cursor(name=" not in kaynak, (
+        "Sunucu tarafı imleç geri gelmiş — autocommit havuzda çalışmaz."
+    )
 
-    Sunucu tarafı imleçle tablo bir kez taranır → SELECT sayısı sabit kalır,
-    satır sayısıyla ÖLÇEKLENMEZ."""
+
+def test_tek_baglanti_kullanilir():
+    """Havuz max_size=2; iki bağlantı birden almak kilitlenme riski."""
+    import inspect
+    kaynak = inspect.getsource(R.onar_chunks)
+    assert kaynak.count("pg.connection()") == 1, (
+        f"{kaynak.count('pg.connection()')} bağlantı alınıyor — bir tane olmalı."
+    )
+
+
+def test_sorgu_sayisi_dogrusal_artar(sahte_pg):
+    """OFFSET'te sorgu maliyeti KARESEL artıyordu. Keyset'te tur sayısı
+    satır/parti oranıyla DOĞRUSAL artmalı — 40 kat veri, ~40 kat tur."""
     kucuk = {f"c{i:05d}": _KIRLI for i in range(50)}
     sayac_k = sahte_pg(kucuk)
     R.onar_chunks(dry_run=False)
@@ -231,10 +252,9 @@ def test_tablo_tek_kez_taranir(sahte_pg):
     sayac_b = sahte_pg(buyuk)
     R.onar_chunks(dry_run=False)
 
-    assert sayac_b["sorgu"] == sorgu_kucuk, (
-        f"40 kat veri, {sayac_b['sorgu']} vs {sorgu_kucuk} sorgu — "
-        "tarama sayısı veri boyutuyla ölçekleniyor."
-    )
+    # 2000/500 = 4 tur + count; 50 satır = 1 tur + count
+    assert sayac_b["sorgu"] <= 8, f"beklenenden çok sorgu: {sayac_b['sorgu']}"
+    assert sorgu_kucuk <= 3
 
 
 # ==========================================================================

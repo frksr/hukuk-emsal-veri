@@ -86,21 +86,40 @@ _KIRLI_KOSUL = """
 
 
 def _kirli_sorgusu() -> str:
-    """Kirli satırları TEK GEÇİŞTE akıtan sorgu (sayfalama YOK).
+    """Anahtar-tabanlı (keyset) sayfalama.
 
-    NEDEN SAYFALAMA YOK
-    -------------------
-    İlk sürüm `LIMIT/OFFSET` kullanıyordu. OFFSET atlanan satırları her
-    seferinde yeniden tarar; 71138 kirli satırda 143 tur × artan offset ≈
-    5 milyon gereksiz satır taraması (O(n²)) demek — saatler sürüyordu.
+    NEDEN OFFSET DEĞİL
+    ------------------
+    İlk sürüm `LIMIT/OFFSET` kullanıyordu. OFFSET atlanan satırları HER
+    SEFERİNDE yeniden tarar; 71138 kirli satırda ~5 milyon gereksiz satır
+    taraması (O(n²)) demekti — saatler sürüyordu.
 
-    İkinci sürüm keyset (`chunk_id > son`) idi: sonlanma garantisi verdi ama
-    yine tur başına bir tam tarama yapıyordu.
+    NEDEN SUNUCU TARAFI İMLEÇ DE DEĞİL
+    ----------------------------------
+    Sunucu tarafı (named) imleç `DECLARE ... CURSOR` yapar ve bu bir
+    TRANSACTION gerektirir. `services/pg.py` havuzu `autocommit=True` ile
+    açılıyor; autocommit'te DECLARE anında commit'lenir, imleç yok olur ve
+    ilk FETCH "cursor does not exist" ile patlar. (Cloud Run job'u tam olarak
+    bu yüzden anında düştü.)
 
-    Şimdi sunucu tarafı (named) imleç kullanılıyor: sorgu BİR KEZ planlanır,
-    tablo BİR KEZ taranır, sonuçlar parça parça akar.
+    KEYSET NEDEN HIZLI
+    ------------------
+    `ORDER BY chunk_id LIMIT N` sayesinde Postgres birincil anahtar indeksi
+    üzerinde ilerler, filtreyi giderken uygular ve N eşleşme bulunca DURUR.
+    Kirli satırlar toplamın ~%43'ü olduğundan 500 eşleşme birkaç yüz satır
+    içinde bulunur — tur başına tam tarama YOKTUR.
+
+    `chunk_id` birincil anahtar ve kesin artan olduğundan imleç her turda
+    ilerlemeyi GARANTİ eder — satır güncellensin ya da güncellenmesin.
     """
-    return "SELECT chunk_id, document FROM rag_chunks WHERE " + _KIRLI_KOSUL + " ORDER BY chunk_id"
+    return f"""
+        SELECT chunk_id, document
+        FROM rag_chunks
+        WHERE chunk_id > %(son)s
+          AND {_KIRLI_KOSUL}
+        ORDER BY chunk_id
+        LIMIT %(lim)s
+    """
 
 
 def _satiri_isle(chunk_id, belge, sayac, atlanan_ornekler):
@@ -142,46 +161,48 @@ def onar_chunks(dry_run: bool, max_rows: int | None = None) -> dict:
         if not toplam:
             return {"toplam": 0, "temizlenen": 0, "atlanan": 0, "incelenen": 0}
 
-        # TEK GEÇİŞ — sunucu tarafı (named) imleç.
-        #
-        # İlk sürüm LIMIT/OFFSET ile sayfalıyordu. OFFSET atlanan satırları HER
-        # SEFERİNDE yeniden tarar: 143 tur × artan offset ≈ 5 milyon gereksiz
-        # satır taraması (O(n²)). 71138 kirli satırda bu saatler sürüyordu —
-        # mantık hatası değil, ama kabul edilemez.
-        #
-        # Sunucu tarafı imleç sonucu akıtır: tablo BİR KEZ taranır.
-        # Yazma ayrı bağlantıdan yapılır — imleç açıkken aynı bağlantıda
-        # commit etmek imleci geçersiz kılar.
-        with pg.connection() as yazma_conn:
-            with conn.cursor(name="repair_html_kirliligi") as imlec:
-                imlec.itersize = _PARTI
-                imlec.execute(_kirli_sorgusu().replace("%%", "%"))
+        # TEK BAĞLANTI — havuz max_size=2, ikinci bağlantı almak riskli.
+        son_id = ""
+        tur = 0
+        max_tur = max(20, (toplam // _PARTI) * 3 + 20)   # emniyet freni
 
-                tampon: list[tuple[str, str]] = []
-                for chunk_id, belge in imlec:
-                    yeni_metin = _satiri_isle(chunk_id, belge, sayac, atlanan_ornekler)
-                    if yeni_metin is not None:
-                        tampon.append((yeni_metin, chunk_id))
+        tampon: list[tuple[str, str]] = []
+        while True:
+            tur += 1
+            if tur > max_tur:
+                print(f"[REPAIR] DURDURULDU — {max_tur} tur aşıldı "
+                      f"(son chunk_id: {son_id})", file=sys.stderr)
+                break
 
-                    if len(tampon) >= _PARTI:
-                        _yaz(yazma_conn, tampon, dry_run)
-                        tampon.clear()
-                        gecen = time.perf_counter() - t_baslangic
-                        hiz = sayac["incelenen"] / max(gecen, 0.001)
-                        kalan_sn = (toplam - sayac["incelenen"]) / max(hiz, 0.001)
-                        print(f"[REPAIR] {sayac['incelenen']}/{toplam} incelendi, "
-                              f"{sayac['temizlenen']} temizlendi, "
-                              f"{sayac['atlanan']} atlandı | "
-                              f"{hiz:.0f} satır/sn, tahmini kalan "
-                              f"{kalan_sn/60:.1f} dk", file=sys.stderr)
+            with conn.cursor() as cur:
+                cur.execute(_kirli_sorgusu(), {"lim": _PARTI, "son": son_id})
+                rows = cur.fetchall()
+            if not rows:
+                break
+            son_id = rows[-1][0]          # imleç: güncelleme olmasa da ilerler
 
-                    if max_rows and sayac["incelenen"] >= max_rows:
-                        print("[REPAIR] ÖLÇÜM SINIRINA ULAŞILDI — duruluyor.",
-                              file=sys.stderr)
-                        break
+            for chunk_id, belge in rows:
+                yeni_metin = _satiri_isle(chunk_id, belge, sayac, atlanan_ornekler)
+                if yeni_metin is not None:
+                    tampon.append((yeni_metin, chunk_id))
 
-                if tampon:
-                    _yaz(yazma_conn, tampon, dry_run)
+            if tampon:
+                _yaz(conn, tampon, dry_run)
+                tampon.clear()
+
+            gecen = time.perf_counter() - t_baslangic
+            hiz = sayac["incelenen"] / max(gecen, 0.001)
+            kalan_sn = (toplam - sayac["incelenen"]) / max(hiz, 0.001)
+            print(f"[REPAIR] {sayac['incelenen']}/{toplam} incelendi, "
+                  f"{sayac['temizlenen']} temizlendi, {sayac['atlanan']} atlandı | "
+                  f"{hiz:.0f} satır/sn, tahmini kalan {kalan_sn/60:.1f} dk",
+                  file=sys.stderr)
+
+            if max_rows and sayac["incelenen"] >= max_rows:
+                print("[REPAIR] ÖLÇÜM SINIRINA ULAŞILDI — duruluyor.", file=sys.stderr)
+                break
+            if len(rows) < _PARTI:
+                break
 
     gecen = time.perf_counter() - t_baslangic
     print(f"[REPAIR] BİTTİ — {sayac['incelenen']}/{toplam} incelendi, "
