@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -119,19 +120,25 @@ def _satiri_isle(chunk_id, belge, sayac, atlanan_ornekler):
     return temiz
 
 
-def onar_chunks(dry_run: bool) -> dict:
+def onar_chunks(dry_run: bool, max_rows: int | None = None) -> dict:
     from services import pg
 
     sayac = {"incelenen": 0, "temizlenen": 0, "atlanan": 0}
     atlanan_ornekler: list[str] = []
 
+    t_baslangic = time.perf_counter()
     with pg.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 ("SELECT count(*) FROM rag_chunks WHERE " + _KIRLI_KOSUL).replace("%%", "%")
             )
             toplam = cur.fetchone()[0]
-        print(f"[REPAIR] HTML izi olan chunk: {toplam}", file=sys.stderr)
+        print(f"[REPAIR] HTML izi olan chunk: {toplam}  "
+              f"(sayım {time.perf_counter() - t_baslangic:.1f} sn sürdü)",
+              file=sys.stderr)
+        if max_rows:
+            print(f"[REPAIR] ÖLÇÜM MODU — yalnızca ilk {max_rows} satır işlenecek.",
+                  file=sys.stderr)
         if not toplam:
             return {"toplam": 0, "temizlenen": 0, "atlanan": 0, "incelenen": 0}
 
@@ -159,16 +166,31 @@ def onar_chunks(dry_run: bool) -> dict:
                     if len(tampon) >= _PARTI:
                         _yaz(yazma_conn, tampon, dry_run)
                         tampon.clear()
+                        gecen = time.perf_counter() - t_baslangic
+                        hiz = sayac["incelenen"] / max(gecen, 0.001)
+                        kalan_sn = (toplam - sayac["incelenen"]) / max(hiz, 0.001)
                         print(f"[REPAIR] {sayac['incelenen']}/{toplam} incelendi, "
                               f"{sayac['temizlenen']} temizlendi, "
-                              f"{sayac['atlanan']} atlandı", file=sys.stderr)
+                              f"{sayac['atlanan']} atlandı | "
+                              f"{hiz:.0f} satır/sn, tahmini kalan "
+                              f"{kalan_sn/60:.1f} dk", file=sys.stderr)
+
+                    if max_rows and sayac["incelenen"] >= max_rows:
+                        print("[REPAIR] ÖLÇÜM SINIRINA ULAŞILDI — duruluyor.",
+                              file=sys.stderr)
+                        break
 
                 if tampon:
                     _yaz(yazma_conn, tampon, dry_run)
 
+    gecen = time.perf_counter() - t_baslangic
     print(f"[REPAIR] BİTTİ — {sayac['incelenen']}/{toplam} incelendi, "
-          f"{sayac['temizlenen']} temizlendi, {sayac['atlanan']} atlandı",
-          file=sys.stderr)
+          f"{sayac['temizlenen']} temizlendi, {sayac['atlanan']} atlandı "
+          f"({gecen:.1f} sn)", file=sys.stderr)
+    if max_rows and sayac["incelenen"]:
+        tam_tahmin = gecen * toplam / sayac["incelenen"]
+        print(f"[REPAIR] ÖLÇÜM: bu hızla {toplam:,} satırın tamamı "
+              f"~{tam_tahmin/60:.0f} DAKİKA sürer.", file=sys.stderr)
 
     if atlanan_ornekler:
         print("\n[REPAIR] ATLANAN (temizlik metni aşırı kısalttı — elle bakın):",
@@ -395,6 +417,9 @@ def main() -> int:
                     help="bu koşuda en fazla N chunk embed et (maliyet freni)")
     ap.add_argument("--parquet", action="store_true",
                     help="karar tam metni parquet'ini de onar")
+    ap.add_argument("--max-rows", type=int, default=None,
+                    help="ÖLÇÜM: yalnızca ilk N satırı işle, süreyi ölç ve "
+                         "tamamının ne kadar süreceğini tahmin et")
     ap.add_argument("--skip-db", action="store_true", help="rag_chunks'a dokunma")
     args = ap.parse_args()
 
@@ -404,7 +429,7 @@ def main() -> int:
 
     sonuc: dict = {}
     if not args.skip_db:
-        sonuc["rag_chunks"] = onar_chunks(args.dry_run)
+        sonuc["rag_chunks"] = onar_chunks(args.dry_run, args.max_rows)
 
     if args.reembed and not args.dry_run:
         sonuc["embed"] = _yeniden_embed(args.onayla, args.max_embed)

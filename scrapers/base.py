@@ -13,7 +13,14 @@ class BaseScraper(ABC):
     output_root: Path = Path("data")
     scraper_version: str = "1.0.0"
 
-    def __init__(self, root: str | Path = "data"):
+    def __init__(self, root: str | Path = "data", since: str | None = None):
+        # `since` (YYYY-MM-DD): yalnızca bu tarihten sonraki kararlar işlenir.
+        # None → tam tarama. Bkz. common/scrape_state.py
+        self.since = since
+        # Bu koşuda görülen EN YENİ karar tarihi — koşu sonunda imleç olarak
+        # kaydedilir (koşu tarihi değil; kaynaklar geriye dönük yayın yapıyor).
+        self.en_yeni_tarih: str | None = None
+        self.eklenen_kayit = 0
         self.output_root = Path(root)
         self.raw_dir = self.output_root / "raw" / self.source_name
         self.cleaned_dir = self.output_root / "cleaned"
@@ -45,3 +52,34 @@ class BaseScraper(ABC):
         with path.open("ab") as f:
             f.write(orjson.dumps(record))
             f.write(b"\n")
+        self.eklenen_kayit += 1
+        self._imleci_ilerlet(record.get("decision_date"))
+
+    # -- artımlı tazeleme yardımcıları -------------------------------------
+
+    def _imleci_ilerlet(self, karar_tarihi) -> None:
+        """Bu koşuda görülen en yeni karar tarihini takip et."""
+        from common.scrape_state import tarih_normalize
+
+        t = tarih_normalize(karar_tarihi)
+        if t and (self.en_yeni_tarih is None or t > self.en_yeni_tarih):
+            self.en_yeni_tarih = t
+
+    def atlanmali_mi(self, karar_tarihi) -> bool:
+        """`since` filtresine göre bu karar atlanmalı mı?
+
+        Kaynak API tarih filtresini SUNUCU TARAFINDA desteklemiyorsa (Danıştay)
+        liste aşamasında bunu çağırarak pahalı detay isteğinden kaçınırız.
+        Tarih çözülemezse ATLANMAZ — eksik metadata yüzünden gerçek bir kararı
+        kaçırmaktansa fazladan işlemek yeğdir.
+        """
+        from common.scrape_state import yeni_mi
+
+        return not yeni_mi(karar_tarihi, self.since)
+
+    def durumu_kaydet(self) -> None:
+        """Koşu sonunda imleci kalıcı hale getir."""
+        from common.scrape_state import kaydet
+
+        kaydet(self.output_root, self.source_name,
+               self.en_yeni_tarih, self.eklenen_kayit)

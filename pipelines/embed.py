@@ -45,6 +45,11 @@ def main():
                    help="Sadece N chunk için (test)")
     p.add_argument("--recreate", action="store_true",
                    help="rag_chunks tablosunu TRUNCATE et, sıfırdan yaz")
+    p.add_argument("--prune", action="store_true",
+                   help="YETİM chunk temizliği: chunks.parquet'te olmayan ama "
+                        "DB'de duran chunk'ları sil (metin kısalıp chunk sayısı "
+                        "azaldığında oluşur). Yalnızca parquet'te BULUNAN "
+                        "kararların yetimlerini siler.")
     p.add_argument("--dsn", default=None,
                    help="Override DSN (yoksa RAG_DATABASE_URL/DATABASE_URL)")
     args = p.parse_args()
@@ -70,6 +75,11 @@ def main():
     if args.max_chunks:
         sql += f" LIMIT {args.max_chunks}"
     df = duckdb.sql(sql).df()
+    # --prune için: parquet'teki TÜM chunk/karar kimlikleri. Bu, aşağıdaki
+    # RESUME filtresinden ÖNCE alınmalı — sonra alınırsa yalnızca yeni
+    # chunk'lar kalır ve prune mevcut her şeyi yetim sanıp SİLER.
+    df_tum_chunk_idler = set(df["chunk_id"].astype(str))
+    df_tum_karar_idler = set(df["decision_id"].astype(str)) if "decision_id" in df.columns else set()
     total = len(df)
     print(f"[EMBED] {total} chunk yüklendi", file=sys.stderr)
 
@@ -177,6 +187,9 @@ def main():
         conn.commit()
         written += len(rows)
 
+    if args.prune:
+        _yetimleri_sil(conn, df_tum_chunk_idler, df_tum_karar_idler)
+
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM rag_chunks")
         final_count = cur.fetchone()[0]
@@ -187,3 +200,44 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def _yetimleri_sil(conn, gecerli_chunk_idler: set, gecerli_karar_idler: set) -> None:
+    """chunks.parquet'te olmayan ama DB'de duran chunk'ları sil.
+
+    NEDEN GEREKLİ
+    -------------
+    Bir kararın metni KISALIRSA (ör. HTML kirliliği temizlendikten sonra
+    yeniden chunk'lanınca) chunk sayısı azalır: 25 chunk'lık karar 20'ye düşer.
+    `_c020`..`_c024` chunk'ları tabloda SONSUZA DEK kalır — embed.py silme
+    yapmaz. Bu yetimler aramada eski/kirli metinle çıkmaya devam eder.
+
+    GÜVENLİK: yalnızca parquet'te BULUNAN kararların yetimleri silinir.
+    Parquet'ten tamamen düşmüş bir karara (ör. eksik koşu, bozuk dosya)
+    DOKUNULMAZ — yarım bir parquet ile tüm veri tabanını silmemek için.
+    """
+    if not gecerli_karar_idler:
+        print("[EMBED] --prune atlandı: parquet'te decision_id kolonu yok",
+              file=sys.stderr)
+        return
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT chunk_id FROM rag_chunks WHERE decision_id = ANY(%s)",
+            (list(gecerli_karar_idler),),
+        )
+        db_idler = {r[0] for r in cur.fetchall()}
+
+    yetimler = sorted(db_idler - gecerli_chunk_idler)
+    if not yetimler:
+        print("[EMBED] --prune: yetim chunk yok.", file=sys.stderr)
+        return
+
+    print(f"[EMBED] --prune: {len(yetimler)} yetim chunk siliniyor "
+          f"(örn. {yetimler[:3]})", file=sys.stderr)
+    with conn.cursor() as cur:
+        for i in range(0, len(yetimler), 1000):
+            cur.execute("DELETE FROM rag_chunks WHERE chunk_id = ANY(%s)",
+                        (yetimler[i:i + 1000],))
+    conn.commit()
+    print(f"[EMBED] --prune: {len(yetimler)} yetim silindi.", file=sys.stderr)

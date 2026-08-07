@@ -83,15 +83,36 @@ DETAIL_BAN_BACKOFF = 120.0
 DETAIL_BAN_MAX_RETRIES = 3
 
 
+def _tr_tarih(iso: str | None) -> str:
+    """YYYY-MM-DD → DD.MM.YYYY (Yargıtay formu bu biçimi bekler)."""
+    if not iso:
+        return ""
+    try:
+        y, a, g = iso.split("-")
+        return f"{g}.{a}.{y}"
+    except ValueError:
+        return ""
+
+
 def _build_search_payload(keyword: str, chamber: str,
-                          page_size: int, page_number: int) -> dict:
+                          page_size: int, page_number: int,
+                          since: str | None = None) -> dict:
+    """Arama payload'ı.
+
+    ARTIMLI TAZELEME: `since` verilirse `baslangicTarihi` doldurulur —
+    filtreleme SUNUCU TARAFINDA olur, yani eski kararların sayfaları hiç
+    gezilmez. Bu, düzenli koşuda hem süreyi hem anti-bot riskini düşürür.
+
+    `siralama=1, direction=desc` zaten karar tarihine göre yeniden eskiye
+    sıralıyor; yeni kararlar ilk sayfalarda çıkar.
+    """
     return {
         "data": {
             "arananKelime": keyword,
             "hukuk": chamber,
             "esasYil": "", "esasIlkSiraNo": "", "esasSonSiraNo": "",
             "kararYil": "", "kararIlkSiraNo": "", "kararSonSiraNo": "",
-            "baslangicTarihi": "", "bitisTarihi": "",
+            "baslangicTarihi": _tr_tarih(since), "bitisTarihi": "",
             "siralama": "1", "siralamaDirection": "desc",
             "birimYrgKurulDaire": "",
             "birimYrgHukukDaire": chamber,
@@ -107,8 +128,9 @@ class YargitayScraper(BaseScraper):
 
     def __init__(self, root: str | Path = "data",
                  chambers: list[str] | None = None,
-                 keywords_path: str | Path = "queries/keywords.yaml"):
-        super().__init__(root)
+                 keywords_path: str | Path = "queries/keywords.yaml",
+                 since: str | None = None):
+        super().__init__(root, since=since)
         self.chambers = chambers or CHAMBERS
         kw = yaml.safe_load(Path(keywords_path).read_text(encoding="utf-8"))
         self.keywords = kw["primary"]
@@ -131,7 +153,7 @@ class YargitayScraper(BaseScraper):
                 yielded_for_query = 0
                 while True:
                     payload = _build_search_payload(
-                        keyword, chamber, page_size, page_number)
+                        keyword, chamber, page_size, page_number, self.since)
                     j = None
                     for attempt in range(SEARCH_BAN_MAX_RETRIES):
                         delay = SEARCH_BASE_DELAY + random.uniform(0, SEARCH_JITTER)

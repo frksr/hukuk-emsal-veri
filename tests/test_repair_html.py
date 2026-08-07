@@ -371,3 +371,19 @@ def test_temizlik_bayat_isareti_koyar(sahte_pg):
     kaynak = inspect.getsource(R._yaz)
     assert "embedding_model = %s" in kaynak
     assert "_BAYAT_ISARET" in kaynak
+
+
+def test_max_rows_siniri_uygulanir(sahte_pg):
+    """Ölçüm modu: N satırdan fazlasına dokunmamalı."""
+    store = {f"c{i:05d}": _KIRLI for i in range(3000)}
+    sahte_pg(store)
+    sonuc = R.onar_chunks(dry_run=False, max_rows=1000)
+    # Parti sınırında durur → tam kat olmayabilir ama 1000'i az aşar, 3000 olmaz
+    assert 1000 <= sonuc["incelenen"] < 1600, sonuc["incelenen"]
+    assert sonuc["incelenen"] < 3000
+
+
+def test_max_rows_yoksa_hepsi_islenir(sahte_pg):
+    store = {f"c{i:05d}": _KIRLI for i in range(1200)}
+    sahte_pg(store)
+    assert R.onar_chunks(dry_run=False)["incelenen"] == 1200

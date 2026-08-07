@@ -86,8 +86,13 @@ class DanistayScraper(BaseScraper):
 
     def __init__(self, root: str | Path = "data",
                  keywords_path: str | Path = "queries/keywords.yaml",
-                 keywords: list[str] | None = None):
-        super().__init__(root)
+                 keywords: list[str] | None = None,
+                 since: str | None = None):
+        # NOT: Danıştay arama payload'ında tarih alanı YOK — bu yüzden `since`
+        # filtresi SUNUCU tarafında uygulanamıyor. Liste sonuçları geldikten
+        # sonra istemci tarafında süzüyoruz; kazanç, eski kararlar için pahalı
+        # DETAY isteğinin hiç yapılmaması. Yargıtay'da filtre sunucudadır.
+        super().__init__(root, since=since)
         if keywords is not None:
             self.keywords = keywords
         else:
@@ -106,6 +111,7 @@ class DanistayScraper(BaseScraper):
                        limit: int | None = None) -> AsyncIterator[dict]:
         page_size = 50
         yielded_total = 0
+        atlanan_eski = 0
 
         if True:  # client dışarıdan geliyor — session zaten init'li
             import random
@@ -187,6 +193,16 @@ class DanistayScraper(BaseScraper):
                                row.get("dokumanId") or row.get("itemId"))
                         if not iid:
                             continue
+
+                        # ARTIMLI TAZELEME (istemci tarafı süzme).
+                        # Danıştay payload'ı tarih filtresi kabul etmediği için
+                        # liste hep tam geliyor; burada süzerek eski kararlar
+                        # için PAHALI DETAY isteğini hiç yapmıyoruz.
+                        karar_tarihi = (row.get("kararTarihi") or row.get("tarih"))
+                        if self.atlanmali_mi(karar_tarihi):
+                            atlanan_eski += 1
+                            continue
+
                         yield {
                             "id": str(iid),
                             "chamber": (row.get("daireKurul") or
