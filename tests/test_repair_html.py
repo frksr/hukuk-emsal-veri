@@ -265,13 +265,21 @@ def test_sorgu_sayisi_dogrusal_artar(sahte_pg):
 class _EmbedSayaci:
     """embed_passages çağrılarını sayan sahte sağlayıcı."""
 
-    def __init__(self, hata_versin: bool = False, eksik_donsun: bool = False):
+    def __init__(self, hata_versin: bool = False, eksik_donsun: bool = False,
+                 hata_baslangici: int | None = None):
         self.cagri = 0
         self.gonderilen = 0
         self.hata_versin = hata_versin
         self.eksik_donsun = eksik_donsun
+        #: Bu kadar chunk gönderildikten SONRA hata vermeye başla.
+        #: "Koşunun ortasında bakiye bitti" senaryosunu taklit eder.
+        self.hata_baslangici = hata_baslangici
 
     def embed_passages(self, texts):
+        if (self.hata_baslangici is not None
+                and self.gonderilen >= self.hata_baslangici):
+            self.cagri += 1
+            raise RuntimeError("429 RESOURCE_EXHAUSTED: kota/bakiye bitti")
         self.cagri += 1
         self.gonderilen += len(texts)
         if self.hata_versin:
@@ -407,3 +415,45 @@ def test_max_rows_yoksa_hepsi_islenir(sahte_pg):
     store = {f"c{i:05d}": _KIRLI for i in range(1200)}
     sahte_pg(store)
     assert R.onar_chunks(dry_run=False)["incelenen"] == 1200
+
+
+def test_bakiye_ORTADA_biterse_kaldigi_yerden_devam_eder(sahte_embed):
+    """KULLANICI SENARYOSU: koşunun ortasında API bakiyesi bitiyor.
+
+    Beklenen davranış:
+      1. O ana kadar embed edilenler KALICI (parti parti commit'leniyor).
+      2. Geri kalanlar BAYAT işaretli KALIYOR — iş listesi DB'de tutuluyor.
+      3. Bakiye yüklenip aynı komut çalıştırılınca BAŞTAN başlamıyor.
+      4. Hiçbir chunk İKİ KEZ gönderilmiyor → çifte ödeme yok.
+    """
+    sayici, isaret = sahte_embed(300, hata_baslangici=128)   # 2 parti sonra kes
+
+    R._yeniden_embed(onayla=True, max_embed=None)
+
+    # 1) İlk iki parti kalıcı
+    tamamlanan = sum(1 for v in isaret.values() if v != R._BAYAT_ISARET)
+    assert tamamlanan == 128, f"commit edilen parti sayısı beklenmedik: {tamamlanan}"
+    # 2) Kalanlar iş listesinde duruyor
+    assert sum(1 for v in isaret.values() if v == R._BAYAT_ISARET) == 172
+    # Fren tuttu: başarısız istek sayısı sınırlı
+    assert sayici.cagri <= 2 + R._MAX_ARDISIK_HATA
+
+    # 3) Bakiye yüklendi → ikinci koşu
+    sayici.hata_baslangici = None
+    R._yeniden_embed(onayla=True, max_embed=None)
+
+    assert sum(1 for v in isaret.values() if v == R._BAYAT_ISARET) == 0
+    # 4) Toplam gönderim = chunk sayısı; tek bir chunk bile iki kez gitmedi
+    assert sayici.gonderilen == 300, (
+        f"{sayici.gonderilen} chunk gönderildi ama 300 chunk var — ÇİFTE ÖDEME")
+
+
+def test_kesinti_sonrasi_yeniden_embed_MALIYETI_dusurur(sahte_embed):
+    """Kesintiden sonraki koşunun maliyet tahmini KALAN'ı göstermeli;
+    baştan başlıyormuş gibi tüm külliyatı değil."""
+    sayici, isaret = sahte_embed(300, hata_baslangici=64)
+    R._yeniden_embed(onayla=True, max_embed=None)
+
+    sayici.hata_baslangici = None
+    sonuc = R._yeniden_embed(onayla=False, max_embed=None)
+    assert sonuc["kalan"] == 236, "kalan iş sayısı yanlış raporlanıyor"
