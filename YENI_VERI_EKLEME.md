@@ -104,6 +104,33 @@ Danıştay'ın API'si tarih parametresi kabul etmediği için oradaki kazanç
 kısmi. API'de böyle bir alan keşfedilirse `_build_payload`'a eklenmeli;
 `SINCE_DESTEKLI` kümesi de güncellenmeli.
 
+### 2b. İŞARETSİZ temizlenmiş chunk'lar — ✅ KAPATILDI (`--bayat-tara`)
+
+2026-08-07'deki HTML onarımında ilk koşular metni temizledi ama
+`embedding_model` sütununa BAYAT işaretini **yazmadı** (o güvenlik sonradan
+eklendi). Sonuç: metni temiz, **vektörü HTML çöpünden üretilmiş** ~21.500
+satır. DB'ye bakarak bunlar hiç kirli olmamış satırlardan ayırt edilemez;
+`--reembed` onları sessizce atlar ve arama kalitesi bozuk kalır.
+
+Kanıt **parquet'te**: parquet onarılmadığı sürece kirli metni hâlâ içerir.
+
+```bash
+# Kirli KARAR kimliklerini parquet'ten çıkar, o kararların TÜM chunk'larını
+# BAYAT işaretle. Parquet onarımından ÖNCE çalıştırın.
+python -m scripts.repair_html_kirliligi --skip-db --bayat-tara
+```
+
+Yalnızca `embedding_model IS NULL` satırlar işaretlenir — onarımdan sonra
+düzgün embed edilmiş satırların imzası ezilmez. Zaten BAYAT olanlara
+dokunulmaz, temiz kararlar hiç işaretlenmez (gereksiz API maliyeti doğmasın).
+
+Parquet zaten onarıldıysa yedekten okuyun:
+
+```bash
+DECISIONS_PARQUET=data/final/all_decisions.parquet.html-kirli-yedek \
+  python -m scripts.repair_html_kirliligi --skip-db --bayat-tara
+```
+
 ### 3. Yetim (orphan) chunk temizliği — ✅ KAPATILDI (`--prune`)
 
 Bir kararın metni **kısalırsa** chunk sayısı azalır. Örnek: HTML temizliğinden

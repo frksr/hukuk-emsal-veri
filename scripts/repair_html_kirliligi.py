@@ -373,12 +373,123 @@ def _yeniden_embed(onayla: bool, max_embed: int | None) -> dict:
     return {"embed_edilen": embed_edilen, "kalan": kalan}
 
 
+#: `bayat_isaretle_parquetten` tek UPDATE'te kaç decision_id gönderilsin.
+_ISARET_PARTI = 2000
+
+
+def _parquet_yolu() -> Path:
+    return Path(os.environ.get(
+        "DECISIONS_PARQUET", str(ROOT / "data" / "final" / "all_decisions.parquet")))
+
+
+def kirli_karar_idleri(yol: Path | None = None) -> list[str]:
+    """Parquet'te HÂLÂ HTML izi taşıyan kararların kimlikleri.
+
+    Parquet onarımdan ÖNCE okunmalı — `onar_parquet` bu kanıtı siler.
+    """
+    import duckdb
+
+    yol = yol or _parquet_yolu()
+    if not yol.exists():
+        raise FileNotFoundError(
+            f"parquet bulunamadı: {yol}\n"
+            "Bayat tarama parquet'teki kirli metne dayanır; onsuz yapılamaz."
+        )
+
+    kaynak = "'" + str(yol).replace("'", "''") + "'"
+    mevcut = duckdb.sql(f"SELECT * FROM {kaynak} LIMIT 0").columns
+    kolonlar = [k for k in ("cleaned_text", "raw_text") if k in mevcut]
+    if "id" not in mevcut or not kolonlar:
+        raise ValueError(
+            f"parquet'te beklenen kolonlar yok: id + cleaned_text/raw_text "
+            f"(bulunan: {list(mevcut)[:10]})")
+
+    # ÖN SÜZME DuckDB'de: `_HTML_IZI_RE` kalıplarının HEPSİ ya '<' ya '&' ile
+    # başlar, dolayısıyla bu koşul kesin bir ÜST KÜMEDİR — eleme yapmaz, sadece
+    # tam metni belleğe çekilecek satır sayısını düşürür (parquet yüz binlerce
+    # karar tutabiliyor; tamamını pandas'a almak job'u OOM ile düşürürdü).
+    # Nihai kararı yine `html_izi_var_mi` verir; iki yerde iki farklı desen
+    # tutmuyoruz.
+    kosul = " OR ".join(
+        f"{k} LIKE '%<%' OR {k} LIKE '%&%'" for k in kolonlar)
+    secim = ", ".join(["id", *kolonlar])
+    adaylar = duckdb.sql(
+        f"SELECT {secim} FROM {kaynak} WHERE {kosul}").fetchall()
+
+    kirli: list[str] = []
+    for satir in adaylar:
+        if any(isinstance(v, str) and html_izi_var_mi(v) for v in satir[1:]):
+            kirli.append(str(satir[0]))
+    return kirli
+
+
+def bayat_isaretle_parquetten(dry_run: bool) -> dict:
+    """İŞARETSİZ temizlenmiş chunk'ları BAYAT olarak işaretle.
+
+    KAPATILAN BOŞLUK
+    ----------------
+    İlk onarım koşuları metni temizliyor ama `embedding_model` sütununa BAYAT
+    işareti YAZMIYORDU (o özellik sonradan eklendi). Sonuç: metni temiz,
+    vektörü HTML çöpünden üretilmiş satırlar oluştu ve bunlar DB'de hiç kirli
+    olmamış satırlardan ayırt edilemez hâle geldi — `--reembed` onları atlar,
+    arama kalitesi sessizce bozuk kalır.
+
+    ÇÖZÜM: parquet henüz onarılmadığı için kirli metni HÂLÂ içeriyor. Kirli
+    KARAR kimlikleri oradan çıkarılıp o kararların TÜM chunk'ları işaretlenir.
+    Bu, zaten işaretli olanların ÜST KÜMESİDİR — kayıp bırakmaz.
+
+    GÜVENLİK: yalnızca `embedding_model IS NULL` satırlar işaretlenir. Gerçek
+    bir model imzası taşıyan satırlar (onarımdan SONRA düzgün embed edilmiş)
+    ellenmez.
+    """
+    from services import pg
+
+    idler = kirli_karar_idleri()
+    print(f"[BAYAT] parquet'te kirli karar: {len(idler):,}", file=sys.stderr)
+    if not idler:
+        print(
+            "[BAYAT] UYARI: parquet'te kirli karar YOK.\n"
+            "        Parquet zaten onarılmış olabilir (--parquet daha önce\n"
+            "        çalıştıysa). O durumda bu tarama kanıtı bulamaz; yedeği\n"
+            "        kullanın: DECISIONS_PARQUET=<...>.html-kirli-yedek",
+            file=sys.stderr)
+        return {"kirli_karar": 0, "isaretlenen": 0}
+
+    if dry_run:
+        with pg.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM rag_chunks "
+                "WHERE decision_id = ANY(%s) AND embedding_model IS NULL",
+                (idler,))
+            adet = cur.fetchone()[0]
+        print(f"[BAYAT] DRY-RUN — işaretlenecek chunk: {adet:,}", file=sys.stderr)
+        return {"kirli_karar": len(idler), "isaretlenen": 0, "isaretlenecek": adet}
+
+    isaretlenen = 0
+    with pg.connection() as conn:
+        for i in range(0, len(idler), _ISARET_PARTI):
+            parca = idler[i:i + _ISARET_PARTI]
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE rag_chunks SET embedding_model = %s "
+                    "WHERE decision_id = ANY(%s) AND embedding_model IS NULL",
+                    (_BAYAT_ISARET, parca))
+                isaretlenen += cur.rowcount
+            conn.commit()
+            print(f"[BAYAT] {min(i + _ISARET_PARTI, len(idler)):,}/{len(idler):,} "
+                  f"karar tarandı, {isaretlenen:,} chunk işaretlendi",
+                  file=sys.stderr)
+
+    print(f"[BAYAT] BİTTİ — {isaretlenen:,} chunk BAYAT olarak işaretlendi.",
+          file=sys.stderr)
+    return {"kirli_karar": len(idler), "isaretlenen": isaretlenen}
+
+
 def onar_parquet(dry_run: bool) -> dict:
     """Karar tam metni parquet'ini onarır (karar detay sayfası oradan okur)."""
     import duckdb
 
-    yol = Path(os.environ.get(
-        "DECISIONS_PARQUET", str(ROOT / "data" / "final" / "all_decisions.parquet")))
+    yol = _parquet_yolu()
     if not yol.exists():
         print(f"[REPAIR] parquet yok, atlanıyor: {yol}", file=sys.stderr)
         return {"parquet": "yok"}
@@ -438,10 +549,16 @@ def main() -> int:
                     help="bu koşuda en fazla N chunk embed et (maliyet freni)")
     ap.add_argument("--parquet", action="store_true",
                     help="karar tam metni parquet'ini de onar")
+    ap.add_argument("--bayat-tara", action="store_true",
+                    help="ESKİ koşuların işaretsiz temizlediği chunk'ları "
+                         "parquet'teki kirli karar kimliklerinden bulup BAYAT "
+                         "işaretle. --parquet ONARIMINDAN ÖNCE çalıştırın.")
     ap.add_argument("--max-rows", type=int, default=None,
                     help="ÖLÇÜM: yalnızca ilk N satırı işle, süreyi ölç ve "
                          "tamamının ne kadar süreceğini tahmin et")
-    ap.add_argument("--skip-db", action="store_true", help="rag_chunks'a dokunma")
+    ap.add_argument("--skip-db", action="store_true",
+                    help="METİN TEMİZLEME taramasını atla (rag_chunks.document'e "
+                         "dokunma). --bayat-tara ve --reembed bundan etkilenmez.")
     args = ap.parse_args()
 
     if args.dry_run:
@@ -452,6 +569,14 @@ def main() -> int:
     if not args.skip_db:
         sonuc["rag_chunks"] = onar_chunks(args.dry_run, args.max_rows)
 
+    # SIRA ÖNEMLİ: bayat tarama parquet'teki kirli metne dayanır; `onar_parquet`
+    # o kanıtı temizler. Bu yüzden tarama HER ZAMAN parquet onarımından önce.
+    # NOT: --skip-db yalnızca METİN TEMİZLEME taramasını atlar. --bayat-tara
+    # bağımsızdır; asıl kullanımı zaten "temizlik bitti, sadece işaretle" —
+    # 4,5 saatlik taramayı yeniden çalıştırmaya gerek kalmasın.
+    if args.bayat_tara:
+        sonuc["bayat_tara"] = bayat_isaretle_parquetten(args.dry_run)
+
     if args.reembed and not args.dry_run:
         sonuc["embed"] = _yeniden_embed(args.onayla, args.max_embed)
     elif args.reembed and args.dry_run:
@@ -459,6 +584,13 @@ def main() -> int:
               "embed aşaması ATLANDI.", file=sys.stderr)
 
     if args.parquet:
+        if not args.bayat_tara:
+            print(
+                "\n[REPAIR] UYARI: parquet onarılıyor ama --bayat-tara verilmedi.\n"
+                "         Parquet, ESKİ koşuların işaretsiz temizlediği chunk'ları\n"
+                "         bulmak için kullanılan TEK kanıttır. Onarımdan sonra\n"
+                "         yalnızca .html-kirli-yedek dosyasından bulunabilir.\n",
+                file=sys.stderr)
         sonuc["parquet"] = onar_parquet(args.dry_run)
 
     print("\n[REPAIR] SONUÇ:", sonuc, file=sys.stderr)
