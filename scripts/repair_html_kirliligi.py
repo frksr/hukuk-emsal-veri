@@ -58,7 +58,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from common.normalize import clean_html_to_text, html_izi_var_mi  # noqa: E402
+from common.normalize import (  # noqa: E402
+    HTML_IZI_DESENI,
+    clean_html_to_text,
+    html_izi_var_mi,
+)
 
 #: Temizlik sonrası metin bunun altına düşerse veri kaybı riski var → atla.
 _MIN_KORUNAN_ORAN = 0.20
@@ -386,6 +390,23 @@ def kirli_karar_idleri(yol: Path | None = None) -> list[str]:
     """Parquet'te HÂLÂ HTML izi taşıyan kararların kimlikleri.
 
     Parquet onarımdan ÖNCE okunmalı — `onar_parquet` bu kanıtı siler.
+
+    YALNIZCA `cleaned_text` BAKILIR — `raw_text` DEĞİL
+    --------------------------------------------------
+    `rag_chunks` satırları yalnızca `cleaned_text`'ten üretiliyor
+    (`pipelines/chunk.py`). `raw_text` ise tanımı gereği HAM HTML'dir; her
+    kararda `<` içerir. Onu da tespite katmak iki hataya birden yol açar:
+      * DOĞRULUK: neredeyse TÜM kararlar "kirli" sayılır → 21.500 yerine
+        117.000 chunk yeniden embed edilir, fatura 5 katına çıkar.
+      * BELLEK: tüm külliyatın ham HTML'i belleğe çekilir → job OOM ile ölür
+        (2026-08-07'de tam olarak bu oldu).
+
+    TESPİT DuckDB'DE YAPILIR
+    ------------------------
+    Python'a yalnızca KİMLİKLER döner, metin hiç dönmez — bellek karar
+    sayısıyla değil, kirli karar sayısıyla sınırlı. Desen `HTML_IZI_DESENI`
+    üzerinden paylaşılıyor; DuckDB (RE2) ile Python `re` aynı sonucu veriyor
+    ve bunu bir fark testi koruyor.
     """
     import duckdb
 
@@ -397,30 +418,26 @@ def kirli_karar_idleri(yol: Path | None = None) -> list[str]:
         )
 
     kaynak = "'" + str(yol).replace("'", "''") + "'"
-    mevcut = duckdb.sql(f"SELECT * FROM {kaynak} LIMIT 0").columns
-    kolonlar = [k for k in ("cleaned_text", "raw_text") if k in mevcut]
-    if "id" not in mevcut or not kolonlar:
-        raise ValueError(
-            f"parquet'te beklenen kolonlar yok: id + cleaned_text/raw_text "
-            f"(bulunan: {list(mevcut)[:10]})")
+    con = duckdb.connect()
+    try:
+        mevcut = con.execute(f"SELECT * FROM {kaynak} LIMIT 0").description
+        adlar = [d[0] for d in mevcut]
+        if "id" not in adlar or "cleaned_text" not in adlar:
+            raise ValueError(
+                f"parquet'te beklenen kolonlar yok: id + cleaned_text "
+                f"(bulunan: {adlar[:10]})")
 
-    # ÖN SÜZME DuckDB'de: `_HTML_IZI_RE` kalıplarının HEPSİ ya '<' ya '&' ile
-    # başlar, dolayısıyla bu koşul kesin bir ÜST KÜMEDİR — eleme yapmaz, sadece
-    # tam metni belleğe çekilecek satır sayısını düşürür (parquet yüz binlerce
-    # karar tutabiliyor; tamamını pandas'a almak job'u OOM ile düşürürdü).
-    # Nihai kararı yine `html_izi_var_mi` verir; iki yerde iki farklı desen
-    # tutmuyoruz.
-    kosul = " OR ".join(
-        f"{k} LIKE '%<%' OR {k} LIKE '%&%'" for k in kolonlar)
-    secim = ", ".join(["id", *kolonlar])
-    adaylar = duckdb.sql(
-        f"SELECT {secim} FROM {kaynak} WHERE {kosul}").fetchall()
+        satirlar = con.execute(
+            f"SELECT DISTINCT id FROM {kaynak} "
+            "WHERE cleaned_text IS NOT NULL "
+            "  AND regexp_matches(cleaned_text, ?, 'i') "
+            "ORDER BY id",
+            [HTML_IZI_DESENI],
+        ).fetchall()
+    finally:
+        con.close()
 
-    kirli: list[str] = []
-    for satir in adaylar:
-        if any(isinstance(v, str) and html_izi_var_mi(v) for v in satir[1:]):
-            kirli.append(str(satir[0]))
-    return kirli
+    return [str(s[0]) for s in satirlar]
 
 
 def bayat_isaretle_parquetten(dry_run: bool) -> dict:

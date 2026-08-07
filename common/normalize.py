@@ -30,6 +30,13 @@ _HTML_IZI_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: `_HTML_IZI_RE` deseninin ham hâli — SQL/DuckDB tarafında AYNI tespiti
+#: yapabilmek için dışa açık. Desen RE2 uyumlu (yalnızca `\b`, `\s`, `\d` ve
+#: yakalamayan grup kullanıyor), dolayısıyla DuckDB `regexp_matches(x, ?, 'i')`
+#: ile Python `re` birebir aynı sonucu verir — bkz. tests/test_bayat_tara.py
+#: içindeki fark testi. İki yerde iki desen TUTMUYORUZ; sapma olursa test düşer.
+HTML_IZI_DESENI = _HTML_IZI_RE.pattern
+
 #: Kaç tur unescape+strip denenecek. Kaynak siteler bazen HTML'i JSON içinde
 #: KAÇIŞLI (&lt;font&gt;) gönderiyor; bir tur unescape sonrası ortaya gerçek
 #: HTML çıkıyor ve ikinci bir temizlik turu gerekiyor.

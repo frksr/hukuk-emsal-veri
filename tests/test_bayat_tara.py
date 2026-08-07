@@ -13,7 +13,8 @@ Kirli KARAR kimlikleri oradan çıkarılıp o kararların TÜM chunk'ları
 işaretlenir.
 
 BU TESTLERİN KORUDUĞU DAVRANIŞLAR
-  1. Kirli karar kimlikleri parquet'ten doğru çıkarılır (raw_text dahil).
+  1. Kirli karar kimlikleri parquet'ten YALNIZCA cleaned_text bakılarak
+     çıkarılır — raw_text ham HTML olduğu için tespite GİRMEZ.
   2. Yalnızca `embedding_model IS NULL` satırlar işaretlenir — düzgün embed
      edilmiş satırların imzası EZİLMEZ.
   3. Zaten BAYAT olanlar iki kez sayılmaz.
@@ -30,6 +31,7 @@ import types
 import pytest
 
 import scripts.repair_html_kirliligi as R
+from common.normalize import html_izi_var_mi
 
 pd = pytest.importorskip("pandas")
 pytest.importorskip("duckdb")
@@ -146,10 +148,17 @@ def test_kirli_kimlikler_parquetten_cikar(parquet_kur):
     assert sorted(R.kirli_karar_idleri()) == ["k1", "k3"]
 
 
-def test_raw_text_kirliyse_de_yakalanir(parquet_kur):
-    """cleaned_text temizlenmiş ama raw_text kirli kalmış olabilir."""
+def test_raw_text_kirliligi_KARARI_KIRLI_YAPMAZ(parquet_kur):
+    """`raw_text` tanımı gereği HAM HTML'dir — her kararda `<` vardır.
+
+    `rag_chunks` yalnızca `cleaned_text`'ten üretiliyor (pipelines/chunk.py),
+    dolayısıyla raw_text'in kirli olması o kararın vektörlerini bozmaz.
+    Tespite katılırsa NEREDEYSE TÜM kararlar işaretlenir: 21.500 yerine
+    117.000 chunk yeniden embed edilir (5 kat fatura) ve tüm külliyatın ham
+    HTML'i belleğe çekildiği için job OOM ile ölür. 2026-08-07'de ikisi de oldu.
+    """
     parquet_kur([{"id": "k1", "cleaned_text": _TEMIZ, "raw_text": _KIRLI}])
-    assert R.kirli_karar_idleri() == ["k1"]
+    assert R.kirli_karar_idleri() == []
 
 
 def test_ayni_karar_iki_kez_sayilmaz(parquet_kur):
@@ -162,6 +171,21 @@ def test_parquet_yoksa_patlar(tmp_path, monkeypatch):
     monkeypatch.setenv("DECISIONS_PARQUET", str(tmp_path / "yok.parquet"))
     with pytest.raises(FileNotFoundError):
         R.kirli_karar_idleri()
+
+
+@pytest.mark.parametrize("metin", [
+    "<html><body>x</body></html>", "a &lt; b", "Faiz < %25", "5 & 6 TL",
+    "<br>", "&nbsp;", "&#39;", "sade metin", "<TABLE>", "a<b", "",
+    "<SPAN class=x>", "&quot;alinti&quot;", "2023/318 &amp; 2024/1",
+    "< html >", "<htmlx>", "&lt", "x&#1071;y",
+])
+def test_duckdb_ve_python_deseni_AYNI_sonucu_verir(metin, parquet_kur):
+    """Tespit artık DuckDB'de (RE2) yapılıyor, `html_izi_var_mi` ise Python
+    `re`. Aynı deseni paylaşıyorlar; motorlar ayrışırsa bu test düşer ve
+    sessizce yanlış küme işaretlenmez."""
+    parquet_kur([{"id": "k1", "cleaned_text": metin}])
+    duck = R.kirli_karar_idleri() == ["k1"]
+    assert duck is html_izi_var_mi(metin)
 
 
 def test_beklenen_kolonlar_yoksa_patlar(tmp_path, monkeypatch):
@@ -345,6 +369,17 @@ def test_matematiksel_kucuktur_isareti_kirli_SAYILMAZ(parquet_kur):
 
 
 def test_null_metin_cokmez(parquet_kur):
-    parquet_kur([{"id": "k1", "cleaned_text": None, "raw_text": _KIRLI},
+    parquet_kur([{"id": "k1", "cleaned_text": _KIRLI, "raw_text": None},
                  {"id": "k2", "cleaned_text": None, "raw_text": None}])
+    assert R.kirli_karar_idleri() == ["k1"]
+
+
+def test_raw_text_kolonu_HIC_OKUNMAZ(parquet_kur):
+    """Bellek güvenliği: ham HTML sütunu sorguya girmemeli."""
+    parquet_kur([{"id": "k1", "cleaned_text": _TEMIZ, "raw_text": _KIRLI * 50}])
+    assert R.kirli_karar_idleri() == []
+
+
+def test_parquette_raw_text_olmasa_da_calisir(parquet_kur):
+    parquet_kur([{"id": "k1", "cleaned_text": _KIRLI}])
     assert R.kirli_karar_idleri() == ["k1"]
