@@ -62,17 +62,30 @@ class _Cur:
             n = sum(1 for r in self.satirlar
                     if r["decision_id"] in idler and r["embedding_model"] is None)
             self._sonuc = [(n,)]
+        elif s.startswith("SELECT chunk_id FROM rag_chunks"):
+            son, idler, lim = params
+            uygun = sorted(
+                (r["chunk_id"] for r in self.satirlar
+                 if r["chunk_id"] > son
+                 and r["decision_id"] in idler
+                 and r["embedding_model"] is None))
+            self._sonuc = [(c,) for c in uygun[:lim]]
+            self.gunluk.append(("select", son, len(self._sonuc)))
         elif s.startswith("UPDATE rag_chunks SET embedding_model"):
-            isaret, idler = params
+            isaret, chunk_idler = params
+            hedef = set(chunk_idler)
             n = 0
             for r in self.satirlar:
-                if r["decision_id"] in idler and r["embedding_model"] is None:
+                if r["chunk_id"] in hedef and r["embedding_model"] is None:
                     r["embedding_model"] = isaret
                     n += 1
             self.rowcount = n
-            self.gunluk.append(("update", len(idler), n))
+            self.gunluk.append(("update", len(chunk_idler), n))
         else:                                     # pragma: no cover
             raise AssertionError(f"beklenmeyen SQL: {s[:80]}")
+
+    def fetchall(self):
+        return self._sonuc
 
     def fetchone(self):
         return self._sonuc[0] if self._sonuc else None
@@ -258,19 +271,60 @@ def test_zaten_bayat_olan_tekrar_sayilmaz(parquet_kur, sahte_pg):
     assert sonuc["isaretlenen"] == 1
 
 
-def test_partili_calisir(parquet_kur, sahte_pg, monkeypatch):
-    """Binlerce kimlik tek UPDATE'e sığmaz; parti parti gitmeli."""
-    monkeypatch.setattr(R, "_ISARET_PARTI", 2)
-    parquet_kur([{"id": f"k{i}", "cleaned_text": _KIRLI, "raw_text": _KIRLI}
-                 for i in range(5)])
-    satirlar = _chunklar(*[(f"k{i}", 1, None) for i in range(5)])
+def test_parti_CHUNK_sayisina_gore_bolunur(parquet_kur, sahte_pg, monkeypatch):
+    """Parti KARAR sayısına bağlanamaz.
+
+    Kararların chunk sayısı 1 ile 100+ arasında değişiyor. İlk sürüm 2000
+    karar/parti kullanıyordu ve tek bir kararın 40 chunk'ı olduğunda parti
+    ~23.700 satırlık TEK transaction'a dönüşüyordu; 30 dakikalık Cloud Run
+    timeout'una takılıp TAMAMEN geri alındı (2026-08-07).
+    """
+    monkeypatch.setattr(R, "_ISARET_PARTI", 3)
+    parquet_kur([{"id": "buyuk", "cleaned_text": _KIRLI},
+                 {"id": "kucuk", "cleaned_text": _KIRLI}])
+    satirlar = _chunklar(("buyuk", 10, None), ("kucuk", 1, None))
     gunluk = sahte_pg(satirlar)
 
     sonuc = R.bayat_isaretle_parquetten(dry_run=False)
 
-    assert sonuc["isaretlenen"] == 5
-    assert len([g for g in gunluk if g[0] == "update"]) == 3   # 2+2+1
-    assert len([g for g in gunluk if g[0] == "commit"]) == 3   # her parti commit
+    assert sonuc["isaretlenen"] == 11
+    guncellemeler = [g for g in gunluk if g[0] == "update"]
+    assert len(guncellemeler) == 4                    # 3+3+3+2
+    assert all(g[1] <= 3 for g in guncellemeler), (
+        f"parti sınırı aşıldı: {[g[1] for g in guncellemeler]}")
+    # Her parti AYRI commit — yarıda kesilirse ilerleme kalıcı olmalı
+    assert len([g for g in gunluk if g[0] == "commit"]) == 4
+
+
+def test_yarida_kesilse_ilerleme_KALICI(parquet_kur, sahte_pg, monkeypatch):
+    """Timeout/OOM sonrası ikinci koşu baştan başlamamalı."""
+    monkeypatch.setattr(R, "_ISARET_PARTI", 2)
+    parquet_kur([{"id": "k1", "cleaned_text": _KIRLI}])
+    satirlar = _chunklar(("k1", 6, None))
+    sahte_pg(satirlar)
+
+    # İlk 4 satırı işaretlenmiş kabul et (iki parti commit edilmiş)
+    for r in satirlar[:4]:
+        r["embedding_model"] = R._BAYAT_ISARET
+
+    sonuc = R.bayat_isaretle_parquetten(dry_run=False)
+
+    assert sonuc["isaretlenen"] == 2, "zaten işaretli satırlar tekrar yazıldı"
+    assert all(r["embedding_model"] == R._BAYAT_ISARET for r in satirlar)
+
+
+def test_imlec_ILERI_gider_sonsuz_dongu_yok(parquet_kur, sahte_pg, monkeypatch):
+    """Bir parti hiç satır güncellemese bile imleç ilerlemeli."""
+    monkeypatch.setattr(R, "_ISARET_PARTI", 2)
+    parquet_kur([{"id": "k1", "cleaned_text": _KIRLI}])
+    satirlar = _chunklar(("k1", 5, None))
+    gunluk = sahte_pg(satirlar)
+
+    R.bayat_isaretle_parquetten(dry_run=False)
+
+    imlecler = [g[1] for g in gunluk if g[0] == "select"]
+    assert imlecler == sorted(imlecler), f"imleç geri gitti: {imlecler}"
+    assert len(imlecler) == len(set(imlecler)), f"imleç takıldı: {imlecler}"
 
 
 # ---------------------------------------------------------------------------

@@ -377,7 +377,20 @@ def _yeniden_embed(onayla: bool, max_embed: int | None) -> dict:
     return {"embed_edilen": embed_edilen, "kalan": kalan}
 
 
-#: `bayat_isaretle_parquetten` tek UPDATE'te kaç decision_id gönderilsin.
+#: `bayat_isaretle_parquetten` tek transaction'da kaç CHUNK işaretlesin.
+#:
+#: NEDEN KARAR DEĞİL CHUNK
+#: İlk sürüm partiyi KARAR sayısına bağlıyordu (2000 karar/parti). Kararların
+#: chunk sayısı 1 ile 100+ arasında değiştiği için ilk parti ~23.700 satırlık
+#: TEK bir transaction'a dönüştü, 30 dakikalık timeout'a takıldı ve TAMAMEN
+#: geri alındı — yarım saat koştu, sıfır ilerleme kaydetti.
+#:
+#: NEDEN KÜÇÜK
+#: `rag_chunks` satırları 768 boyutlu vektör taşıyor ve üstünde HNSW indeksi
+#: var. Postgres herhangi bir sütunu güncellediğinde satırın yeni sürümünü
+#: yazıp onu TÜM indekslere yeniden ekler; HNSW'ye ekleme graf gezinmesi
+#: demek. Yani satır başına maliyet yüksek — sık commit şart ki iş yarıda
+#: kesilse bile ilerleme kalıcı olsun.
 _ISARET_PARTI = 2000
 
 
@@ -483,22 +496,52 @@ def bayat_isaretle_parquetten(dry_run: bool) -> dict:
         return {"kirli_karar": len(idler), "isaretlenen": 0, "isaretlenecek": adet}
 
     isaretlenen = 0
+    t0 = time.perf_counter()
     with pg.connection() as conn:
-        for i in range(0, len(idler), _ISARET_PARTI):
-            parca = idler[i:i + _ISARET_PARTI]
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM rag_chunks "
+                "WHERE decision_id = ANY(%s) AND embedding_model IS NULL",
+                (idler,))
+            hedef = cur.fetchone()[0]
+        print(f"[BAYAT] işaretlenecek chunk: {hedef:,}", file=sys.stderr)
+        if not hedef:
+            return {"kirli_karar": len(idler), "isaretlenen": 0}
+
+        # KEYSET İMLEÇ: her turda baştan taramamak için chunk_id ile ilerliyoruz.
+        # İmleç, satır güncellensin ya da güncellenmesin ileri gider.
+        son = ""
+        while True:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT chunk_id FROM rag_chunks "
+                    "WHERE chunk_id > %s "
+                    "  AND decision_id = ANY(%s) "
+                    "  AND embedding_model IS NULL "
+                    "ORDER BY chunk_id LIMIT %s",
+                    (son, idler, _ISARET_PARTI))
+                idler_parti = [r[0] for r in cur.fetchall()]
+            if not idler_parti:
+                break
+            son = idler_parti[-1]
+
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE rag_chunks SET embedding_model = %s "
-                    "WHERE decision_id = ANY(%s) AND embedding_model IS NULL",
-                    (_BAYAT_ISARET, parca))
+                    "WHERE chunk_id = ANY(%s)",
+                    (_BAYAT_ISARET, idler_parti))
                 isaretlenen += cur.rowcount
-            conn.commit()
-            print(f"[BAYAT] {min(i + _ISARET_PARTI, len(idler)):,}/{len(idler):,} "
-                  f"karar tarandı, {isaretlenen:,} chunk işaretlendi",
+            conn.commit()          # ← her parti kalıcı; yarıda kesilse de kalır
+
+            gecen = time.perf_counter() - t0
+            hiz = isaretlenen / max(gecen, 0.001)
+            kalan_sn = (hedef - isaretlenen) / max(hiz, 0.001)
+            print(f"[BAYAT] {isaretlenen:,}/{hedef:,} işaretlendi | "
+                  f"{hiz:.0f} satır/sn, tahmini kalan {kalan_sn / 60:.1f} dk",
                   file=sys.stderr)
 
-    print(f"[BAYAT] BİTTİ — {isaretlenen:,} chunk BAYAT olarak işaretlendi.",
-          file=sys.stderr)
+    print(f"[BAYAT] BİTTİ — {isaretlenen:,} chunk BAYAT olarak işaretlendi "
+          f"({time.perf_counter() - t0:.1f} sn).", file=sys.stderr)
     return {"kirli_karar": len(idler), "isaretlenen": isaretlenen}
 
 
