@@ -226,6 +226,108 @@ def onar_chunks(dry_run: bool, max_rows: int | None = None) -> dict:
     return {"toplam": toplam, **sayac}
 
 
+#: `model_dogrula` kaç örnek satır karşılaştırsın.
+_DOGRULAMA_ORNEK = 3
+
+#: Kosinüs benzerliği bunun altındaysa model DEĞİŞMİŞ kabul edilir.
+#: Aynı model + aynı metin ~1.0 verir; float yuvarlama payı bırakıyoruz.
+_AYNI_MODEL_ESIGI = 0.98
+
+
+def model_dogrula() -> dict:
+    """Şu anki embedding modeli, külliyattaki vektörleri üreten modelle AYNI mı?
+
+    NEDEN GEREKLİ
+    -------------
+    `rag_chunks`'taki eski satırların `embedding_model` sütunu NULL — hangi
+    modelle üretildikleri hiçbir yerde kayıtlı değil. 90.096 chunk'ı FARKLI
+    bir modelle yeniden embed edersek tek indekste İKİ AYRI SEMANTİK UZAY
+    oluşur: yeni vektörlerle eski vektörler karşılaştırılamaz, benzerlik
+    skorları tüm külliyatta bozulur. Üstelik bu SESSİZCE olur — hata yok,
+    sadece arama sonuçları saçmalar. Geri dönüşü 166.734 chunk'ın tamamını
+    yeniden embed etmek.
+
+    NASIL ÖLÇÜLÜR
+    -------------
+    Hiç dokunulmamış (`embedding_model IS NULL`) satırlar seçilir; bunların
+    metni ilk embed'den beri DEĞİŞMEDİ. Aynı metin şu anki modelle yeniden
+    embed edilip saklı vektörle kosinüs benzerliği hesaplanır:
+
+        ~1.0  → aynı model, devam edilebilir
+        düşük → model değişmiş, DURMAK gerekir
+
+    Maliyet: tek API isteği (_DOGRULAMA_ORNEK chunk).
+    """
+    import math
+
+    from services import embeddings, pg
+
+    imza = (
+        f"{embeddings.PROVIDER}:"
+        f"{embeddings.API_MODEL if embeddings.PROVIDER == 'google' else embeddings.LOCAL_MODEL}:"
+        f"{embeddings.EMBEDDING_DIM}"
+    )
+    print(f"[MODEL] şu anki yapılandırma: {imza}", file=sys.stderr)
+
+    with pg.connection() as conn, conn.cursor() as cur:
+        # embedding::text → pgvector adaptörüne bağımlı kalmadan okuyoruz.
+        cur.execute(
+            "SELECT chunk_id, document, embedding::text FROM rag_chunks "
+            "WHERE embedding_model IS NULL AND length(document) > 200 "
+            "ORDER BY chunk_id LIMIT %s",
+            (_DOGRULAMA_ORNEK,))
+        satirlar = cur.fetchall()
+
+    if not satirlar:
+        print("[MODEL] Karşılaştırılacak dokunulmamış satır yok — "
+              "doğrulama YAPILAMADI.", file=sys.stderr)
+        return {"dogrulandi": False, "sebep": "ornek_yok"}
+
+    yeni = embeddings.embed_passages([s[1] for s in satirlar])
+    if len(yeni) != len(satirlar):
+        print(f"[MODEL] {len(satirlar)} metin gönderildi, {len(yeni)} vektör "
+              f"döndü — doğrulama YAPILAMADI.", file=sys.stderr)
+        return {"dogrulandi": False, "sebep": "eksik_vektor"}
+
+    benzerlikler = []
+    for (chunk_id, _belge, eski_metin), yeni_vek in zip(satirlar, yeni):
+        eski = [float(x) for x in eski_metin.strip("[]").split(",")]
+        if len(eski) != len(yeni_vek):
+            print(f"[MODEL] ✗ BOYUT UYUŞMUYOR: saklı {len(eski)}, "
+                  f"yeni {len(yeni_vek)} — model KESİNLİKLE değişmiş.",
+                  file=sys.stderr)
+            return {"dogrulandi": False, "sebep": "boyut",
+                    "saklanan_boyut": len(eski), "yeni_boyut": len(yeni_vek)}
+
+        nokta = sum(a * b for a, b in zip(eski, yeni_vek))
+        na = math.sqrt(sum(a * a for a in eski))
+        nb = math.sqrt(sum(b * b for b in yeni_vek))
+        benzerlik = nokta / (na * nb) if na and nb else 0.0
+        benzerlikler.append(benzerlik)
+        print(f"[MODEL] {chunk_id}: kosinüs benzerliği {benzerlik:.4f}",
+              file=sys.stderr)
+
+    en_dusuk = min(benzerlikler)
+    ayni = en_dusuk >= _AYNI_MODEL_ESIGI
+
+    if ayni:
+        print(f"[MODEL] ✓ AYNI MODEL (en düşük benzerlik {en_dusuk:.4f} ≥ "
+              f"{_AYNI_MODEL_ESIGI}). Yeniden embed güvenli.", file=sys.stderr)
+    else:
+        print(
+            f"\n[MODEL] ✗✗ DUR — MODEL DEĞİŞMİŞ GÖRÜNÜYOR "
+            f"(en düşük benzerlik {en_dusuk:.4f} < {_AYNI_MODEL_ESIGI}).\n"
+            f"        Bu yapılandırmayla yeniden embed ederseniz indekste iki\n"
+            f"        ayrı semantik uzay oluşur ve arama TÜM külliyatta bozulur.\n"
+            f"        Önce EMBEDDING_API_MODEL / EMBEDDING_DIM değerlerini\n"
+            f"        külliyatı üreten değerlere geri alın.\n",
+            file=sys.stderr)
+
+    return {"dogrulandi": True, "ayni_model": ayni, "imza": imza,
+            "en_dusuk_benzerlik": round(en_dusuk, 4),
+            "ornek": len(benzerlikler)}
+
+
 #: Metni temizlenmiş ama embedding'i henüz yenilenmemiş satırların işareti.
 #: DB'de tutulur — böylece embed aşaması ayrı koşuda, yarıda kesilse bile
 #: KALDIĞI YERDEN devam edebilir.
@@ -609,6 +711,12 @@ def main() -> int:
                     help="bu koşuda en fazla N chunk embed et (maliyet freni)")
     ap.add_argument("--parquet", action="store_true",
                     help="karar tam metni parquet'ini de onar")
+    ap.add_argument("--model-dogrula", action="store_true",
+                    help="şu anki embedding modelinin külliyatı üreten modelle "
+                         "aynı olup olmadığını ÖLÇ (tek API isteği)")
+    ap.add_argument("--model-uyusmazligini-yoksay", action="store_true",
+                    help="TEHLİKELİ: model doğrulaması başarısız olsa bile "
+                         "--reembed devam etsin")
     ap.add_argument("--bayat-tara", action="store_true",
                     help="ESKİ koşuların işaretsiz temizlediği chunk'ları "
                          "parquet'teki kirli karar kimliklerinden bulup BAYAT "
@@ -636,6 +744,26 @@ def main() -> int:
     # 4,5 saatlik taramayı yeniden çalıştırmaya gerek kalmasın.
     if args.bayat_tara:
         sonuc["bayat_tara"] = bayat_isaretle_parquetten(args.dry_run)
+
+    # MODEL KAPISI: gerçekten API çağrısı yapılacaksa (--reembed --onayla),
+    # önce külliyatı üreten modelle aynı modelde olduğumuzu KANITLA. Yanlış
+    # modelle 90.096 chunk embed etmek indekste iki semantik uzay yaratır ve
+    # bunu geri almanın yolu tüm külliyatı yeniden embed etmektir.
+    if args.model_dogrula or (args.reembed and args.onayla and not args.dry_run):
+        sonuc["model"] = model_dogrula()
+        engel = (sonuc["model"].get("dogrulandi") is False
+                 or sonuc["model"].get("ayni_model") is False)
+        if engel and args.reembed and args.onayla and not args.dry_run:
+            if args.model_uyusmazligini_yoksay:
+                print("[REPAIR] UYARI: model doğrulaması geçmedi ama "
+                      "--model-uyusmazligini-yoksay verildi → devam ediliyor.",
+                      file=sys.stderr)
+            else:
+                print("[REPAIR] DURDURULDU — model doğrulaması geçmeden "
+                      "yeniden embed yapılmaz. Bilerek devam etmek için "
+                      "--model-uyusmazligini-yoksay ekleyin.", file=sys.stderr)
+                print("\n[REPAIR] SONUÇ:", sonuc, file=sys.stderr)
+                return 3
 
     if args.reembed and not args.dry_run:
         sonuc["embed"] = _yeniden_embed(args.onayla, args.max_embed)
